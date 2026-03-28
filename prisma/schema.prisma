@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 관리자
+// ========================================
+model Admin {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(100)
+  password  String   @db.VarChar(255)
+  name      String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("admins")
+}
+
+// ========================================
+// 셀러 (판매자)
+// ========================================
+model Seller {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(100)
+  password     String   @db.VarChar(255)
+  businessNo   String   @unique @map("business_no") @db.VarChar(12)
+  name         String   @db.VarChar(100) // 상호명
+  repName      String   @map("rep_name") @db.VarChar(50) // 대표자명
+  address      String
+  phone        String   @db.VarChar(20)
+  bankAccount  String?  @map("bank_account") @db.VarChar(30)
+  bankName     String?  @map("bank_name") @db.VarChar(20)
+  tradeRegNo   String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  status       SellerStatus @default(PENDING)
+  plan         SellerPlan   @default(FREE)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  products    Product[]
+  settlements Settlement[]
+  auditLogs   SellerAuditLog[]
+
+  @@map("sellers")
+}
+
+enum SellerStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum SellerPlan {
+  FREE
+  STANDARD
+  PRO
+}
+
+// ========================================
+// 상품
+// ========================================
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  sellerId    String   @map("seller_id") @db.Uuid
+  name        String   @db.VarChar(200)
+  description String?
+  price       Int // 원 단위
+  stock       Int      @default(0)
+  category    String   @db.VarChar(50)
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  seller Seller @relation(fields: [sellerId], references: [id])
+  codes  Code[]
+
+  @@map("products")
+}
+
+// ========================================
+// 주문 코드
+// ========================================
+model Code {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  codeKey   String   @unique @map("code_key") @db.VarChar(20) // 예: K9A-2503-X7YZ
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  maxQty    Int      @default(0) @map("max_qty") // 0 = 무제한
+  usedQty   Int      @default(0) @map("used_qty")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  product Product @relation(fields: [productId], references: [id])
+  orders  Order[]
+
+  @@map("codes")
+}
+
+// ========================================
+// 주문
+// ========================================
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  codeId        String      @map("code_id") @db.Uuid
+  buyerName     String      @map("buyer_name") @db.VarChar(50)
+  buyerPhone    String      @map("buyer_phone") @db.VarChar(20)
+  address       String
+  addressDetail String?     @map("address_detail")
+  memo          String?
+  quantity      Int         @default(1)
+  amount        Int // 결제금액
+  status        OrderStatus @default(PAID)
+  pgTid         String?     @map("pg_tid") @db.VarChar(100) // PG사 거래번호
+  trackingNo    String?     @map("tracking_no") @db.VarChar(50) // 운송장번호
+  carrier       String?     @db.VarChar(30) // 택배사
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  code Code @relation(fields: [codeId], references: [id])
+
+  @@index([codeId, status])
+  @@index([buyerPhone])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PAID      // 결제 완료
+  SHIPPING  // 배송 중 (선택)
+  SETTLED   // 정산 완료
+  REFUNDED  // 환불
+}
+
+// ========================================
+// 정산
+// ========================================
+model Settlement {
+  id          String           @id @default(uuid()) @db.Uuid
+  sellerId    String           @map("seller_id") @db.Uuid
+  amount      Int // 정산금액
+  fee         Int // 플랫폼 수수료
+  pgFee       Int              @map("pg_fee") // PG 수수료
+  netAmount   Int              @map("net_amount") // 실지급액
+  status      SettlementStatus @default(PENDING)
+  scheduledAt DateTime         @map("scheduled_at") @db.Timestamptz // 정산 예정일
+  settledAt   DateTime?        @map("settled_at") @db.Timestamptz
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  seller Seller @relation(fields: [sellerId], references: [id])
+
+  @@map("settlements")
+}
+
+enum SettlementStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// ========================================
+// 감사 로그
+// ========================================
+model SellerAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  sellerId  String   @map("seller_id") @db.Uuid
+  action    String   @db.VarChar(100)
+  detail    Json?
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  seller Seller @relation(fields: [sellerId], references: [id])
+
+  @@map("seller_audit_log")
+}

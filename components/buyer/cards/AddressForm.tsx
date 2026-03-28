@@ -1,0 +1,161 @@
+"use client";
+
+import { useState } from "react";
+import { useBuyerStore } from "@/stores/buyer-store";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
+interface Props {
+  data: Record<string, unknown>;
+}
+
+export default function AddressForm({ data }: Props) {
+  const { currentFlow, updateFlowStep, addMessage, setPhoneNumber } =
+    useBuyerStore();
+  const isInteractive = currentFlow?.step === "quantity_selected";
+  const [agreePersonal, setAgreePersonal] = useState(false);
+  const [agreeThirdParty, setAgreeThirdParty] = useState(false);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    const address = {
+      buyerName: formData.get("buyerName") as string,
+      buyerPhone: formData.get("buyerPhone") as string,
+      address: formData.get("address") as string,
+      addressDetail: formData.get("addressDetail") as string,
+      memo: formData.get("memo") as string,
+    };
+
+    setPhoneNumber(address.buyerPhone);
+
+    addMessage({
+      direction: "outgoing",
+      type: "text",
+      payload: { text: `배송지: ${address.buyerName} / ${address.address}` },
+    });
+
+    updateFlowStep("address_entry", { address });
+
+    // 결제 요약 표시
+    const totalAmount = data.totalAmount as number;
+    addMessage({
+      direction: "incoming",
+      type: "payment-summary",
+      payload: {
+        quantity: data.quantity,
+        totalAmount,
+        product: currentFlow?.product,
+        seller: currentFlow?.seller,
+        address,
+      },
+    });
+    updateFlowStep("payment_pending");
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <p className="text-sm font-medium">배송 정보를 입력해주세요</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="buyerName" className="text-xs">수령인 *</Label>
+              <Input
+                id="buyerName"
+                name="buyerName"
+                required
+                disabled={!isInteractive}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="buyerPhone" className="text-xs">연락처 *</Label>
+              <Input
+                id="buyerPhone"
+                name="buyerPhone"
+                type="tel"
+                required
+                disabled={!isInteractive}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="address" className="text-xs">주소 *</Label>
+            <Input
+              id="address"
+              name="address"
+              required
+              disabled={!isInteractive}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="addressDetail" className="text-xs">상세주소</Label>
+            <Input
+              id="addressDetail"
+              name="addressDetail"
+              disabled={!isInteractive}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="memo" className="text-xs">배송 메모</Label>
+            <Textarea
+              id="memo"
+              name="memo"
+              rows={2}
+              disabled={!isInteractive}
+              className="text-sm"
+            />
+          </div>
+
+          {isInteractive && (
+            <>
+              <div className="space-y-2 text-xs">
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={agreePersonal}
+                    onChange={(e) => setAgreePersonal(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    [필수] 개인정보 수집·이용 동의 (이름, 연락처, 주소를
+                    주문처리 및 배송 목적으로 수집하며 거래 후 5년간 보관합니다)
+                  </span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={agreeThirdParty}
+                    onChange={(e) => setAgreeThirdParty(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    [필수] 개인정보 제3자 제공 동의 (수령인명, 배송주소, 연락처를
+                    판매자에게 배송 처리 목적으로 제공합니다)
+                  </span>
+                </label>
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!agreePersonal || !agreeThirdParty}
+              >
+                배송정보 확인
+              </Button>
+            </>
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
