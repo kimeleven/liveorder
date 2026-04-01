@@ -26,7 +26,10 @@ export default function AdminLoginPage() {
     });
 
     if (result?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      setError(`오류: ${result.error}`);
+      setLoading(false);
+    } else if (!result?.ok) {
+      setError(`응답 오류: ok=${result?.ok}`);
       setLoading(false);
     } else {
       router.push("/admin/dashboard");
