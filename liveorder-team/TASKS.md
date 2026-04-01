@@ -6,8 +6,9 @@
 
 ## Dev1 (현재 작업) — Critical Fixes
 
-### Task 1: 운송장 등록 UI 구현
+### Task 1: 운송장 등록 UI 구현 ✅ 완료
 **우선순위:** P0 (즉시)
+**완료 내용:** Dialog 컴포넌트로 택배사 선택 + 운송장번호 입력 UI 구현. PAID/SHIPPING 상태 주문에 등록 버튼 표시. 등록 성공 시 목록 자동 갱신.
 **파일:**
 - `app/seller/orders/page.tsx` — 운송장 등록 버튼 + Dialog 추가
 
@@ -26,8 +27,9 @@
 
 ---
 
-### Task 2: 코드 발급 API 보안 수정
+### Task 2: 코드 발급 API 보안 수정 ✅ 완료
 **우선순위:** P0 (즉시)
+**완료 내용:** POST를 /api/codes → /api/seller/codes로 이동. 프론트엔드 URL 수정. 기존 public POST 엔드포인트 삭제.
 **파일:**
 - `app/api/seller/codes/route.ts` — POST 핸들러 추가 (기존 GET 옆에)
 - `app/api/codes/route.ts` — POST 핸들러 제거
@@ -43,8 +45,9 @@
 
 ---
 
-### Task 3: 셀러 PENDING 상태 차단
+### Task 3: 셀러 PENDING 상태 차단 ✅ 완료
 **우선순위:** P0 (즉시)
+**완료 내용:** 상품 등록 API와 코드 발급 API에 셀러 APPROVED 상태 확인 추가. 대시보드에 PENDING 배너 표시. 대시보드 API에 sellerStatus 반환 추가.
 **파일:**
 - `app/api/seller/products/route.ts` — POST에 셀러 상태 확인 추가
 - `app/api/seller/codes/route.ts` — POST에 셀러 상태 확인 추가 (Task 2 완료 후)
@@ -74,8 +77,9 @@ if (seller?.status !== 'APPROVED') {
 
 ---
 
-### Task 4: 개인정보 제3자 제공 동의
+### Task 4: 개인정보 제3자 제공 동의 ✅ 완료 (이미 구현됨)
 **우선순위:** P0 (즉시)
+**완료 내용:** AddressForm.tsx에 개인정보 수집·이용 동의 + 제3자 제공 동의 체크박스가 이미 구현되어 있음. 미체크 시 제출 버튼 disabled.
 **파일:**
 - `components/buyer/cards/AddressForm.tsx` — 동의 체크박스 추가
 

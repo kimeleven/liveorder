@@ -13,7 +13,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Download, Truck } from "lucide-react";
+
+const carriers = [
+  { value: "CJ대한통운", label: "CJ대한통운" },
+  { value: "로젠택배", label: "로젠택배" },
+  { value: "한진택배", label: "한진택배" },
+  { value: "롯데택배", label: "롯데택배" },
+  { value: "우체국택배", label: "우체국택배" },
+];
 
 interface OrderItem {
   id: string;
@@ -37,15 +61,66 @@ const statusMap: Record<string, { label: string; variant: "default" | "secondary
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [trackingDialog, setTrackingDialog] = useState<{ open: boolean; orderId: string }>({
+    open: false,
+    orderId: "",
+  });
+  const [trackingCarrier, setTrackingCarrier] = useState("");
+  const [trackingNo, setTrackingNo] = useState("");
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState("");
 
-  useEffect(() => {
+  function fetchOrders() {
     fetch("/api/seller/orders")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setOrders(data);
       })
       .catch(() => {});
+  }
+
+  useEffect(() => {
+    fetchOrders();
   }, []);
+
+  function openTrackingDialog(orderId: string) {
+    setTrackingDialog({ open: true, orderId });
+    setTrackingCarrier("");
+    setTrackingNo("");
+    setTrackingError("");
+  }
+
+  async function submitTracking() {
+    if (!trackingCarrier || !trackingNo) {
+      setTrackingError("택배사와 운송장번호를 입력해주세요.");
+      return;
+    }
+    if (!/^\d{10,15}$/.test(trackingNo)) {
+      setTrackingError("운송장번호는 숫자 10~15자리입니다.");
+      return;
+    }
+
+    setTrackingLoading(true);
+    setTrackingError("");
+    try {
+      const res = await fetch(`/api/seller/orders/${trackingDialog.orderId}/tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ carrier: trackingCarrier, trackingNo }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setTrackingError(data.error || "등록에 실패했습니다.");
+        return;
+      }
+      setTrackingDialog({ open: false, orderId: "" });
+      fetchOrders();
+    } catch {
+      setTrackingError("서버 오류가 발생했습니다.");
+    } finally {
+      setTrackingLoading(false);
+    }
+  }
 
   async function downloadExcel() {
     const res = await fetch("/api/seller/orders/export");
@@ -118,9 +193,20 @@ export default function OrdersPage() {
                         <Badge variant={st.variant}>{st.label}</Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {order.trackingNo
-                          ? `${order.carrier} ${order.trackingNo}`
-                          : "-"}
+                        {order.trackingNo ? (
+                          `${order.carrier} ${order.trackingNo}`
+                        ) : (order.status === "PAID" || order.status === "SHIPPING") ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openTrackingDialog(order.id)}
+                          >
+                            <Truck className="mr-1 h-3 w-3" />
+                            운송장 등록
+                          </Button>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -129,6 +215,54 @@ export default function OrdersPage() {
             </TableBody>
           </Table>
         </Card>
+
+        <Dialog open={trackingDialog.open} onOpenChange={(open) => setTrackingDialog({ open, orderId: open ? trackingDialog.orderId : "" })}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>운송장 등록</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>택배사</Label>
+                <Select value={trackingCarrier} onValueChange={(v) => setTrackingCarrier(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="택배사를 선택하세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {carriers.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>운송장번호</Label>
+                <Input
+                  placeholder="숫자 10~15자리"
+                  value={trackingNo}
+                  onChange={(e) => setTrackingNo(e.target.value.replace(/\D/g, ""))}
+                  maxLength={15}
+                />
+              </div>
+              {trackingError && (
+                <p className="text-sm text-destructive">{trackingError}</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setTrackingDialog({ open: false, orderId: "" })}
+              >
+                취소
+              </Button>
+              <Button onClick={submitTracking} disabled={trackingLoading}>
+                {trackingLoading ? "등록 중..." : "등록"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </SellerShell>
   );

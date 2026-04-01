@@ -22,6 +22,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 셀러 승인 상태 확인
+  const seller = await prisma.seller.findUnique({ where: { id: session.user.id } });
+  if (seller?.status !== "APPROVED") {
+    return NextResponse.json(
+      { error: "관리자 승인 후 이용 가능합니다. 승인 대기 중입니다." },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { name, description, price, stock, category, imageUrl } = body;

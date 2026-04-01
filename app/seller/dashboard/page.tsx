@@ -11,6 +11,7 @@ interface DashboardStats {
   activeCodes: number;
   totalOrders: number;
   pendingSettlement: number;
+  sellerStatus?: string;
 }
 
 export default function SellerDashboardPage() {
@@ -62,6 +63,13 @@ export default function SellerDashboardPage() {
           <h1 className="text-2xl font-bold">대시보드</h1>
           <p className="text-muted-foreground">판매 현황을 한눈에 확인하세요</p>
         </div>
+
+        {stats.sellerStatus === "PENDING" && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
+            <p className="font-medium">승인 대기 중</p>
+            <p className="text-sm">관리자 승인 후 상품 등록 및 코드 발급이 가능합니다.</p>
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {cards.map((card) => {

@@ -46,7 +46,7 @@ export default function NewCodePage() {
     const formData = new FormData(e.currentTarget);
 
     try {
-      const res = await fetch("/api/codes", {
+      const res = await fetch("/api/seller/codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
