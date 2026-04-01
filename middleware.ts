@@ -1,52 +1,70 @@
-import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
+import { hkdf } from "@panva/hkdf";
+import { jwtDecrypt } from "jose";
+
+const COOKIE_NAMES = [
+  "__Secure-authjs.session-token",
+  "authjs.session-token",
+];
+
+async function getRole(req: NextRequest): Promise<string | null> {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+
+  let token: string | undefined;
+  for (const name of COOKIE_NAMES) {
+    const val = req.cookies.get(name)?.value;
+    if (val) { token = val; break; }
+  }
+  if (!token) return null;
+
+  try {
+    const salt = "authjs.session-token";
+    const keyMaterial = new TextEncoder().encode(secret);
+    const derived = await hkdf(
+      "sha256",
+      keyMaterial,
+      salt,
+      `Auth.js Generated Encryption Key (${salt})`,
+      64
+    );
+    const { payload } = await jwtDecrypt(token, derived);
+    return (payload as { role?: string }).role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const role = await getRole(req);
 
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET,
-    cookieName: "authjs.session-token",
-  });
-  const role = token?.role as string | undefined;
-
-  // 셀러 영역 보호
   if (pathname.startsWith("/seller") && !pathname.startsWith("/seller/auth")) {
-    if (!token) {
-      const loginUrl = new URL("/seller/auth/login", req.url);
-      loginUrl.searchParams.set("callbackUrl", pathname);
-      return NextResponse.redirect(loginUrl);
+    if (!role) {
+      const url = new URL("/seller/auth/login", req.url);
+      url.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(url);
     }
-    if (role !== "seller") {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
+    if (role !== "seller") return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 관리자 영역 보호
   if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/auth")) {
-    if (!token) {
-      const loginUrl = new URL("/admin/auth/login", req.url);
-      loginUrl.searchParams.set("callbackUrl", pathname);
-      return NextResponse.redirect(loginUrl);
+    if (!role) {
+      const url = new URL("/admin/auth/login", req.url);
+      url.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(url);
     }
-    if (role !== "admin") {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
+    if (role !== "admin") return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 셀러 API 보호
   if (pathname.startsWith("/api/seller")) {
-    if (!token || role !== "seller") {
+    if (!role || role !== "seller")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
   }
 
-  // 관리자 API 보호
   if (pathname.startsWith("/api/admin")) {
-    if (!token || role !== "admin") {
+    if (!role || role !== "admin")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
   }
 
   return NextResponse.next();
