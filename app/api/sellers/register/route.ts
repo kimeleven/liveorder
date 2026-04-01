@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hashedPassword = await hash(password, 12);
+    const hashedPassword = await hash(password, 8);
 
     const seller = await prisma.seller.create({
       data: {
