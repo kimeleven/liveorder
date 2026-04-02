@@ -4,157 +4,108 @@
 
 ---
 
-## Dev1 (현재 작업) — Critical Fixes
+## Dev1 현재 작업 — P2: debug 정리 + 이미지 업로드
 
-### Task 1: 운송장 등록 UI 구현 ✅ 완료
-**우선순위:** P0 (즉시)
-**완료 내용:** Dialog 컴포넌트로 택배사 선택 + 운송장번호 입력 UI 구현. PAID/SHIPPING 상태 주문에 등록 버튼 표시. 등록 성공 시 목록 자동 갱신.
+### Task 8: debug 엔드포인트 제거 (보안)
+**우선순위:** P1-HIGH (배포 전 필수)
 **파일:**
-- `app/seller/orders/page.tsx` — 운송장 등록 버튼 + Dialog 추가
+- `app/api/debug/route.ts` — 파일 전체 삭제
 
-**구현 상세:**
-1. 각 주문 행의 "운송장" 열에 등록 버튼 추가 (status가 `PAID` 또는 `SHIPPING`일 때)
-2. Dialog 컴포넌트:
-   - 택배사 Select: CJ대한통운, 로젠택배, 한진택배, 롯데택배, 우체국택배
-   - 운송장번호 Input (숫자만, 10~15자리)
-   - "등록" / "취소" 버튼
-3. 제출 시: `POST /api/seller/orders/{orderId}/tracking` 호출
-   - body: `{ carrier: string, trackingNo: string }`
-4. 성공 시: Dialog 닫기, 주문 목록 갱신 (해당 주문의 trackingNo/carrier 업데이트)
-5. API 수정: `app/api/seller/orders/[id]/tracking/route.ts` — 주문 status도 `SHIPPING`으로 변경
+**배경:** DB 연결 테스트용 public 엔드포인트. 프로덕션에서 DB 스키마 정보 노출 위험. 배포 전 반드시 제거.
 
-**참고:** Dialog 컴포넌트는 이미 `components/ui/dialog.tsx`에 있음
+**구현:**
+1. `app/api/debug/route.ts` 삭제
+2. 해당 경로를 참조하는 파일 없는지 확인 후 커밋
 
 ---
 
-### Task 2: 코드 발급 API 보안 수정 ✅ 완료
-**우선순위:** P0 (즉시)
-**완료 내용:** POST를 /api/codes → /api/seller/codes로 이동. 프론트엔드 URL 수정. 기존 public POST 엔드포인트 삭제.
+### Task 9: 상품 이미지 업로드 (Vercel Blob)
+**우선순위:** P2
 **파일:**
-- `app/api/seller/codes/route.ts` — POST 핸들러 추가 (기존 GET 옆에)
-- `app/api/codes/route.ts` — POST 핸들러 제거
-- `app/seller/codes/new/page.tsx` — fetch URL 변경: `/api/codes` → `/api/seller/codes`
+- `app/api/seller/products/upload/route.ts` — 신규 (Vercel Blob 업로드)
+- `app/seller/products/new/page.tsx` — 이미지 파일 선택 UI
+- `app/seller/products/[id]/edit/page.tsx` — 수정 시 이미지 교체
+- `components/buyer/cards/ProductCard.tsx` — imageUrl 있으면 표시
 
 **구현 상세:**
-1. `app/api/codes/route.ts`에서 POST 함수 전체를 복사
-2. `app/api/seller/codes/route.ts`에 POST 추가
-   - 미들웨어가 `/api/seller/*`를 보호하므로 추가 인증 불필요
-   - 셀러 세션에서 sellerId 추출하여 상품 소유권 확인
-3. `app/api/codes/route.ts`에서 POST export 제거
-4. 프론트엔드 URL 수정
-
----
-
-### Task 3: 셀러 PENDING 상태 차단 ✅ 완료
-**우선순위:** P0 (즉시)
-**완료 내용:** 상품 등록 API와 코드 발급 API에 셀러 APPROVED 상태 확인 추가. 대시보드에 PENDING 배너 표시. 대시보드 API에 sellerStatus 반환 추가.
-**파일:**
-- `app/api/seller/products/route.ts` — POST에 셀러 상태 확인 추가
-- `app/api/seller/codes/route.ts` — POST에 셀러 상태 확인 추가 (Task 2 완료 후)
-- `app/seller/dashboard/page.tsx` — PENDING 배너 추가
-
-**구현 상세:**
-1. 상품 등록 API에서:
+1. `npm install @vercel/blob`
+2. 업로드 API (`app/api/seller/products/upload/route.ts`):
 ```typescript
-// session에서 셀러 ID 가져온 후
-const seller = await prisma.seller.findUnique({ where: { id: sellerId } });
-if (seller?.status !== 'APPROVED') {
-  return NextResponse.json(
-    { error: '관리자 승인 후 이용 가능합니다. 승인 대기 중입니다.' },
-    { status: 403 }
-  );
+import { put } from "@vercel/blob";
+import { auth } from "@/lib/auth";
+
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
+  const form = await req.formData();
+  const file = form.get("file") as File;
+  if (!file) return new Response("파일 없음", { status: 400 });
+  const blob = await put(`products/${session.user.id}/${Date.now()}-${file.name}`, file, { access: "public" });
+  return Response.json({ url: blob.url });
 }
 ```
-2. 대시보드에 배너:
-```tsx
-{sellerStatus === 'PENDING' && (
-  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
-    <p className="font-medium">승인 대기 중</p>
-    <p className="text-sm">관리자 승인 후 상품 등록 및 코드 발급이 가능합니다.</p>
-  </div>
-)}
-```
+3. 상품 등록/수정 폼에 `<input type="file" accept="image/*">` 추가, 선택 시 업로드 → `imageUrl` 저장
+4. ProductCard: `imageUrl` 있으면 `<Image>` 표시, 없으면 회색 placeholder
+
+**환경변수 필요:** `BLOB_READ_WRITE_TOKEN` (Vercel Blob Storage 연동 후 발급)
 
 ---
 
-### Task 4: 개인정보 제3자 제공 동의 ✅ 완료 (이미 구현됨)
-**우선순위:** P0 (즉시)
-**완료 내용:** AddressForm.tsx에 개인정보 수집·이용 동의 + 제3자 제공 동의 체크박스가 이미 구현되어 있음. 미체크 시 제출 버튼 disabled.
-**파일:**
-- `components/buyer/cards/AddressForm.tsx` — 동의 체크박스 추가
+## 완료된 P0 작업 ✅ (커밋: afc5b54, 2026-04-02)
 
-**구현 상세:**
-1. 폼 하단, 제출 버튼 위에 체크박스 추가:
-```tsx
-<div className="flex items-start gap-2">
-  <input
-    type="checkbox"
-    id="privacyConsent"
-    checked={consent}
-    onChange={(e) => setConsent(e.target.checked)}
-    className="mt-1"
-  />
-  <label htmlFor="privacyConsent" className="text-xs text-muted-foreground">
-    배송 처리를 위해 수령인명, 배송주소, 연락처를 판매자에게 제공하는 것에 동의합니다.
-    (동의하지 않으면 구매를 진행할 수 없습니다.)
-  </label>
-</div>
-```
-2. `consent` 상태가 false이면 제출 버튼 disabled
+### Task 1: 운송장 등록 UI ✅
+`app/seller/orders/page.tsx` — Dialog (택배사 + 운송장번호), PAID/SHIPPING 상태 전용 버튼
+
+### Task 2: 코드 발급 API 보안 ✅
+POST `/api/codes` → `/api/seller/codes` 이동. 프론트엔드 URL 수정.
+
+### Task 3: 셀러 PENDING 상태 차단 ✅
+상품 등록/코드 발급 API에 APPROVED 검증. 대시보드 PENDING 배너.
+
+### Task 4: 개인정보 제3자 제공 동의 ✅
+`AddressForm.tsx` — 수집·이용 + 제3자 제공 동의 체크박스 (미체크 시 제출 불가).
 
 ---
 
-## Dev1 (다음 작업) — P1 Tasks
+## 완료된 P1 작업 ✅ (미커밋 — Task 8과 함께 커밋 예정)
 
-### Task 5: OrderStatus에 DELIVERED 추가 ✅ 완료
-**완료 내용:** schema.prisma에 DELIVERED 추가. 마이그레이션 SQL 파일 수동 생성 (DATABASE_URL 로컬 없음 — Vercel 배포 시 적용). 주문관리/주문조회 UI에 '배송완료' 표시 추가.
-**파일:**
-- `prisma/schema.prisma` — OrderStatus enum에 `DELIVERED` 추가 (SHIPPING과 SETTLED 사이)
-- `prisma/migrations/20260402000001_add_delivered_status/migration.sql` — 마이그레이션 SQL
-- `app/seller/orders/page.tsx` — statusMap에 DELIVERED 추가
-- `app/(buyer)/lookup/page.tsx` — statusLabel에 DELIVERED 추가
+### Task 5: OrderStatus DELIVERED 추가 ✅
+- `prisma/schema.prisma` + 마이그레이션 (`20260402000001_add_delivered_status`)
+- `app/seller/orders/page.tsx` + `app/(buyer)/lookup/page.tsx` — statusMap/Label 업데이트
 
-### Task 6: 상품 수정/삭제 기능 ✅ 완료
-**완료 내용:** 상품 수정(PUT)/삭제(DELETE soft delete) API 구현. 상품 수정 페이지 신규 생성. 상품 목록에 수정/삭제 버튼(Dialog 확인) 추가.
-**파일:**
-- `app/api/seller/products/[id]/route.ts` — GET/PUT/DELETE (소유권 확인 포함)
-- `app/seller/products/page.tsx` — 수정/삭제 버튼 + 삭제 확인 Dialog
-- `app/seller/products/[id]/edit/page.tsx` — 상품 수정 페이지 (데이터 preload)
+### Task 6: 상품 수정/삭제 ✅
+- `app/api/seller/products/[id]/route.ts` — GET, PUT, DELETE (soft delete)
+- `app/seller/products/[id]/edit/page.tsx` — 수정 페이지
+- `app/seller/products/page.tsx` — 수정/삭제 버튼
 
-### Task 7: 셀러 정산 페이지 개선 ✅ 완료
-**완료 내용:** 기존 기본 테이블에 상태별 필터(전체/대기/완료/실패) + 합계 카드(총 거래금액, 수수료, PG수수료, 실지급액) 추가.
-**파일:** `app/seller/settlements/page.tsx`
+### Task 7: 셀러 정산 페이지 ✅
+`app/seller/settlements/page.tsx` — 기존 구현 확인 완료. 목록 + 상태 필터 + 합계 카드.
 
 ---
 
-## 완료된 작업
+## 완료된 인프라 작업
 
 - [x] Next.js 16 + TypeScript + Tailwind 프로젝트 초기화
 - [x] Prisma 스키마 설계 (Admin, Seller, Product, Code, Order, Settlement, AuditLog)
 - [x] Neon HTTP 어댑터 연동
 - [x] NextAuth v5 셀러/관리자 이중 인증
 - [x] 미들웨어 JWE 토큰 복호화 (HKDF)
-- [x] 셀러 회원가입 (`app/seller/auth/register/page.tsx`)
-- [x] 셀러 로그인 (`app/seller/auth/login/page.tsx`)
-- [x] 관리자 로그인 (`app/admin/auth/login/page.tsx`)
-- [x] 상품 등록 (`app/seller/products/new/page.tsx`)
-- [x] 상품 목록 (`app/seller/products/page.tsx`)
-- [x] 코드 발급 (`app/seller/codes/new/page.tsx`)
-- [x] 코드 관리 — 토글 활성화/비활성화 (`app/seller/codes/page.tsx`)
-- [x] 구매자 코드 입력 랜딩 (`app/(buyer)/page.tsx`)
-- [x] 구매자 채팅 UI + Zustand 스토어 (`app/(buyer)/chat/page.tsx`)
-- [x] 채팅 카드 컴포넌트 (ProductCard, QuantitySelector, AddressForm, PaymentSummary, OrderConfirmation)
-- [x] PortOne 결제 연동 + 서버 검증 (`app/api/payments/confirm/route.ts`)
-- [x] 주문 생성 트랜잭션 (주문 + 코드 수량 업데이트)
-- [x] 주문 조회 — 비회원 (`app/(buyer)/lookup/page.tsx`)
-- [x] 셀러 주문 관리 + CSV 다운로드 (`app/seller/orders/page.tsx`)
-- [x] 셀러 대시보드 통계 (`app/seller/dashboard/page.tsx`)
-- [x] 관리자 대시보드 (`app/admin/dashboard/page.tsx`)
-- [x] 관리자 셀러 관리 — 승인/거부/정지 (`app/admin/sellers/page.tsx`)
-- [x] 관리자 정산 조회 (`app/admin/settlements/page.tsx`)
-- [x] 정산 크론 잡 (`app/api/cron/settlements/route.ts`)
-- [x] 이용약관 + 개인정보처리방침 (`app/(buyer)/terms/`)
-- [x] 법적 중개자 고지문 (PaymentSummary에 포함)
-- [x] bcrypt 비용 최적화 (Vercel 서버리스 타임아웃 대응)
-- [x] 미들웨어 번들 크기 최적화 (Vercel 1MB 엣지 제한)
+- [x] 셀러 회원가입 / 로그인
+- [x] 관리자 로그인
+- [x] 상품 등록/목록 (`app/seller/products/`)
+- [x] 코드 발급/관리 (`app/seller/codes/`)
+- [x] 구매자 코드 입력 랜딩
+- [x] 구매자 채팅 UI + Zustand 스토어
+- [x] PortOne 결제 연동 + 서버 검증
+- [x] 주문 생성 트랜잭션
+- [x] 주문 조회 (비회원, 전화번호+주문번호)
+- [x] 셀러 주문 관리 + CSV 다운로드
+- [x] 셀러 대시보드 통계
+- [x] 관리자 셀러 승인/거부/정지 + 감사 로그
+- [x] 관리자 정산 조회
+- [x] 정산 크론 잡 (D+3)
+- [x] 이용약관 + 개인정보처리방침
+- [x] 법적 중개자 고지문
+- [x] bcrypt 비용 최적화
+- [x] 미들웨어 번들 최적화
 - [x] auth() 레이아웃 리다이렉트 루프 수정

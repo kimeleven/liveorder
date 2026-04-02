@@ -1,0 +1,2 @@
+[done] P0 크리티컬 이슈 4건 수정: 운송장 등록 UI, 코드 발급 API 보안(/api/seller/codes로 이동), 셀러 PENDING 상태 차단, 개인정보 동의(이미 구현 확인)
+[done] P1 tasks: DELIVERED status (schema+migration+UI), product edit/delete API+page, settlements filter+totals

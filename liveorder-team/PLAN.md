@@ -1,7 +1,7 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-02
-> 현재 단계: **Phase 1 MVP — 후반부 (QA 및 안정화)**
+> 최종 업데이트: 2026-04-02 (PM 조율)
+> 현재 단계: **Phase 1 MVP — 마무리 (P2 이미지 + 배포 준비)**
 
 ---
 
@@ -34,18 +34,19 @@
 
 ### 발견된 이슈 및 미완성 항목
 
-| # | 이슈 | 심각도 | 설명 |
+| # | 이슈 | 심각도 | 상태 |
 |---|------|--------|------|
-| 1 | 운송장 등록 UI 미구현 | **HIGH** | API (`/api/seller/orders/[id]/tracking`)는 존재하나, 셀러 주문목록에서 운송장 입력/등록 UI가 없음. 현재 "-"만 표시 |
-| 2 | 셀러 PENDING 상태 진입 차단 없음 | **HIGH** | 셀러가 PENDING 상태일 때 상품 등록/코드 발급이 가능. APPROVED 상태만 허용해야 함 |
-| 3 | 상품 이미지 업로드 미구현 | **MEDIUM** | DB에 `imageUrl` 필드가 있으나 업로드 기능 없음. S3 미연동 |
-| 4 | 개인정보 제3자 제공 동의 미구현 | **HIGH** | 기획서 §7.2에 명시된 결제 시 별도 동의 절차 없음 |
-| 5 | 셀러 정산 조회 상세 부족 | **LOW** | 정산 목록만 보이고, 정산 건별 상세(어떤 주문들이 포함됐는지) 없음 |
-| 6 | 주문 상태 DELIVERED 누락 | **MEDIUM** | 기획서에는 delivered 상태가 있지만 enum에는 SHIPPING 다음이 SETTLED. 배송완료 상태가 없음 |
-| 7 | 상품 수정/삭제 미구현 | **MEDIUM** | 상품 등록만 가능하고 수정/삭제 불가 |
-| 8 | 코드 발급 API 인증 없음 | **HIGH** | `app/api/codes/route.ts`의 POST가 public API로 되어있음. 셀러 인증 필요 |
-| 9 | 셀러 정산 페이지 미구현 | **MEDIUM** | `app/seller/settlements/page.tsx` 파일 존재 여부 확인 필요 |
-| 10 | 환불 처리 미구현 | **LOW** | MVP 단계에서는 수동 처리 가능하나, 관리자 환불 기능 필요 |
+| 1 | 운송장 등록 UI | ~~HIGH~~ | ✅ **해결** (afc5b54) |
+| 2 | 셀러 PENDING 상태 차단 | ~~HIGH~~ | ✅ **해결** (afc5b54) |
+| 3 | 상품 이미지 업로드 | **MEDIUM** | 🔄 Task 9 진행 예정 (Vercel Blob) |
+| 4 | 개인정보 제3자 제공 동의 | ~~HIGH~~ | ✅ **해결** (기존 구현 확인) |
+| 5 | 셀러 정산 조회 상세 | **LOW** | 📋 P2 이후 |
+| 6 | 주문 상태 DELIVERED | ~~MEDIUM~~ | ✅ **해결** (마이그레이션 완료, 미커밋) |
+| 7 | 상품 수정/삭제 | ~~MEDIUM~~ | ✅ **해결** (API + UI 구현, 미커밋) |
+| 8 | 코드 발급 API 인증 | ~~HIGH~~ | ✅ **해결** (afc5b54) |
+| 9 | 셀러 정산 페이지 | ~~MEDIUM~~ | ✅ **확인** (기존 구현됨) |
+| 10 | 환불 처리 | **LOW** | 📋 MVP 이후 |
+| 11 | debug 엔드포인트 노출 | **HIGH** | 🔄 Task 8 — 배포 전 삭제 필수 |
 
 ---
 
@@ -106,29 +107,24 @@ if (seller?.status !== 'APPROVED') {
 
 ### Phase 1 마무리 작업
 
-#### P0 — 즉시 (이번 스프린트)
+#### P0 — 완료 ✅
 
-1. **운송장 등록 UI** (이슈 #1)
-2. **셀러 PENDING 차단** (이슈 #2)
-3. **코드 발급 API 보안** (이슈 #8)
-4. **개인정보 동의** (이슈 #4)
+1. ~~**운송장 등록 UI**~~ ✅ afc5b54
+2. ~~**셀러 PENDING 차단**~~ ✅ afc5b54
+3. ~~**코드 발급 API 보안**~~ ✅ afc5b54
+4. ~~**개인정보 동의**~~ ✅ 기존 구현 확인
 
-#### P1 — 이번 주 내
+#### P1 — 완료 ✅ (미커밋 — 다음 커밋 필요)
 
-5. **OrderStatus enum에 DELIVERED 추가** (이슈 #6)
-   - `prisma/schema.prisma` — OrderStatus에 DELIVERED 추가
-   - 마이그레이션: `npx prisma migrate dev --name add_delivered_status`
-   - 셀러 주문 페이지에서 상태 표시 업데이트
+5. ~~**OrderStatus DELIVERED 추가**~~ ✅ 마이그레이션 완료
+6. ~~**상품 수정/삭제**~~ ✅ API + UI 구현
+7. ~~**셀러 정산 페이지**~~ ✅ 기존 구현 확인
 
-6. **상품 수정/삭제 기능** (이슈 #7)
-   - `app/api/seller/products/[id]/route.ts` — PUT (수정), DELETE (비활성화)
-   - `app/seller/products/page.tsx` — 수정/삭제 버튼 추가
-   - 삭제는 soft delete (`isActive = false`)
+#### 배포 전 필수 (Task 8)
 
-7. **셀러 정산 페이지 구현/점검** (이슈 #9)
-   - 정산 목록 + 상태별 필터 + 합계
+- **debug 엔드포인트 제거** (`app/api/debug/route.ts`) — 보안
 
-#### P2 — 다음 주
+#### P2 — 현재 진행 (Task 9)
 
 8. **상품 이미지 업로드** (이슈 #3)
    - Option A: Vercel Blob Storage (간단)
