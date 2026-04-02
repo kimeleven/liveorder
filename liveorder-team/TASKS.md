@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM — Task 23 완료, Task 24 착수)
+> 최종 업데이트: 2026-04-03 (Planner — 코드 검증 후 Task 24 미구현 확인, Task 24 재지시)
 
 ---
 
@@ -8,6 +8,8 @@
 
 > **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅
 > **지금 할 일:** Task 24 — 셀러 대시보드 7일 매출 차트 구현
+>
+> ⚠️ **검증 결과:** recharts 미설치, API에 dailySales 없음, 프론트에 차트 없음 — 아직 미구현 상태
 
 ---
 
@@ -15,13 +17,105 @@
 
 ### Task 24: P3-3 셀러 대시보드 차트
 
-**우선순위:** LOW — P3-2 완료 후
+**우선순위:** LOW
+**상태:** 🔴 미구현 (recharts 미설치 확인)
 
-**패키지 설치:** `npm i recharts`
+#### Step 1: 패키지 설치
 
-**파일 수정 2개:**
-- `app/api/seller/dashboard/route.ts` — dailySales 데이터 추가 (PLAN.md 3절 SQL 참고)
-- `app/seller/dashboard/page.tsx` — LineChart 컴포넌트 추가 (PLAN.md 3절 UI 참고)
+```bash
+npm i recharts
+```
+
+#### Step 2: API 수정 — `app/api/seller/dashboard/route.ts`
+
+현재 `Promise.all` 배열에 dailySales raw query 추가:
+
+```typescript
+// 기존 Promise.all 6개 항목 뒤에 7번째로 추가
+const dailySalesRaw: { date: string; total: bigint }[] = await prisma.$queryRaw`
+  SELECT
+    TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD') as date,
+    COALESCE(SUM(o.amount), 0)::bigint as total
+  FROM generate_series(
+    NOW() - INTERVAL '6 days', NOW(), INTERVAL '1 day'
+  ) gs(day)
+  LEFT JOIN orders o
+    ON DATE(o.created_at AT TIME ZONE 'Asia/Seoul') = DATE(gs.day AT TIME ZONE 'Asia/Seoul')
+    AND o.status != 'REFUNDED'
+    AND o.code_id IN (
+      SELECT c.id FROM codes c
+      JOIN products p ON c.product_id = p.id
+      WHERE p.seller_id = ${sellerId}::uuid
+    )
+  GROUP BY DATE(gs.day), TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD')
+  ORDER BY DATE(gs.day) ASC
+`;
+// BigInt → number 변환 (JSON 직렬화 대응)
+const dailySales = dailySalesRaw.map((r) => ({ date: r.date, total: Number(r.total) }));
+```
+
+`return NextResponse.json(...)` 응답에 `dailySales` 추가:
+```typescript
+return NextResponse.json({
+  totalProducts,
+  activeCodes,
+  totalOrders,
+  pendingSettlement,
+  sellerStatus: seller?.status,
+  recentOrders,
+  dailySales,  // ← 추가
+});
+```
+
+#### Step 3: 프론트엔드 수정 — `app/seller/dashboard/page.tsx`
+
+**인터페이스 수정:**
+```typescript
+// DashboardStats에 추가
+interface DashboardStats {
+  // ... 기존 필드 유지
+  dailySales?: { date: string; total: number }[];
+}
+```
+
+**import 추가 (파일 상단):**
+```typescript
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+```
+
+**JSX: 최근 주문 카드(`<Card>`) 위에 추가:**
+```tsx
+{stats.dailySales && stats.dailySales.length > 0 && (
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-lg">최근 7일 매출</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={stats.dailySales}>
+          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+          <YAxis
+            tickFormatter={(v: number) =>
+              v >= 10000 ? `${(v / 10000).toFixed(0)}만` : `${v}`
+            }
+            tick={{ fontSize: 11 }}
+          />
+          <Tooltip
+            formatter={(v: number) => [`₩${v.toLocaleString()}`, '매출']}
+          />
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke="#6366f1"
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </CardContent>
+  </Card>
+)}
+```
 
 **커밋:** `feat: 셀러 대시보드 7일 매출 차트 추가 (P3-3)`
 
@@ -29,11 +123,69 @@
 
 ### Task 25: P3-4 배송 추적
 
-**우선순위:** LOW — P3-3 완료 후
+**우선순위:** LOW — Task 24 완료 후
+**상태:** ⚠️ 부분 구현 (운송장번호 표시만 있음, 링크 없음)
 
-**신규 파일 `lib/carrier-urls.ts`** (PLAN.md 3절 참고)
+#### Step 1: `lib/carrier-urls.ts` 신규 생성
 
-**수정 파일:** 구매자 주문 조회 페이지에 "배송 추적" 버튼 추가 (택배사 홈페이지 새 탭)
+```typescript
+export const CARRIER_URLS: Record<string, string> = {
+  '대한통운': 'https://www.cjlogistics.com/ko/tool/parcel/tracking?gnbInvcNo=',
+  'CJ대한통운': 'https://www.cjlogistics.com/ko/tool/parcel/tracking?gnbInvcNo=',
+  '롯데택배': 'https://www.lotteglogis.com/home/reservation/tracking/index?InvNo=',
+  '한진택배': 'https://www.hanjin.com/kor/CMS/DeliveryMgr/WaybillResult.do?mCode=MN038&schLang=KR&wblnumText2=',
+  '우체국': 'https://service.epost.go.kr/trace.RetrieveDomRfRcptnInfo.comm?sid1=',
+  '로젠택배': 'https://www.ilogen.com/web/personal/trace/',
+};
+
+export function getTrackingUrl(carrier: string, trackingNo: string): string | null {
+  const base = CARRIER_URLS[carrier];
+  return base ? `${base}${trackingNo}` : null;
+}
+```
+
+#### Step 2: `app/(buyer)/lookup/page.tsx` 수정
+
+파일 상단에 import 추가:
+```typescript
+import { getTrackingUrl } from '@/lib/carrier-urls';
+```
+
+현재 배송 정보 섹션 (line 108-112 근처):
+```tsx
+// 기존:
+{order.trackingNo && (
+  <div>
+    <p className="font-medium text-blue-800">배송 정보</p>
+    <p>택배사: {order.carrier}</p>
+    <p>운송장: {order.trackingNo}</p>
+  </div>
+)}
+
+// 수정 후:
+{order.trackingNo && (
+  <div>
+    <p className="font-medium text-blue-800">배송 정보</p>
+    <p>택배사: {order.carrier}</p>
+    <p>운송장: {order.trackingNo}</p>
+    {order.carrier && (
+      (() => {
+        const url = getTrackingUrl(order.carrier, order.trackingNo!);
+        return url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 text-sm text-blue-600 underline hover:text-blue-800"
+          >
+            배송 추적 →
+          </a>
+        ) : null;
+      })()
+    )}
+  </div>
+)}
+```
 
 **커밋:** `feat: 배송 추적 링크 추가 (P3-4) — 택배사별 URL 매핑`
 
@@ -41,7 +193,7 @@
 
 ### Task 26: P3-5 셀러 이메일 인증
 
-**우선순위:** LOW — P3-4 완료 후 (P3-2 의존)
+**우선순위:** LOW — Task 25 완료 후 (P3-2 의존)
 
 **DB 변경 필요:**
 ```prisma
@@ -60,7 +212,7 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 
 ### Task 27: P3-6 구매자 데이터 삭제권
 
-**우선순위:** MED — P3-5 완료 후
+**우선순위:** MED — Task 26 완료 후
 
 **신규 파일 2개:**
 - `app/(buyer)/privacy/request/page.tsx`
@@ -113,10 +265,10 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 **상태:** Phase 3 작업과 병행 가능
 
 **작업 내용:**
-1. Vercel 프로젝트 Settings → Environment Variables에서 8개 변수 확인:
+1. Vercel 프로젝트 Settings → Environment Variables에서 9개 변수 확인:
    - `DATABASE_URL`, `NEXTAUTH_SECRET`, `PORTONE_API_KEY`, `PORTONE_STORE_ID`
    - `PORTONE_API_SECRET` (⚠️ 환불 필수), `BLOB_READ_WRITE_TOKEN`
-   - `CRON_SECRET`, `NEXTAUTH_URL`
+   - `CRON_SECRET`, `NEXTAUTH_URL`, `RESEND_API_KEY` (⚠️ 이메일 알림 필수)
 
 2. 미설정 항목 추가 후 Redeploy
 

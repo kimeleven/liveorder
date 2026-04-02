@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Phase 3 진행 중)
-> 현재 단계: **Phase 3 — Task 24 (P3-3 셀러 대시보드 차트) 진행 중**
-> P3-0/P3-1/P3-2 완료. Task 14 (Vercel 배포) 병행 진행 중.
+> 최종 업데이트: 2026-04-03 (Planner — Phase 3 코드 검증, Task 24 미구현 확인)
+> 현재 단계: **Phase 3 — Task 24 (P3-3 셀러 대시보드 차트) 구현 대기 중**
+> P3-0/P3-1/P3-2 완료. recharts 미설치, dailySales API 미구현 확인됨. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -198,7 +198,9 @@ export async function sendEmail(to: string, subject: string, html: string) {
 
 ---
 
-### P3-3: 셀러 대시보드 차트 (B-13)
+### P3-3: 셀러 대시보드 차트 (B-13) — ⚠️ 미구현
+
+**현황:** recharts 미설치. API에 dailySales 없음. 프론트엔드에 차트 없음.
 
 **파일 수정:** `app/seller/dashboard/page.tsx`, `app/api/seller/dashboard/route.ts`
 
@@ -249,13 +251,13 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 
 ---
 
-### P3-4: 배송 추적 (B-12)
+### P3-4: 배송 추적 (B-12) — ⚠️ 링크 미구현
 
-**현재:** 수동 운송장번호 + 택배사 입력만 가능
+**현황:** `app/(buyer)/lookup/page.tsx`에 carrier + trackingNo 표시 코드 있음 (line 108-112). 하지만 추적 링크 없음. `lib/carrier-urls.ts` 미존재.
 
 **최소 구현 (외부 API 없이):**
-- 구매자 주문 조회 페이지 (`app/(buyer)/order/status/page.tsx` 또는 유사 경로)에 운송장번호 표시 + 택배사 홈페이지 링크 제공
-- 운송장이 있는 경우: "배송 추적" 버튼 → 해당 택배사 추적 페이지로 새 탭 열기
+- `app/(buyer)/lookup/page.tsx`의 배송정보 섹션에 "배송 추적" 버튼 추가
+- 운송장이 있는 경우: 해당 택배사 추적 페이지로 새 탭 열기
 
 **택배사 URL 매핑 (`lib/carrier-urls.ts`):**
 ```typescript
