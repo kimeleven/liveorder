@@ -18,14 +18,23 @@ export default function AddressForm({ data }: Props) {
   const isInteractive = currentFlow?.step === "quantity_selected";
   const [agreePersonal, setAgreePersonal] = useState(false);
   const [agreeThirdParty, setAgreeThirdParty] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
+    const buyerPhone = formData.get("buyerPhone") as string;
+    const phoneRegex = /^01[0-9]-\d{3,4}-\d{4}$/;
+    if (!phoneRegex.test(buyerPhone)) {
+      setPhoneError("올바른 휴대폰 번호를 입력해 주세요 (예: 010-1234-5678)");
+      return;
+    }
+    setPhoneError("");
+
     const address = {
       buyerName: formData.get("buyerName") as string,
-      buyerPhone: formData.get("buyerPhone") as string,
+      buyerPhone,
       address: formData.get("address") as string,
       addressDetail: formData.get("addressDetail") as string,
       memo: formData.get("memo") as string,
@@ -80,10 +89,13 @@ export default function AddressForm({ data }: Props) {
                 id="buyerPhone"
                 name="buyerPhone"
                 type="tel"
+                placeholder="010-1234-5678"
                 required
                 disabled={!isInteractive}
-                className="h-9"
+                className={`h-9${phoneError ? " border-destructive" : ""}`}
+                onChange={() => setPhoneError("")}
               />
+              {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
             </div>
           </div>
 

@@ -64,8 +64,15 @@ export default function NewProductPage() {
     }
   }
 
+  const [categoryError, setCategoryError] = useState("");
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!category) {
+      setCategoryError("카테고리를 선택해 주세요.");
+      return;
+    }
+    setCategoryError("");
     setLoading(true);
     setError("");
 
@@ -178,8 +185,8 @@ export default function NewProductPage() {
               </div>
               <div className="space-y-2">
                 <Label>카테고리 *</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v ?? "")} required>
-                  <SelectTrigger>
+                <Select value={category} onValueChange={(v) => { setCategory(v ?? ""); setCategoryError(""); }}>
+                  <SelectTrigger className={categoryError ? "border-destructive" : ""}>
                     <SelectValue placeholder="카테고리 선택" />
                   </SelectTrigger>
                   <SelectContent>
@@ -190,6 +197,7 @@ export default function NewProductPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {categoryError && <p className="text-sm text-destructive">{categoryError}</p>}
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}

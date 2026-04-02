@@ -4,33 +4,30 @@
 
 ---
 
-## 🔜 Dev1 다음 작업 — Phase 1 마무리 + P2 버그 수정
+## ✅ Dev1 완료 — Phase 1 마무리 + P2 버그 수정
 
-> Phase 1 MVP 모든 P1 작업 완료. 수동 QA 병행하며 아래 P2 UX 버그 수정.
+### Task 10: 카테고리 미선택 UX 피드백 개선 (B-03) ✅ 완료 (2026-04-02)
 
-### Task 10: 카테고리 미선택 UX 피드백 개선 (B-03) ← **우선 착수**
+**파일:** `app/seller/products/new/page.tsx`
 
-**파일:** `app/seller/products/new/page.tsx:181`, `app/api/seller/products/route.ts:38-43`
-
-**문제:** 상품 등록 폼에서 카테고리 미선택 시 shadcn Select의 `required`가 브라우저 네이티브 팝업 없이 서버 오류를 반환. 클라이언트 피드백이 없어 UX 혼란.
-
-**구현:**
-1. `new/page.tsx` — `handleSubmit`에서 `category` 값이 없을 때 `setError("카테고리를 선택해 주세요.")` 처리 (submit 전 client-side validation)
-2. Select 아래 에러 메시지 표시 (`category`별 에러 state 추가)
-3. 커밋: `fix: add client-side category validation on product form`
+**완료 내용:**
+- `categoryError` state 추가
+- `handleSubmit`에서 `category` 미선택 시 조기 반환 + `setCategoryError("카테고리를 선택해 주세요.")`
+- Select `onValueChange`에서 에러 초기화
+- Select 아래 에러 메시지 표시 + 빨간 테두리
 
 ---
 
-### Task 11: 연락처 형식 검증 추가 (B-04)
+### Task 11: 연락처 형식 검증 추가 (B-04) ✅ 완료 (2026-04-02)
 
-**파일:** `components/buyer/cards/AddressForm.tsx:80-87`
+**파일:** `components/buyer/cards/AddressForm.tsx`
 
-**문제:** 전화번호 `type="tel"`만 있고 형식 검증(01X-XXXX-XXXX) 없음. 잘못된 번호 입력 시 주문 조회 불가.
-
-**구현:**
-1. 제출 시 정규식 검증: `/^01[0-9]-\d{3,4}-\d{4}$/`
-2. 오류 시 필드 아래 안내 메시지: `"올바른 휴대폰 번호를 입력해 주세요 (예: 010-1234-5678)"`
-3. 커밋: `fix: add phone number format validation in AddressForm`
+**완료 내용:**
+- `phoneError` state 추가
+- 제출 시 정규식 검증: `/^01[0-9]-\d{3,4}-\d{4}$/`
+- 오류 시 필드 아래 안내 메시지 표시 + 빨간 테두리
+- 입력 변경 시 에러 초기화
+- placeholder `"010-1234-5678"` 추가
 
 ---
 
