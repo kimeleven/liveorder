@@ -43,7 +43,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const { name, description, price, stock, category } = body;
+    const { name, description, price, stock, category, imageUrl } = body;
 
     if (!name || !price || !category) {
       return NextResponse.json(
@@ -60,6 +60,7 @@ export async function PUT(
         price: Number(price),
         stock: Number(stock) || 0,
         category,
+        imageUrl: imageUrl ?? null,
       },
     });
 

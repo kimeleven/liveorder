@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter, useParams } from "next/navigation";
 import SellerShell from "@/components/seller/SellerShell";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { ImagePlus, X } from "lucide-react";
 
 const categories = [
   "패션의류",
@@ -26,16 +28,6 @@ const categories = [
   "기타",
 ];
 
-interface Product {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  stock: number;
-  category: string;
-  isActive: boolean;
-}
-
 export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
@@ -44,31 +36,62 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState("");
-  const [product, setProduct] = useState<Product | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [category, setCategory] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [stock, setStock] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
     fetch(`/api/seller/products/${productId}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          setError(data.error);
+          setNotFound(true);
         } else {
-          setProduct(data);
           setName(data.name);
           setDescription(data.description ?? "");
           setPrice(String(data.price));
           setStock(String(data.stock));
           setCategory(data.category);
+          setImageUrl(data.imageUrl ?? "");
+          setImagePreview(data.imageUrl ?? "");
         }
       })
-      .catch(() => setError("상품 정보를 불러오지 못했습니다."))
+      .catch(() => setNotFound(true))
       .finally(() => setFetchLoading(false));
   }, [productId]);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageUploading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/seller/products/upload", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "이미지 업로드에 실패했습니다.");
+        return;
+      }
+      setImageUrl(data.url);
+      setImagePreview(data.url);
+    } catch {
+      setError("이미지 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +102,14 @@ export default function EditProductPage() {
       const res = await fetch(`/api/seller/products/${productId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, price, stock, category }),
+        body: JSON.stringify({
+          name,
+          description,
+          price,
+          stock,
+          category,
+          imageUrl: imageUrl || null,
+        }),
       });
 
       if (!res.ok) {
@@ -104,10 +134,10 @@ export default function EditProductPage() {
     );
   }
 
-  if (!product && error) {
+  if (notFound) {
     return (
       <SellerShell>
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">상품을 찾을 수 없습니다.</p>
       </SellerShell>
     );
   }
@@ -123,6 +153,42 @@ export default function EditProductPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* 상품 이미지 */}
+              <div className="space-y-2">
+                <Label>상품 이미지</Label>
+                {imagePreview ? (
+                  <div className="relative w-full h-48 rounded-lg overflow-hidden border bg-muted">
+                    <Image
+                      src={imagePreview}
+                      alt="상품 이미지"
+                      fill
+                      className="object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setImageUrl(""); setImagePreview(""); }}
+                      className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <ImagePlus className="h-8 w-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">
+                      {imageUploading ? "업로드 중..." : "이미지 선택 (JPG, PNG, WebP, 5MB 이하)"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleImageChange}
+                      disabled={imageUploading}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="name">상품명 *</Label>
                 <Input
@@ -183,7 +249,7 @@ export default function EditProductPage() {
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="flex gap-3">
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading || imageUploading}>
                   {loading ? "저장 중..." : "수정 완료"}
                 </Button>
                 <Button

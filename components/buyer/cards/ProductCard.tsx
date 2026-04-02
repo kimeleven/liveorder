@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface Props {
@@ -9,9 +10,24 @@ interface Props {
 export default function ProductCard({ data }: Props) {
   const product = data.product as Record<string, unknown>;
   const seller = data.seller as Record<string, unknown>;
+  const imageUrl = product?.imageUrl as string | null | undefined;
 
   return (
     <Card className="overflow-hidden">
+      {imageUrl ? (
+        <div className="relative w-full h-48 bg-muted">
+          <Image
+            src={imageUrl}
+            alt={String(product?.name ?? "상품 이미지")}
+            fill
+            className="object-cover"
+          />
+        </div>
+      ) : (
+        <div className="w-full h-32 bg-muted flex items-center justify-center text-muted-foreground text-sm">
+          이미지 없음
+        </div>
+      )}
       <CardContent className="p-4 space-y-3">
         <div>
           <h3 className="font-semibold text-lg">
