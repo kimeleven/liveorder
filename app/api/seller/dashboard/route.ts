@@ -10,7 +10,7 @@ export async function GET() {
 
   const sellerId = session.user.id;
 
-  const [seller, totalProducts, activeCodes, totalOrders, pendingSettlement] =
+  const [seller, totalProducts, activeCodes, totalOrders, pendingSettlement, recentOrders] =
     await Promise.all([
       prisma.seller.findUnique({ where: { id: sellerId }, select: { status: true } }),
       prisma.product.count({ where: { sellerId } }),
@@ -33,6 +33,17 @@ export async function GET() {
           _sum: { amount: true },
         })
         .then((r) => r._sum.amount ?? 0),
+      prisma.order.findMany({
+        where: {
+          code: { product: { sellerId } },
+          status: { not: "REFUNDED" },
+        },
+        include: {
+          code: { include: { product: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
     ]);
 
   return NextResponse.json({
@@ -41,5 +52,6 @@ export async function GET() {
     totalOrders,
     pendingSettlement,
     sellerStatus: seller?.status,
+    recentOrders,
   });
 }

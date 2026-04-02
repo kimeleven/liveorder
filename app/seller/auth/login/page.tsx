@@ -21,6 +21,7 @@ function SellerLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/seller/dashboard";
+  const message = searchParams.get("message");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -52,6 +53,11 @@ function SellerLoginForm() {
           <p className="text-sm text-muted-foreground">셀러 로그인</p>
         </CardHeader>
         <CardContent>
+          {message === "approved" && (
+            <div className="mb-4 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
+              승인되었습니다. 다시 로그인해주세요.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">이메일</Label>

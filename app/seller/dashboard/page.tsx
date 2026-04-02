@@ -1,10 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import SellerShell from "@/components/seller/SellerShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Package, QrCode, ShoppingCart, Wallet } from "lucide-react";
+
+interface RecentOrder {
+  id: string;
+  buyerName: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+  code: { product: { name: string } };
+}
 
 interface DashboardStats {
   totalProducts: number;
@@ -12,7 +31,16 @@ interface DashboardStats {
   totalOrders: number;
   pendingSettlement: number;
   sellerStatus?: string;
+  recentOrders?: RecentOrder[];
 }
+
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  PAID: "결제완료",
+  SHIPPING: "배송중",
+  DELIVERED: "배송완료",
+  SETTLED: "정산완료",
+  REFUNDED: "환불",
+};
 
 export default function SellerDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -21,6 +49,8 @@ export default function SellerDashboardPage() {
     totalOrders: 0,
     pendingSettlement: 0,
   });
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const [checkLoading, setCheckLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/seller/dashboard")
@@ -28,6 +58,24 @@ export default function SellerDashboardPage() {
       .then(setStats)
       .catch(() => {});
   }, []);
+
+  async function checkApprovalStatus() {
+    setCheckLoading(true);
+    setCheckMessage(null);
+    try {
+      const res = await fetch("/api/seller/me");
+      const data = await res.json();
+      if (data.status === "APPROVED") {
+        await signOut({ callbackUrl: "/seller/auth/login?message=approved" });
+      } else {
+        setCheckMessage("아직 승인 대기 중입니다. 관리자에게 문의하세요.");
+      }
+    } catch {
+      setCheckMessage("확인 중 오류가 발생했습니다.");
+    } finally {
+      setCheckLoading(false);
+    }
+  }
 
   const cards = [
     {
@@ -68,6 +116,20 @@ export default function SellerDashboardPage() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
             <p className="font-medium">승인 대기 중</p>
             <p className="text-sm">관리자 승인 후 상품 등록 및 코드 발급이 가능합니다.</p>
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-yellow-400 text-yellow-800 hover:bg-yellow-100"
+                onClick={checkApprovalStatus}
+                disabled={checkLoading}
+              >
+                {checkLoading ? "확인 중..." : "승인 확인"}
+              </Button>
+              {checkMessage && (
+                <p className="text-sm text-yellow-700">{checkMessage}</p>
+              )}
+            </div>
           </div>
         )}
 
@@ -95,9 +157,42 @@ export default function SellerDashboardPage() {
             <CardTitle className="text-lg">최근 주문</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              아직 주문이 없습니다. 상품을 등록하고 코드를 발급하여 판매를 시작하세요.
-            </p>
+            {stats.recentOrders && stats.recentOrders.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>주문번호</TableHead>
+                    <TableHead>상품명</TableHead>
+                    <TableHead>금액</TableHead>
+                    <TableHead>상태</TableHead>
+                    <TableHead>날짜</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stats.recentOrders.map((order) => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-mono text-xs">
+                        {order.id.slice(0, 8).toUpperCase()}
+                      </TableCell>
+                      <TableCell className="text-sm">{order.code.product.name}</TableCell>
+                      <TableCell className="text-sm">₩{order.amount.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">
+                          {ORDER_STATUS_LABELS[order.status] ?? order.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(order.createdAt).toLocaleDateString("ko-KR")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                아직 주문이 없습니다. 상품을 등록하고 코드를 발급하여 판매를 시작하세요.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
