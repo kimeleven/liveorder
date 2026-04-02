@@ -1,6 +1,6 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-03 (QA 자동화 — Phase 1 배포 전 최종 코드 리뷰)
+> 최종 업데이트: 2026-04-03 (PM 조율 — 잔여 오류 수정, Task 12 수동 QA 최우선)
 > QA 단계: Phase 1 MVP — 배포 전 최종 검증 (신규 버그 2개 발견)
 
 ---
@@ -100,7 +100,7 @@
 
 | 기능 | 기획 여부 | 상태 |
 |------|-----------|------|
-| UX-2 QR 코드 생성 (코드 발급 후 즉시 표시) | 기획서 명시 | **미구현** — B-23 |
+| UX-2 QR 코드 생성 (코드 발급 후 즉시 표시) | 기획서 명시 | ✅ 완료 (2026-04-03, B-23) |
 | 환불 UI (관리자) | 기획서 명시 | ✅ 완료 (2026-04-03, P2-1) |
 | 정산 상세 드릴다운 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 19) |
 | 셀러 이메일 인증 | 기획서 명시 | Phase 3 예정 |
@@ -160,7 +160,7 @@ Phase 1 MVP 배포 가능 기준:
 | `NEXTAUTH_SECRET` | JWT 서명 | PLAN.md 기재 |
 | `PORTONE_API_KEY` | PortOne V2 API 키 | PLAN.md 기재 |
 | `PORTONE_STORE_ID` | PortOne 상점 ID | PLAN.md 기재 |
-| `PORTONE_API_SECRET` | PortOne 환불 API 인증 | **⚠️ PLAN.md 누락 — 추가 필요** |
+| `PORTONE_API_SECRET` | PortOne 환불 API 인증 | ✅ PLAN.md 추가 완료 (B-24) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob | PLAN.md 기재 |
 | `CRON_SECRET` | 정산 크론 Bearer 토큰 | PLAN.md 기재 |
 | `NEXTAUTH_URL` | 프로덕션 URL | PLAN.md 기재 |
