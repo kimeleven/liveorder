@@ -1,6 +1,6 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 QA 진행 중, B-05/B-08/B-09 조기 완료)
+> 최종 업데이트: 2026-04-02 (PM 조율 — B-15/B-16/B-17 보안 수정 완료, HKDF salt 버그 수정, QA 진행 중)
 > 현재 단계: **Phase 1 MVP — 수동 QA 6개 항목 통과 → Vercel 배포**
 
 ---
@@ -38,6 +38,11 @@
 | 관리자 정산 조회 | ✅ 완료 | 초기 |
 | 정산 크론 (D+3, CRON_SECRET 인증) | ✅ 완료 | 1485f74 |
 | debug 엔드포인트 제거 (보안) | ✅ 완료 | af0cc28 |
+| 결제 우회 엔드포인트 제거 (B-15) | ✅ 완료 | ac653d0 |
+| 관리자 정산 배치 인증 수정 (B-16) | ✅ 완료 | ac653d0 |
+| 비활성 상품 코드 발급 차단 (B-17) | ✅ 완료 | ac653d0 |
+| 미들웨어 HKDF salt 버그 수정 | ✅ 완료 | 876bb02 |
+| 관리자 계정 DB seed 누락 수정 | ✅ 완료 | cc08f64 |
 | 이용약관 + 개인정보처리방침 | ✅ 완료 | 초기 |
 | 법적 중개자 고지문 (PaymentSummary) | ✅ 완료 | 초기 |
 
@@ -53,7 +58,7 @@ QA_REPORT.md "검증 필요 항목" 섹션 기준. 각 항목 통과 시 ✅ 마
 |---|------|------|
 | QA-1 | 결제 플로우 | PortOne 테스트 결제창 → 서버 검증 → Order 생성 DB 확인 |
 | QA-2 | 운송장 등록 | PAID 주문 → Dialog → 제출 → SHIPPING 상태 전환 확인 |
-| QA-3 | 관리자 셀러 승인 | 신규 셀러 → 관리자 승인 → 셀러 대시보드 PENDING 배너 사라짐 |
+| QA-3 | 관리자 셀러 승인 | 신규 셀러 → 관리자 승인 → **셀러 재로그인** → 대시보드 PENDING 배너 사라짐 ⚠️ B-18: JWT 세션 재로그인 후 갱신 |
 | QA-4 | 정산 크론 | POST `/api/cron/settlements` (Authorization: Bearer $CRON_SECRET) → Settlement 생성 확인 |
 | QA-5 | 미들웨어 인증 | 비로그인 상태 `/seller/dashboard` 접근 → `/seller/login` 리다이렉트 |
 | QA-6 | 이미지 업로드 | 5MB 초과 → 오류, 정상 이미지 → Vercel Blob URL 저장 확인 |
@@ -206,6 +211,12 @@ const settlement = await prisma.settlement.findUnique({
 |------|----------|-----------|
 | B-05: 코드 검증 N+1 쿼리 | MED | ✅ 완료 (2026-04-02) |
 | `.env.example` PortOne/Blob 변수 추가 | MED | ✅ 완료 (2026-04-02) |
+| B-15: 결제 우회 엔드포인트 제거 | HIGH | ✅ 완료 (2026-04-02) |
+| B-16: 관리자 정산 배치 인증 수정 | HIGH | ✅ 완료 (2026-04-02) |
+| B-17: 비활성 상품 코드 발급 차단 | MED | ✅ 완료 (2026-04-02) |
+| B-18: 셀러 승인 후 JWT 세션 미갱신 | MED | 미처리 (재로그인 필요 안내로 우선 대응) |
+| B-19: 전화번호 서버측 검증 없음 | LOW | Task 15 (선택, 배포 전) |
+| B-20: 정산 배치 alert() UX | LOW | Task 15 (선택, 배포 전) |
 | buyer-store `Record<string, unknown>` 타입 개선 | LOW | 미처리 |
 | CSV 다운로드 페이지네이션 (대용량 대비) | LOW | 미처리 |
 | Redis 캐싱 (코드 조회) | LOW | MVP 이후 |
@@ -223,5 +234,9 @@ const settlement = await prisma.settlement.findUnique({
 - [x] B-02: 레이스 컨디션 수정 (원자적 UPDATE)
 - [x] B-03: 카테고리 UX 피드백
 - [x] B-04: 연락처 형식 검증
-- [ ] **수동 QA 6개 항목 모두 통과** ← Dev1 Task 12
-- [ ] **Vercel 환경변수 7개 확인** ← Dev1 배포 전 체크
+- [x] B-15: 결제 우회 엔드포인트 제거
+- [x] B-16: 관리자 정산 배치 인증 수정
+- [x] B-17: 비활성 상품 코드 발급 차단
+- [ ] **수동 QA 6개 항목 모두 통과** ← Dev1 Task 12 (진행 중)
+- [ ] **B-19/B-20 선택적 수정** ← Dev1 Task 15 (선택)
+- [ ] **Vercel 환경변수 7개 확인** ← Dev1 Task 14 (배포 전)

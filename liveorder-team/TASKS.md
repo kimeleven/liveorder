@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — QA 진행 중, B-08/B-09 조기 완료 반영)
+> 최종 업데이트: 2026-04-02 (PM 조율 — B-15/B-16/B-17 보안 수정 완료, QA 진행 중, B-18 세션 이슈 주의)
 
 ---
 
@@ -14,13 +14,36 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 **QA 항목:**
 1. 결제 플로우: PortOne 테스트 결제창 → 서버 검증 → 주문 DB 생성 확인
 2. 운송장 등록: PAID 주문 → Dialog → 제출 → SHIPPING 전환
-3. 관리자 승인: 신규 셀러 → 관리자 승인 → 셀러 PENDING 배너 사라짐
+3. 관리자 승인: 신규 셀러 → 관리자 승인 → **셀러 재로그인** → PENDING 배너 사라짐 확인
+   > ⚠️ **B-18 주의:** JWT 세션은 재로그인 전까지 갱신 안 됨. API는 DB 직접 조회라 정상 동작하나,
+   > 대시보드 배너는 재로그인 후 사라짐. QA 시 로그아웃 → 재로그인 과정 포함해서 확인할 것.
 4. 정산 크론: `Authorization: Bearer $CRON_SECRET` 헤더로 POST → Settlement 생성
 5. 미들웨어: 비로그인 상태 `/seller/dashboard` 접근 → `/seller/login` 리다이렉트
 6. 이미지 업로드: 5MB 초과 → 오류 메시지, 정상 이미지 → Blob URL 저장
 
 **완료 조건:** QA_REPORT.md 6개 항목 모두 ✅ → PM에게 배포 승인 요청
 **커밋:** `qa: Phase 1 수동 QA 6개 항목 통과 확인`
+
+---
+
+### Task 15: 배포 전 빠른 픽스 (선택, Task 12와 병행 가능)
+
+QA 통과 가능성 높이고 배포 품질 개선을 위한 선택적 수정 2건.
+큰 작업 아님 — 각 30분 내외.
+
+**B-19: 서버측 전화번호 형식 검증 추가 (LOW)**
+- `app/api/sellers/register/route.ts` — `phone` 필드 정규식 검증 추가
+- `app/api/payments/confirm/route.ts` — `buyerPhone` 필드 정규식 검증 추가
+  ```typescript
+  const phoneRegex = /^01[0-9]-\d{3,4}-\d{4}$/;
+  if (!phoneRegex.test(phone)) return Response.json({ error: "연락처 형식 오류" }, { status: 400 });
+  ```
+- **커밋:** `fix: 서버측 전화번호 형식 검증 추가 (B-19)`
+
+**B-20: 정산 배치 UX — alert() 제거 (LOW)**
+- `app/admin/settlements/page.tsx:43-44` — `alert()` → toast/상태 메시지로 교체
+- 오류 시 `res.ok` 체크하여 실패 메시지 표시
+- **커밋:** `fix: 정산 배치 UX 개선 — alert() 제거, 오류 처리 추가 (B-20)`
 
 ---
 
