@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
       await prisma.$transaction(async (tx) => {
         // 정산 레코드 생성
-        await tx.settlement.create({
+        const settlement = await tx.settlement.create({
           data: {
             sellerId: group.sellerId,
             amount: group.totalAmount,
@@ -75,10 +75,10 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // 주문 상태를 SETTLED로 변경
+        // 주문 상태를 SETTLED로 변경 + settlementId 연결
         await tx.order.updateMany({
           where: { id: { in: group.orderIds } },
-          data: { status: "SETTLED" },
+          data: { status: "SETTLED", settlementId: settlement.id },
         });
       });
 

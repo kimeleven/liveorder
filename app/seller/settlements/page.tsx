@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import SettlementDetailDrawer from "@/components/seller/SettlementDetailDrawer";
 
 interface SettlementItem {
   id: string;
@@ -50,6 +51,7 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive"> = {
 export default function SettlementsPage() {
   const [settlements, setSettlements] = useState<SettlementItem[]>([]);
   const [filter, setFilter] = useState<FilterStatus>("ALL");
+  const [selectedSettlementId, setSelectedSettlementId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/seller/settlements")
@@ -75,6 +77,10 @@ export default function SettlementsPage() {
 
   return (
     <SellerShell>
+      <SettlementDetailDrawer
+        settlementId={selectedSettlementId}
+        onClose={() => setSelectedSettlementId(null)}
+      />
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">정산 내역</h1>
@@ -151,6 +157,7 @@ export default function SettlementsPage() {
                 <TableHead>실지급액</TableHead>
                 <TableHead>상태</TableHead>
                 <TableHead>정산일</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,6 +188,15 @@ export default function SettlementsPage() {
                       {s.settledAt
                         ? new Date(s.settledAt).toLocaleDateString("ko-KR")
                         : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedSettlementId(s.id)}
+                      >
+                        상세 보기
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

@@ -79,8 +79,8 @@ export default function AdminOrdersPage() {
     fetchOrders();
   }, [fetchOrders]);
 
-  function handleStatusChange(value: string) {
-    setStatusFilter(value);
+  function handleStatusChange(value: string | null) {
+    setStatusFilter(value ?? "ALL");
     setPage(1);
   }
 

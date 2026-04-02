@@ -105,6 +105,7 @@ model Code {
 model Order {
   id            String      @id @default(uuid()) @db.Uuid
   codeId        String      @map("code_id") @db.Uuid
+  settlementId  String?     @map("settlement_id") @db.Uuid
   buyerName     String      @map("buyer_name") @db.VarChar(50)
   buyerPhone    String      @map("buyer_phone") @db.VarChar(20)
   address       String
@@ -118,7 +119,8 @@ model Order {
   carrier       String?     @db.VarChar(30) // 택배사
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  code Code @relation(fields: [codeId], references: [id])
+  code       Code        @relation(fields: [codeId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])
 
   @@index([codeId, status])
   @@index([buyerPhone])
@@ -148,7 +150,8 @@ model Settlement {
   settledAt   DateTime?        @map("settled_at") @db.Timestamptz
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
 
-  seller Seller @relation(fields: [sellerId], references: [id])
+  seller Seller  @relation(fields: [sellerId], references: [id])
+  orders Order[]
 
   @@map("settlements")
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { OrderStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,7 +13,8 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get("status") || undefined;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
 
-  const where = status ? { status: status as string } : {};
+  const validStatuses = ["PAID", "SHIPPING", "DELIVERED", "SETTLED", "REFUNDED"];
+  const where = status && validStatuses.includes(status) ? { status: status as OrderStatus } : {};
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({

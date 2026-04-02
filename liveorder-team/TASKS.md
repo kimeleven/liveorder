@@ -6,19 +6,10 @@
 
 ## 🔴 UX 개선 (Sanghun 직접 요청 — 최우선)
 
-### UX-1: 상품 등록 시 코드 자동 발급 — 🔄 진행 중 (uncommitted)
+### ~~UX-1: 상품 등록 시 코드 자동 발급~~ ✅ 완료 (2026-04-03)
 
-**현재:** 상품 등록 → 코드 발급 페이지 별도 이동 → 상품 선택 → 코드 발급 (2단계)
-**개선:** 상품 등록 완료 시 코드 1개 자동 발급 + 추가 발급은 별도로
-
-**구현:**
-1. `app/api/seller/products/route.ts` POST 핸들러 수정
-   - 상품 INSERT 후 자동으로 Code 1개 생성 (유효기간 24시간, maxQty 0)
-   - 응답에 `codeKey` 포함
-2. `app/seller/products/new/page.tsx` 수정
-   - 등록 성공 시 "상품이 등록되었습니다! 코드: XXX-XXXX-XXXX" 표시
-   - "코드 복사" 버튼 + "추가 코드 발급" 링크 (/seller/codes/new?productId=xxx)
-3. 코드 발급 페이지(`/seller/codes/new`)는 "추가 발급" 용도로 유지
+- `app/api/seller/products/route.ts` — 상품 등록 후 코드 1개 자동 발급 (24시간, 무제한 수량), 응답에 `autoCode` 포함
+- `app/seller/products/new/page.tsx` — 등록 성공 시 "상품이 등록되었습니다!" + 코드 표시 + 복사 버튼 + 추가 발급 링크
 
 ### ~~UX-2: 코드 발급 시 QR코드 자동 생성~~ ✅ 완료 (2026-04-03, c0bb241)
 
@@ -279,47 +270,14 @@ async function checkApprovalStatus() {
 
 ---
 
-### Task 19: 정산 상세 드릴다운 (MEDIUM, ~1시간 남음)
+### ~~Task 19: 정산 상세 드릴다운~~ ✅ 완료 (2026-04-03)
 
-> **⚠️ 거의 완료 (uncommitted):** ①②③④⑤ 전부 구현됨. 코드 검토 후 바로 커밋 가능.
-> 생성된 파일: `app/api/seller/settlements/[id]/route.ts`, `components/seller/SettlementDetailDrawer.tsx`, 마이그레이션
-
-**~~① 스키마 변경:~~ ✅ 완료 (uncommitted)**
 - `prisma/schema.prisma` — `Order.settlementId` FK + `Settlement.orders` 관계 추가
-- 마이그레이션: `prisma/migrations/20260403000001_add_settlement_id_to_orders/` 생성됨
-
-**~~② 크론 수정:~~ ✅ 완료 (uncommitted)**
-- `app/api/cron/settlements/route.ts` — `settlementId: settlement.id` 업데이트 추가됨
-
-**~~③ API 신규:~~ ✅ 완료 (uncommitted)** — `app/api/seller/settlements/[id]/route.ts`
-
-**~~④ UI 수정:~~ ✅ 완료 (uncommitted)** — `app/seller/settlements/page.tsx`
-
-**~~⑤ 신규 컴포넌트:~~ ✅ 완료 (uncommitted)** — `components/seller/SettlementDetailDrawer.tsx`
-
-**③ API 신규:** `app/api/seller/settlements/[id]/route.ts`
-```typescript
-// GET /api/seller/settlements/[id]
-const settlement = await prisma.settlement.findUnique({
-  where: { id, sellerId: session.user.id },
-  include: {
-    orders: {
-      include: {
-        code: { include: { product: { select: { name: true } } } }
-      }
-    }
-  }
-});
-if (!settlement) return Response.json({ error: "Not found" }, { status: 404 });
-return Response.json(settlement);
-```
-
-**④ UI:** `app/seller/settlements/page.tsx` 수정
-- Settlement 카드에 "상세 보기" 버튼 추가 → `SettlementDetailDrawer` 열기
-
-**⑤ 신규 컴포넌트:** `components/seller/SettlementDetailDrawer.tsx`
-- shadcn `Sheet` 컴포넌트 사용 (우측 슬라이드아웃)
-- 포함 주문 테이블: 주문번호, 상품명, 금액, 결제일
+- `prisma/migrations/20260403000001_add_settlement_id_to_orders/` — 마이그레이션 SQL
+- `app/api/cron/settlements/route.ts` — 정산 생성 시 `settlementId` 연결
+- `app/api/seller/settlements/[id]/route.ts` — 정산 상세 API (포함 주문 포함)
+- `components/seller/SettlementDetailDrawer.tsx` — Sheet 슬라이드아웃 컴포넌트
+- `app/seller/settlements/page.tsx` — "상세 보기" 버튼 + Drawer 연결
 
 **커밋:** `feat: 정산 상세 드릴다운 구현 (P2-3, B-06)`
 
@@ -329,6 +287,7 @@ return Response.json(settlement);
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 19: 정산 상세 드릴다운 (P2-3, B-06) + UX-1: 상품 등록 시 코드 자동 발급 | (이번 커밋) |
 | 2026-04-03 | B-19 서버 전화번호 검증, B-20 정산 배치 alert() 제거 + 인라인 메시지 | 6bcb637 |
 | 2026-04-03 | Task 16: 관리자 주문 목록 + 환불 UI (P2-1) | 048ac72 |
 | 2026-04-03 | Task 17+18: 셀러 대시보드 최근 주문 실데이터, 승인 세션 갱신 UX (B-22, B-18) | 49a984b |

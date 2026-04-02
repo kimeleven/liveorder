@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { ImagePlus, X } from "lucide-react";
+import { ImagePlus, X, Copy, Check } from "lucide-react";
 
 const categories = [
   "패션의류",
@@ -36,6 +36,8 @@ export default function NewProductPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState("");
+  const [autoCodeResult, setAutoCodeResult] = useState<{ productId: string; codeKey: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -99,11 +101,68 @@ export default function NewProductPage() {
         return;
       }
 
+      const data = await res.json();
+      if (data.autoCode?.codeKey) {
+        setAutoCodeResult({ productId: data.id, codeKey: data.autoCode.codeKey });
+        setLoading(false);
+        return;
+      }
+
       router.push("/seller/products");
     } catch {
       setError("서버 오류가 발생했습니다.");
       setLoading(false);
     }
+  }
+
+  async function handleCopy() {
+    if (!autoCodeResult) return;
+    await navigator.clipboard.writeText(autoCodeResult.codeKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (autoCodeResult) {
+    return (
+      <SellerShell>
+        <div className="max-w-md mx-auto space-y-6 text-center">
+          <div>
+            <h1 className="text-2xl font-bold">상품이 등록되었습니다!</h1>
+            <p className="text-muted-foreground mt-1">코드가 자동으로 발급되었습니다</p>
+          </div>
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground">발급된 코드</p>
+              <p className="text-3xl font-mono font-bold tracking-widest">
+                {autoCodeResult.codeKey}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                라이브 방송 중 이 코드를 구매자에게 공유하세요.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={handleCopy} variant="default">
+                  {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                  {copied ? "복사됨" : "코드 복사"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/seller/codes/new?productId=${autoCodeResult.productId}`)}
+                >
+                  추가 코드 발급
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => router.push("/seller/products")}
+              >
+                상품 목록으로
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </SellerShell>
+    );
   }
 
   return (

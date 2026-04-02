@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { generateCodeKey } from "@/lib/code-generator";
 
 export async function GET() {
   const session = await auth();
@@ -54,7 +55,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(product, { status: 201 });
+    // 상품 등록 후 코드 1개 자동 발급 (유효기간 24시간, 무제한 수량)
+    let autoCode = null;
+    try {
+      let codeKey: string;
+      let attempts = 0;
+      do {
+        codeKey = generateCodeKey(session.user.id);
+        const existing = await prisma.code.findUnique({ where: { codeKey } });
+        if (!existing) break;
+        attempts++;
+      } while (attempts < 10);
+
+      if (attempts < 10) {
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        autoCode = await prisma.code.create({
+          data: { productId: product.id, codeKey, expiresAt, maxQty: 0 },
+        });
+      }
+    } catch {
+      // 코드 자동 발급 실패 시 상품 등록은 유지
+    }
+
+    return NextResponse.json({ ...product, autoCode }, { status: 201 });
   } catch (error) {
     console.error("상품 등록 오류:", error);
     return NextResponse.json(
