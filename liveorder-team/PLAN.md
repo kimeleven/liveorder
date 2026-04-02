@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Task 26 완료 반영, Task 27 착수)
+> 최종 업데이트: 2026-04-03 (PM — Task 27 P3-6 스펙 검증, Task 28 계획 추가)
 > 현재 단계: **Phase 3 — Task 27 (P3-6 구매자 데이터 삭제권) 진행 중**
-> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5 완료. Task 27 (GDPR 삭제권) 진행 중. Task 14 (Vercel 배포) 병행 진행 중.
+> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5 완료. Task 27 (GDPR 삭제권) 진행 중. Task 28 (기술 부채 B-28/B-29) 계획 수립. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -298,24 +298,115 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 
 ---
 
-### P3-6: 구매자 데이터 삭제권 (개인정보법)
+### P3-6: 구매자 데이터 삭제권 (개인정보법) — 🔄 진행 중 (Task 27)
 
 **최소 구현 (비회원 구매자):**
 
-**신규 파일:**
-- `app/(buyer)/privacy/request/page.tsx` — 이름 + 전화번호 입력 폼
-- `app/api/buyer/data-deletion/route.ts` — 해당 전화번호 주문 soft delete
+**신규 파일 2개 + 기존 파일 수정 1개:**
 
-**API 스펙:**
+#### 1. `app/api/buyer/data-deletion/route.ts` (신규)
 ```typescript
 // POST /api/buyer/data-deletion
 // Body: { name: string, phone: string }
-// 처리: 해당 전화번호 주문에서 buyerName, address, addressDetail, memo를 '[삭제됨]'으로 마스킹
-//       (Order 자체는 정산 무결성을 위해 유지, 개인정보만 삭제)
-// 응답: { deleted: number } — 처리된 주문 수
+// 처리: 해당 전화번호+이름 주문에서 개인정보 마스킹 (정산 무결성 유지)
+// 응답: { deleted: number }
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+export async function POST(req: NextRequest) {
+  const { name, phone } = await req.json();
+  if (!name || !phone)
+    return NextResponse.json({ error: '이름과 전화번호를 입력해 주세요.' }, { status: 400 });
+
+  const result = await prisma.order.updateMany({
+    where: { buyerPhone: phone, buyerName: name },
+    data: {
+      buyerName: '[삭제됨]',
+      buyerPhone: '[삭제됨]',
+      address: '[삭제됨]',
+      addressDetail: '[삭제됨]',
+      memo: '[삭제됨]',
+    },
+  });
+
+  return NextResponse.json({ deleted: result.count });
+}
 ```
 
-**개인정보처리방침 페이지 링크 추가:** `app/(buyer)/privacy/page.tsx`에 삭제 요청 링크 추가
+#### 2. `app/(buyer)/privacy/request/page.tsx` (신규)
+- `'use client'` 클라이언트 컴포넌트
+- 이름 + 전화번호 입력 폼 (이름: text, 전화번호: tel)
+- 전화번호 형식: 하이픈 없이 숫자만 (010xxxxxxxx)
+- 제출 → `POST /api/buyer/data-deletion` 호출
+- 결과 표시:
+  - `deleted > 0`: "처리 완료 — {N}건의 주문 개인정보가 삭제되었습니다."
+  - `deleted === 0`: "해당 정보로 등록된 주문이 없습니다. 이름과 전화번호를 다시 확인해 주세요."
+- 상단 링크: "← 개인정보처리방침으로 돌아가기" (`/terms/privacy`)
+
+**레이아웃:**
+```tsx
+<div className="max-w-md mx-auto p-6">
+  <h1 className="text-xl font-bold mb-4">개인정보 삭제 요청</h1>
+  <p className="text-sm text-muted-foreground mb-6">
+    주문 시 입력하신 이름과 전화번호를 입력하시면 해당 주문의 개인정보(이름, 전화번호, 배송주소)를 삭제합니다.
+    단, 거래 기록(주문번호, 결제금액)은 전자상거래법에 따라 5년간 보존됩니다.
+  </p>
+  <form> ... </form>
+  {result && <p className="mt-4 text-sm ...">...</p>}
+</div>
+```
+
+#### 3. `app/(buyer)/terms/privacy/page.tsx` (기존 수정)
+파일 끝 `<h2>4. 문의</h2>` 섹션 뒤에 추가:
+```tsx
+<h2>5. 개인정보 삭제 요청</h2>
+<p>
+  전자상거래법상 보존 의무 기간이 경과한 정보 또는 마케팅 목적으로 수집된 정보에 대해
+  삭제를 요청하실 수 있습니다.
+</p>
+<p>
+  <Link href="/privacy/request" className="text-blue-600 underline">
+    개인정보 삭제 요청 →
+  </Link>
+</p>
+```
+
+**커밋:** `feat: 구매자 개인정보 삭제 요청 API + 페이지 (P3-6)`
+
+---
+
+### P3-7: 기술 부채 최종 클린업 (계획 — Task 28)
+
+**대상 버그 2개:**
+
+#### B-28: `app/api/admin/orders/route.ts` 페이지네이션 불일치
+
+현재 상태: `take: 50` 하드코딩, 응답 `{ orders, total }` (셀러 API 표준 `{ data, pagination }` 불일치)
+프론트엔드(`app/admin/orders/page.tsx`)가 `{ orders, total }` 형식에 맞게 구현되어 있어 동작은 정상.
+
+**수정 방향:**
+- `lib/pagination.ts`의 `parsePagination()` + `buildPaginationResponse()` 적용
+- 응답을 `{ data, pagination }` 형식으로 통일
+- `app/admin/orders/page.tsx` 프론트엔드도 `res.data`, `res.pagination.total` 등으로 수정
+- `components/ui/Pagination.tsx` 컴포넌트 연결
+
+#### B-29: `app/seller/orders/page.tsx:88` fetch 에러 무시
+
+현재 상태: `fetchOrders()` fetch 실패 시 `.catch(() => {})` 로 에러 무시 — 빈 목록만 표시
+**수정 방향:**
+```typescript
+// 현재:
+.catch(() => {})
+
+// 수정 후:
+.catch((err) => {
+  console.error('[seller/orders] fetch failed:', err);
+  setError('주문 목록을 불러오지 못했습니다. 새로고침해 주세요.');
+});
+// JSX에 에러 메시지 표시 추가
+```
+
+**커밋:** `fix: admin/orders 페이지네이션 표준화 + seller/orders 에러 처리 (B-28, B-29)`
 
 ---
 
@@ -333,6 +424,8 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 | 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
 | 셀러 이메일 인증 없음 | LOW | ✅ P3-5 완료 (Task 26, 17fc5ce) |
 | 구매자 데이터 삭제권 없음 (GDPR) | MED | 🔄 P3-6 진행 중 (Task 27) |
+| admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | 📋 Task 28 계획 수립 |
+| seller/orders fetch 에러 무시 (B-29) | LOW | 📋 Task 28 계획 수립 |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 

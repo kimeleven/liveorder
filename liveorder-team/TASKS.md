@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM — Task 26 완료 반영, Task 27 착수)
+> 최종 업데이트: 2026-04-03 (PM — Task 27 스펙 검증, Task 28 추가)
 
 ---
 
@@ -8,6 +8,7 @@
 
 > **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅
 > **지금 할 일:** Task 27 — 구매자 개인정보 삭제권 구현 (PLAN.md P3-6 섹션 참고)
+> **다음 예정:** Task 28 — B-28/B-29 기술 부채 최종 클린업
 
 ---
 
@@ -254,6 +255,77 @@ export async function POST(req: NextRequest) {
   - 없으면 간단한 페이지 생성 (링크 포함)
 
 **커밋:** `feat: 구매자 개인정보 삭제 요청 API + 페이지 (P3-6)`
+
+---
+
+### Task 28: B-28/B-29 기술 부채 최종 클린업
+
+**우선순위:** LOW — Task 27 완료 후
+**상태:** 📋 계획됨
+
+#### Step 1: `app/api/admin/orders/route.ts` 수정 (B-28)
+
+현재 `take: 50` 하드코딩 + `{ orders, total }` 응답을 표준 페이지네이션으로 교체:
+
+```typescript
+import { parsePagination, buildPaginationResponse } from '@/lib/pagination';
+
+export async function GET(req: NextRequest) {
+  // ... 기존 인증/필터 코드 유지 ...
+  const { page, limit, skip } = parsePagination(req);
+
+  const [data, total] = await prisma.$transaction([
+    prisma.order.findMany({
+      where: filter,
+      include: {
+        code: { include: { product: { include: { seller: true } } } },
+        settlement: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.order.count({ where: filter }),
+  ]);
+
+  return NextResponse.json(buildPaginationResponse(data, { page, limit, total }));
+}
+```
+
+#### Step 2: `app/admin/orders/page.tsx` 프론트엔드 수정 (B-28)
+
+응답 형식 변경에 맞게 프론트엔드 업데이트:
+- `res.orders` → `res.data`
+- `res.total` → `res.pagination.total`
+- 페이지 하단에 `<Pagination>` 컴포넌트 추가:
+  ```tsx
+  import Pagination from '@/components/ui/Pagination';
+  // ...
+  <Pagination page={page} totalPages={pagination.totalPages} onPageChange={setPage} />
+  ```
+
+#### Step 3: `app/seller/orders/page.tsx` 에러 처리 (B-29)
+
+`fetchOrders()` 내부 `.catch(() => {})` 를 사용자 피드백으로 교체:
+
+```typescript
+// fetchOrders 함수 내:
+} catch (err) {
+  console.error('[seller/orders] fetch failed:', err);
+  setError('주문 목록을 불러오지 못했습니다. 새로고침해 주세요.');
+} finally {
+  setIsLoading(false);
+}
+```
+
+JSX에 에러 표시 추가 (로딩 Skeleton 아래):
+```tsx
+{error && (
+  <div className="text-center py-8 text-red-500 text-sm">{error}</div>
+)}
+```
+
+**커밋:** `fix: admin/orders 페이지네이션 표준화 + seller/orders 에러 처리 (B-28, B-29)`
 
 ---
 
