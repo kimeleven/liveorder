@@ -1,6 +1,6 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-02 (QA 2차 — 배포 전 최종 코드 리뷰)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Phase 2 완료 항목 반영)
 > QA 단계: Phase 1 MVP — 배포 전 최종 검증
 
 ---
@@ -72,12 +72,12 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-06 | LOW | 정산 상세 없음 | 정산 목록은 있으나 정산 건별 포함 주문 내역 없음 | `app/seller/settlements/page.tsx` |
-| B-07 | LOW | 환불 처리 미구현 | 관리자 환불 UI 없음. 현재 수동 처리 | `app/admin/` |
+| B-06 | LOW | 정산 상세 없음 | 🔄 **2026-04-03 진행 중** — 스키마(settlementId FK)+크론 수정 완료, API+UI 미완 (Task 19) | `app/seller/settlements/page.tsx` |
+| ~~B-07~~ | ~~LOW~~ | ~~환불 처리 미구현~~ | ✅ **2026-04-03 완료** — 관리자 주문 목록 + RefundDialog + 환불 API 구현 (048ac72, P2-1) | `app/admin/orders/`, `components/admin/RefundDialog.tsx` |
 | ~~B-17~~ | ~~MED~~ | ~~비활성 상품에 코드 발급 가능~~ | ✅ **2026-04-02 수정** — 코드 발급 시 `isActive: true` 조건 추가. 비활성 상품은 404 반환. | `app/api/seller/codes/route.ts` |
-| B-18 | MED | 셀러 승인 후 JWT 세션 미갱신 | 관리자가 셀러를 APPROVED 전환해도 셀러의 JWT `sellerStatus`는 로그아웃 전까지 `PENDING` 유지. API는 DB 직접 조회로 정상 동작하나, 세션 기반 UI(대시보드 배너 등)는 재로그인 전까지 승인 상태 미반영. 명확한 안내 메시지 또는 세션 갱신 메커니즘 필요. | `lib/auth.ts` (JWT 전략 한계) |
-| B-19 | LOW | 연락처/전화번호 서버 검증 없음 | B-04로 프론트엔드는 수정됐으나, `buyerPhone` (`/api/orders`, `/api/payments/confirm`) 및 셀러 `phone` (`/api/sellers/register`) 서버 검증 부재. 직접 API 호출 시 임의 형식 저장 가능. | `app/api/orders/route.ts:8`, `app/api/sellers/register/route.ts:22` |
-| B-20 | LOW | 정산 배치 실행 UX | 배치 완료 시 `alert()` 사용 (blocking). 오류 발생 시(`res.ok` 미확인) 성공처럼 표시됨. | `app/admin/settlements/page.tsx:43-44` |
+| ~~B-18~~ | ~~MED~~ | ~~셀러 승인 후 JWT 세션 미갱신~~ | ✅ **2026-04-03 완료** — PENDING 배너에 "승인 확인" 버튼 추가. 승인 시 자동 로그아웃 후 안내 메시지 표시 (49a984b) | `app/seller/dashboard/page.tsx`, `app/api/seller/me/route.ts` |
+| ~~B-19~~ | ~~LOW~~ | ~~연락처/전화번호 서버 검증 없음~~ | ✅ **2026-04-03 완료** — `/api/sellers/register`, `/api/payments/confirm` 서버측 정규식 검증 추가 (6bcb637) | `app/api/sellers/register/route.ts`, `app/api/payments/confirm/route.ts` |
+| ~~B-20~~ | ~~LOW~~ | ~~정산 배치 실행 UX~~ | ✅ **2026-04-03 완료** — `alert()` 제거, inline 상태 메시지로 교체, `res.ok` 오류 처리 추가 (6bcb637) | `app/admin/settlements/page.tsx` |
 
 ### P3 — MVP 이후
 
@@ -97,8 +97,8 @@
 
 | 기능 | 기획 여부 | 상태 |
 |------|-----------|------|
-| 환불 UI (관리자) | 기획서 명시 | Phase 2 예정 |
-| 정산 상세 드릴다운 | 기획서 명시 | Phase 2 예정 |
+| 환불 UI (관리자) | 기획서 명시 | ✅ 완료 (2026-04-03, P2-1) |
+| 정산 상세 드릴다운 | 기획서 명시 | 🔄 진행 중 (Task 19) |
 | 셀러 이메일 인증 | 기획서 명시 | Phase 2 예정 |
 | 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | 미반영 |
 

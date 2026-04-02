@@ -1,12 +1,12 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Sanghun 직접 지시 반영)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 19 부분 진행 중, Task 12 QA 최우선)
 
 ---
 
 ## 🔴 UX 개선 (Sanghun 직접 요청 — 최우선)
 
-### UX-1: 상품 등록 시 코드 자동 발급
+### UX-1: 상품 등록 시 코드 자동 발급 — 🔄 진행 중 (uncommitted)
 
 **현재:** 상품 등록 → 코드 발급 페이지 별도 이동 → 상품 선택 → 코드 발급 (2단계)
 **개선:** 상품 등록 완료 시 코드 1개 자동 발급 + 추가 발급은 별도로
@@ -20,7 +20,7 @@
    - "코드 복사" 버튼 + "추가 코드 발급" 링크 (/seller/codes/new?productId=xxx)
 3. 코드 발급 페이지(`/seller/codes/new`)는 "추가 발급" 용도로 유지
 
-### UX-2: 코드 발급 시 QR코드 자동 생성
+### ~~UX-2: 코드 발급 시 QR코드 자동 생성~~ ✅ 완료 (2026-04-03, c0bb241)
 
 **현재:** 코드 발급 → 텍스트 코드만 표시 (셀러가 코드를 읽어줘야 함)
 **개선:** 코드 발급 시 QR코드 자동 생성 → 구매자가 QR 스캔하면 코드 입력까지 자동 완료
@@ -63,7 +63,9 @@
 
 ## 🔴 Dev1 현재 할당 — Phase 1 배포까지
 
-### Task 12: 수동 QA 6개 항목 통과 (진행 중)
+> **⚠️ 주의:** `prisma/schema.prisma`와 `app/api/cron/settlements/route.ts`에 Task 19 관련 변경사항이 uncommitted 상태임. Task 12 QA 완료 후 Task 19를 마저 완성해서 함께 커밋할 것.
+
+### Task 12: 수동 QA 6개 항목 통과 ← **지금 당장 해야 할 일**
 
 QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직접 확인.
 각 항목 통과 시 QA_REPORT.md 해당 항목 옆에 ✅ 표기 + 날짜 기재.
@@ -79,6 +81,8 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 **완료 조건:** QA_REPORT.md 6개 항목 모두 ✅ → PM에게 배포 승인 요청
 **커밋:** `qa: Phase 1 수동 QA 6개 항목 통과 확인`
+
+> Task 12 완료 후 바로 Task 19 나머지 구현 (API + UI) → Task 14 (Vercel 배포) 순서.
 
 ---
 
@@ -275,36 +279,23 @@ async function checkApprovalStatus() {
 
 ---
 
-### Task 19: 정산 상세 드릴다운 (MEDIUM, ~2시간)
+### Task 19: 정산 상세 드릴다운 (MEDIUM, ~1시간 남음)
 
-> **스키마 변경 포함** — 먼저 마이그레이션 실행
+> **⚠️ 거의 완료 (uncommitted):** ①②③④⑤ 전부 구현됨. 코드 검토 후 바로 커밋 가능.
+> 생성된 파일: `app/api/seller/settlements/[id]/route.ts`, `components/seller/SettlementDetailDrawer.tsx`, 마이그레이션
 
-**① 스키마 변경:** `prisma/schema.prisma`
-```prisma
-model Order {
-  // 기존 필드들 유지...
-  settlementId  String?  @map("settlement_id") @db.Uuid  // 추가
+**~~① 스키마 변경:~~ ✅ 완료 (uncommitted)**
+- `prisma/schema.prisma` — `Order.settlementId` FK + `Settlement.orders` 관계 추가
+- 마이그레이션: `prisma/migrations/20260403000001_add_settlement_id_to_orders/` 생성됨
 
-  code       Code        @relation(fields: [codeId], references: [id])
-  settlement Settlement? @relation(fields: [settlementId], references: [id])  // 추가
-}
+**~~② 크론 수정:~~ ✅ 완료 (uncommitted)**
+- `app/api/cron/settlements/route.ts` — `settlementId: settlement.id` 업데이트 추가됨
 
-model Settlement {
-  // 기존 필드들 유지...
-  orders Order[]  // 추가
-}
-```
-마이그레이션: `npx prisma migrate dev --name add_settlement_id_to_orders`
+**~~③ API 신규:~~ ✅ 완료 (uncommitted)** — `app/api/seller/settlements/[id]/route.ts`
 
-**② 크론 수정:** `app/api/cron/settlements/route.ts`
-- Settlement 생성 후 해당 주문들의 `settlementId` 업데이트 추가
-```typescript
-// 기존 settlement 생성 트랜잭션 내 추가:
-prisma.order.updateMany({
-  where: { id: { in: orderIds } },
-  data: { status: 'SETTLED', settlementId: settlement.id }
-})
-```
+**~~④ UI 수정:~~ ✅ 완료 (uncommitted)** — `app/seller/settlements/page.tsx`
+
+**~~⑤ 신규 컴포넌트:~~ ✅ 완료 (uncommitted)** — `components/seller/SettlementDetailDrawer.tsx`
 
 **③ API 신규:** `app/api/seller/settlements/[id]/route.ts`
 ```typescript

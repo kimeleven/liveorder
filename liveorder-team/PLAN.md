@@ -1,7 +1,7 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 QA 막바지, Phase 2 상세 스펙 추가)
-> 현재 단계: **Phase 1 MVP — 수동 QA 완료 → Vercel 배포 → Phase 2 개발 착수**
+> 최종 업데이트: 2026-04-03 (PM 조율 — Phase 2 Task 16/17/18 완료, Task 19 진행 중)
+> 현재 단계: **Phase 1 MVP — 수동 QA 통과 대기 중 (Task 12) → Vercel 배포 → Phase 2 Task 19 완성**
 
 ---
 
@@ -48,9 +48,9 @@
 
 | 항목 | 상태 | 담당 |
 |------|------|------|
-| 수동 QA 6개 항목 통과 | 🔄 진행 중 | Dev1 Task 12 |
-| B-19: 전화번호 서버측 검증 | 선택 (LOW) | Dev1 Task 15 |
-| B-20: 정산 배치 alert() 제거 | 선택 (LOW) | Dev1 Task 15 |
+| 수동 QA 6개 항목 통과 | 🔄 진행 중 | Dev1 Task 12 ← **최우선** |
+| B-19: 전화번호 서버측 검증 | ✅ 완료 (6bcb637) | Dev1 Task 15 |
+| B-20: 정산 배치 alert() 제거 | ✅ 완료 (6bcb637) | Dev1 Task 15 |
 | Vercel 환경변수 7개 확인 + 배포 | ⏳ QA 완료 후 | Dev1 Task 14 |
 
 ---
@@ -86,7 +86,7 @@
 
 ### 우선순위 HIGH
 
-#### 3.1 관리자 주문 목록 + 환불 UI (P2-1)
+#### ~~3.1 관리자 주문 목록 + 환불 UI (P2-1)~~ ✅ 완료 (2026-04-03, 048ac72)
 
 **배경:** `OrderStatus.REFUNDED`는 스키마에 이미 존재. UI와 API만 구현하면 됨.
 
@@ -150,7 +150,7 @@ const orders = await prisma.order.findMany({
 
 ### 우선순위 MEDIUM
 
-#### 3.2 정산 상세 드릴다운 (P2-3, B-06)
+#### 3.2 정산 상세 드릴다운 (P2-3, B-06) — 🔄 진행 중 (스키마+크론 완료, API+UI 미완)
 
 **주의: 스키마 변경 필요.** 현재 Order→Settlement 외래키 없음.
 
@@ -197,7 +197,7 @@ const settlement = await prisma.settlement.findUnique({
   - Drawer (Radix UI sheet) 슬라이드아웃
   - 포함 주문 목록 테이블: 주문번호, 상품명, 구매자, 금액, 결제일
 
-#### 3.3 JWT 세션 갱신 UX 개선 (B-18)
+#### ~~3.3 JWT 세션 갱신 UX 개선 (B-18)~~ ✅ 완료 (2026-04-03, 49a984b)
 
 **문제:** 관리자가 셀러 승인 후 셀러 대시보드의 PENDING 배너가 재로그인 전까지 유지됨.
 
@@ -216,7 +216,7 @@ const settlement = await prisma.settlement.findUnique({
 // 응답: { status: SellerStatus }
 ```
 
-#### 3.4 셀러 대시보드 최근 주문 데이터 표시 (B-22)
+#### ~~3.4 셀러 대시보드 최근 주문 데이터 표시 (B-22)~~ ✅ 완료 (2026-04-03, 49a984b)
 
 **문제:** `app/seller/dashboard/page.tsx:98-101` — "아직 주문이 없습니다" placeholder 하드코딩.
 
@@ -244,7 +244,7 @@ recentOrders: await prisma.order.findMany({
 
 ### 우선순위 LOW
 
-#### 3.5 B-19: 전화번호 서버측 검증
+#### ~~3.5 B-19: 전화번호 서버측 검증~~ ✅ 완료 (2026-04-03, 6bcb637)
 
 **파일:** `app/api/sellers/register/route.ts`, `app/api/payments/confirm/route.ts`
 ```typescript
@@ -254,7 +254,7 @@ if (!phoneRegex.test(phone)) {
 }
 ```
 
-#### 3.6 B-20: 정산 배치 alert() 제거
+#### ~~3.6 B-20: 정산 배치 alert() 제거~~ ✅ 완료 (2026-04-03, 6bcb637)
 
 **파일:** `app/admin/settlements/page.tsx:41-52`
 - `useState<string | null>` 메시지 상태 추가
@@ -288,11 +288,11 @@ SellerStatus: PENDING | APPROVED | SUSPENDED
 
 | 항목 | 우선순위 | 상태 |
 |------|----------|------|
-| B-18: JWT 세션 미갱신 UX | MED | Phase 2 (3.3) |
-| B-19: 전화번호 서버측 검증 | LOW | Phase 2 (3.5) |
-| B-20: 정산 배치 alert() | LOW | Phase 2 (3.6) |
+| B-18: JWT 세션 미갱신 UX | MED | ✅ 완료 (49a984b) |
+| B-19: 전화번호 서버측 검증 | LOW | ✅ 완료 (6bcb637) |
+| B-20: 정산 배치 alert() | LOW | ✅ 완료 (6bcb637) |
 | B-21: 목록 API 페이지네이션 | LOW | Phase 2 (3.7) |
-| B-22: 대시보드 최근 주문 | LOW | Phase 2 (3.4) |
+| B-22: 대시보드 최근 주문 | LOW | ✅ 완료 (49a984b) |
 | buyer-store `Record<string, unknown>` 타입 | LOW | 미처리 |
 | Redis 캐싱 (코드 조회) | LOW | MVP 이후 |
 | 이메일 알림 (주문접수/정산완료) | LOW | MVP 이후 |
