@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
 
 interface Props {
@@ -34,6 +35,13 @@ export default function OrderConfirmation({ data }: Props) {
         <p className="text-xs text-muted-foreground">
           배송 정보가 등록되면 이 채팅에서 확인하실 수 있습니다.
         </p>
+        <Button
+          variant="outline"
+          className="mt-2 w-full"
+          onClick={() => (window.location.href = "/")}
+        >
+          새 코드 입력하기
+        </Button>
       </CardContent>
     </Card>
   );

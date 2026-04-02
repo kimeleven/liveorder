@@ -63,7 +63,7 @@ export default function PaymentSummary({ data }: Props) {
         addMessage({
           direction: "incoming",
           type: "error",
-          payload: { text: result.message ?? "결제가 취소되었습니다." },
+          payload: { text: result.message ?? "결제가 취소되었습니다.", retryAction: "payment" },
         });
         return;
       }
@@ -90,7 +90,7 @@ export default function PaymentSummary({ data }: Props) {
         addMessage({
           direction: "incoming",
           type: "error",
-          payload: { text: order.error || "주문 생성에 실패했습니다." },
+          payload: { text: order.error || "주문 생성에 실패했습니다.", retryAction: "payment" },
         });
         return;
       }
@@ -116,7 +116,7 @@ export default function PaymentSummary({ data }: Props) {
       addMessage({
         direction: "incoming",
         type: "error",
-        payload: { text: message },
+        payload: { text: message, retryAction: "payment" },
       });
     }
   }

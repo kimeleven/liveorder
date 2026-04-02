@@ -43,33 +43,10 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 ---
 
-### Task 13: B-05 코드 검증 N+1 쿼리 최적화 (배포 후 처리 가능)
+### ✅ Task 13: B-05 코드 검증 N+1 쿼리 최적화 (완료 — 2026-04-02)
 
-**우선순위:** MED (배포 후 다음 작업)
-
-**파일:** `app/api/codes/[code]/route.ts`
-
-**문제:** `include: { seller: true }`로 셀러를 가져온 후 status만 확인하는 별도 쿼리 존재 (N+1)
-
-**수정 방법:**
-```typescript
-// 수정 전 (N+1):
-const code = await prisma.code.findUnique({
-  where: { code },
-  include: { seller: true }
-});
-const seller = await prisma.seller.findUnique({ where: { id: code.sellerId } }); // 제거
-
-// 수정 후 (단일 쿼리):
-const code = await prisma.code.findUnique({
-  where: { code },
-  include: {
-    seller: { select: { status: true, businessName: true } },
-    products: true  // 기존 유지
-  },
-});
-// 이후 code.seller.status로 직접 접근, 별도 seller 쿼리 삭제
-```
+seller select에 `status` 필드 추가 → 별도 seller 쿼리 제거로 단일 쿼리 최적화.
+응답에서 status는 destructuring으로 제외.
 
 **커밋:** `perf: 코드 검증 API N+1 쿼리 최적화 (B-05)`
 
@@ -195,12 +172,13 @@ CRON_SECRET=your-cron-secret
 
 ---
 
-## ✅ Dev1 완료 — Phase 1 전체
+## ✅ Dev1 완료 — Phase 1 + Phase 2 일부
 
-### Phase 1 완료 목록 (역순)
+### 완료 목록 (역순)
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-02 | B-05 N+1 쿼리 최적화, B-08 재시도 버튼, B-09 새 코드 입력 버튼, .env.example | (이번) |
 | 2026-04-02 | B-03 카테고리 미선택 UX, B-04 연락처 검증 | b5c9043 |
 | 2026-04-02 | B-01 크론 인증, B-02 레이스컨디션 수정 | 1485f74 |
 | 2026-04-02 | debug 엔드포인트 제거, 상품 이미지 업로드 (Vercel Blob) | af0cc28 |

@@ -16,6 +16,7 @@ export async function GET(
             seller: {
               select: {
                 id: true,
+                status: true,
                 name: true,
                 businessNo: true,
                 tradeRegNo: true,
@@ -57,19 +58,16 @@ export async function GET(
       );
     }
 
-    if (code.product.seller.id) {
-      // 셀러 상태 확인은 별도로
-      const seller = await prisma.seller.findUnique({
-        where: { id: code.product.seller.id },
-        select: { status: true },
-      });
-      if (seller?.status !== "APPROVED") {
-        return NextResponse.json(
-          { valid: false, reason: "판매 중단된 상품입니다." },
-          { status: 400 }
-        );
-      }
+    // 셀러 상태 확인 (단일 쿼리 내 include로 처리 — N+1 제거)
+    if (code.product.seller.status !== "APPROVED") {
+      return NextResponse.json(
+        { valid: false, reason: "판매 중단된 상품입니다." },
+        { status: 400 }
+      );
     }
+
+    // 응답에서 status 필드는 제외하고 반환
+    const { status: _sellerStatus, ...sellerPublic } = code.product.seller;
 
     return NextResponse.json({
       valid: true,
@@ -89,7 +87,7 @@ export async function GET(
         imageUrl: code.product.imageUrl,
         category: code.product.category,
       },
-      seller: code.product.seller,
+      seller: sellerPublic,
     });
   } catch (error) {
     console.error("코드 검증 오류:", error);

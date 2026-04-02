@@ -55,11 +55,11 @@
 |---|----------|------|------|------|
 | ~~B-03~~ | ~~MED~~ | ~~카테고리 필수 검증 UX~~ | ✅ **2026-04-02 수정** — `categoryError` state 추가, 미선택 시 에러 메시지 + 빨간 테두리 표시. 커밋: `b5c9043` | `app/seller/products/new/page.tsx` |
 | ~~B-04~~ | ~~MED~~ | ~~연락처 형식 미검증~~ | ✅ **2026-04-02 수정** — 정규식 `/^01[0-9]-\d{3,4}-\d{4}$/` 검증 추가, placeholder 및 에러 메시지 표시. 커밋: `b5c9043` | `components/buyer/cards/AddressForm.tsx` |
-| B-05 | MED | 코드 검증 N+1 쿼리 | 코드 유효성 API에서 seller 정보를 include로 받아온 후 status만 위해 별도 쿼리 실행 | `app/api/codes/[code]/route.ts:60-72` |
+| ~~B-05~~ | ~~MED~~ | ~~코드 검증 N+1 쿼리~~ | ✅ **2026-04-02 수정** — seller include에 `status` 추가, 별도 seller 쿼리 제거. 단일 쿼리로 최적화. 커밋: `perf` | `app/api/codes/[code]/route.ts` |
 | B-06 | LOW | 정산 상세 없음 | 정산 목록은 있으나 정산 건별 포함 주문 내역 없음 | `app/seller/settlements/page.tsx` |
 | B-07 | LOW | 환불 처리 미구현 | 관리자 환불 UI 없음. 현재 수동 처리 | `app/admin/` |
-| B-08 | LOW | 채팅 오류 재시도 없음 | 코드 검증 또는 결제 실패 시 재시도 버튼 없음 | `app/(buyer)/chat/page.tsx:103-109` |
-| B-09 | LOW | 결제 후 새 코드 입력 버튼 없음 | 주문 완료 후 "새 코드 입력하기" 버튼 미구현 | `components/buyer/cards/OrderConfirmation.tsx` |
+| ~~B-08~~ | ~~LOW~~ | ~~채팅 오류 재시도 없음~~ | ✅ **2026-04-02 수정** — `error` 메시지에 `retryAction` 필드 추가, `ChatMessage.tsx`에 "다시 시도" 버튼 렌더링. 코드 오류 → idle 초기화, 결제 오류 → payment_pending 복원. 커밋: `feat` | `components/buyer/ChatMessage.tsx` |
+| ~~B-09~~ | ~~LOW~~ | ~~결제 후 새 코드 입력 버튼 없음~~ | ✅ **2026-04-02 수정** — 주문 완료 카드 하단에 "새 코드 입력하기" 버튼 추가, `window.location.href="/"` 이동. 커밋: `feat` | `components/buyer/cards/OrderConfirmation.tsx` |
 
 ### P3 — MVP 이후
 
@@ -90,8 +90,8 @@
 |------|----------|------|
 | `/api/cron/settlements` 인증 추가 | HIGH (배포 전) | ✅ 완료 |
 | 동시 주문 레이스 컨디션 방지 (트랜잭션 내 수량 검증) | HIGH | ✅ 완료 |
-| `.env.example` PortOne 변수 추가 | MEDIUM | 미처리 |
-| `/api/codes/[code]` seller status 쿼리 최적화 | LOW | 미처리 |
+| `.env.example` PortOne/Blob/Cron 변수 추가 | MEDIUM | ✅ 완료 (2026-04-02) |
+| `/api/codes/[code]` seller status 쿼리 최적화 | LOW | ✅ 완료 (2026-04-02) |
 | buyer-store 타입 안전성 (`Record<string, unknown>` 개선) | LOW | 미처리 |
 
 ---

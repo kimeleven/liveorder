@@ -94,7 +94,7 @@ export default function ChatPage() {
         addMessage({
           direction: "incoming",
           type: "error",
-          payload: { text: data.reason || "유효하지 않은 코드입니다." },
+          payload: { text: data.reason || "유효하지 않은 코드입니다.", retryAction: "code" },
         });
         return;
       }
@@ -104,7 +104,7 @@ export default function ChatPage() {
       addMessage({
         direction: "incoming",
         type: "error",
-        payload: { text: "서버 오류가 발생했습니다. 다시 시도해주세요." },
+        payload: { text: "서버 오류가 발생했습니다. 다시 시도해주세요.", retryAction: "code" },
       });
     }
   }
