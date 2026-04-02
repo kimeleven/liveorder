@@ -4,10 +4,10 @@
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 26: P3-5 셀러 이메일 인증**
+## 🟢 Dev1 현재 할당 — **Task 27: P3-6 구매자 데이터 삭제권**
 
-> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅
-> **지금 할 일:** Task 26 — 셀러 이메일 인증 (DB 변경 필요)
+> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅
+> **지금 할 일:** Task 27 — 구매자 개인정보 삭제권 (GDPR)
 
 ---
 
@@ -192,17 +192,18 @@ import { getTrackingUrl } from '@/lib/carrier-urls';
 ### Task 26: P3-5 셀러 이메일 인증
 
 **우선순위:** LOW — Task 25 완료 후 (P3-2 의존)
+**상태:** ✅ 완료 (2026-04-03)
 
-**DB 변경 필요:**
-```prisma
-// prisma/schema.prisma Seller 모델에 추가
-emailVerified      Boolean  @default(false) @map("email_verified")
-emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
-```
-
-**마이그레이션:** `npx prisma migrate dev --name add-email-verification`
-
-**플로우:** (PLAN.md P3-5 절 참고)
+구현 내용:
+- `prisma/schema.prisma`: Seller에 `emailVerified`, `emailVerifyToken` 추가
+- `prisma/migrations/20260403000002_add_email_verification/migration.sql`: DB 마이그레이션
+- `app/api/seller/auth/verify/route.ts`: GET — 토큰 검증 후 이메일 인증 완료
+- `app/api/seller/auth/verify/resend/route.ts`: POST — 인증 메일 재발송
+- `app/api/sellers/register/route.ts`: 회원가입 시 토큰 생성 + 인증 메일 발송
+- `app/seller/auth/verify/page.tsx`: 인증 결과 페이지 (success/invalid/already/error)
+- `app/api/seller/dashboard/route.ts`: emailVerified 응답 포함
+- `app/seller/dashboard/page.tsx`: 미인증 배너 + 재발송 버튼
+- `app/api/seller/me/route.ts`: email 필드 추가
 
 **커밋:** `feat: 셀러 이메일 인증 구현 (P3-5)`
 
@@ -224,6 +225,7 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | (최신) |
 | 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | fbadce1 |
 | 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | fbadce1 |
 | 2026-04-03 | B-27: chat/page.tsx JSON.parse try/catch 추가 — sessionStorage 손상 시 크래시 방지 | 2e58865 |

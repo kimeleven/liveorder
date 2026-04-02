@@ -35,7 +35,9 @@ model Seller {
   phone        String   @db.VarChar(20)
   bankAccount  String?  @map("bank_account") @db.VarChar(30)
   bankName     String?  @map("bank_name") @db.VarChar(20)
-  tradeRegNo   String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  tradeRegNo         String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  emailVerified      Boolean  @default(false) @map("email_verified")
+  emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
   status       SellerStatus @default(PENDING)
   plan         SellerPlan   @default(FREE)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz

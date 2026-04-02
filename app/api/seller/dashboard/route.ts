@@ -12,7 +12,7 @@ export async function GET() {
 
   const [seller, totalProducts, activeCodes, totalOrders, pendingSettlement, recentOrders] =
     await Promise.all([
-      prisma.seller.findUnique({ where: { id: sellerId }, select: { status: true } }),
+      prisma.seller.findUnique({ where: { id: sellerId }, select: { status: true, emailVerified: true } }),
       prisma.product.count({ where: { sellerId } }),
       prisma.code.count({
         where: {
@@ -72,6 +72,7 @@ export async function GET() {
     totalOrders,
     pendingSettlement,
     sellerStatus: seller?.status,
+    emailVerified: seller?.emailVerified ?? true,
     recentOrders,
     dailySales,
   });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/db";
 import { sendEmail, ADMIN_EMAIL } from "@/lib/email";
 
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hashedPassword = await hash(password, 8);
+    const emailVerifyToken = randomBytes(32).toString("hex");
 
     const seller = await prisma.seller.create({
       data: {
@@ -59,8 +61,23 @@ export async function POST(req: NextRequest) {
         bankName,
         tradeRegNo,
         status: "PENDING",
+        emailVerified: false,
+        emailVerifyToken,
       },
     });
+
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const verifyUrl = `${baseUrl}/api/seller/auth/verify?token=${emailVerifyToken}`;
+
+    // 셀러에게 이메일 인증 링크 발송
+    await sendEmail(
+      seller.email,
+      "[LiveOrder] 이메일 인증을 완료해주세요",
+      `<p>안녕하세요, LiveOrder에 가입해주셔서 감사합니다!</p>
+      <p>아래 버튼을 클릭하여 이메일 인증을 완료해주세요.</p>
+      <p><a href="${verifyUrl}" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;border-radius:6px;text-decoration:none;">이메일 인증하기</a></p>
+      <p style="color:#888;font-size:12px;">인증 후 관리자 승인까지 영업일 기준 1~2일이 소요될 수 있습니다.</p>`
+    );
 
     // 관리자에게 신규 셀러 가입 알림
     await sendEmail(
@@ -76,7 +93,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json(
-      { id: seller.id, message: "셀러 등록이 완료되었습니다. 관리자 승인을 기다려주세요." },
+      { id: seller.id, message: "셀러 등록이 완료되었습니다. 이메일 인증 후 관리자 승인을 기다려주세요." },
       { status: 201 }
     );
   } catch (error) {

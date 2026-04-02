@@ -32,6 +32,7 @@ interface DashboardStats {
   totalOrders: number;
   pendingSettlement: number;
   sellerStatus?: string;
+  emailVerified?: boolean;
   recentOrders?: RecentOrder[];
   dailySales?: { date: string; total: number }[];
 }
@@ -53,6 +54,8 @@ export default function SellerDashboardPage() {
   });
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const [checkLoading, setCheckLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/seller/dashboard")
@@ -76,6 +79,30 @@ export default function SellerDashboardPage() {
       setCheckMessage("확인 중 오류가 발생했습니다.");
     } finally {
       setCheckLoading(false);
+    }
+  }
+
+  async function resendVerificationEmail() {
+    setResendLoading(true);
+    setResendMessage(null);
+    try {
+      const res = await fetch("/api/seller/me");
+      const me = await res.json();
+      const r = await fetch("/api/seller/auth/verify/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: me.email }),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setResendMessage("인증 메일을 발송했습니다. 받은 편지함을 확인해주세요.");
+      } else {
+        setResendMessage(data.error || "발송 중 오류가 발생했습니다.");
+      }
+    } catch {
+      setResendMessage("발송 중 오류가 발생했습니다.");
+    } finally {
+      setResendLoading(false);
     }
   }
 
@@ -113,6 +140,27 @@ export default function SellerDashboardPage() {
           <h1 className="text-2xl font-bold">대시보드</h1>
           <p className="text-muted-foreground">판매 현황을 한눈에 확인하세요</p>
         </div>
+
+        {stats.emailVerified === false && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-800">
+            <p className="font-medium">이메일 인증이 필요합니다</p>
+            <p className="text-sm">가입 시 발송된 인증 메일을 확인하여 이메일 인증을 완료해주세요.</p>
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-blue-400 text-blue-800 hover:bg-blue-100"
+                onClick={resendVerificationEmail}
+                disabled={resendLoading}
+              >
+                {resendLoading ? "발송 중..." : "인증 메일 재발송"}
+              </Button>
+              {resendMessage && (
+                <p className="text-sm text-blue-700">{resendMessage}</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {stats.sellerStatus === "PENDING" && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
