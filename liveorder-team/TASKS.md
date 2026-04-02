@@ -1,189 +1,45 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Phase 1+2 완전 완료, Task 14 배포 후 Phase 3 시작)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 21/22 구현 완료 확인, Task 23 이메일 알림 배정)
 
 ---
 
-## 🟡 Dev1 현재 할당 — **Task 23: P3-2 이메일 알림 (다음)**
+## 🔴 Dev1 현재 할당 — **Step 1: 미커밋 변경사항 커밋 → Step 2: Task 23 이메일 알림**
 
-> **Task 21, 22 완료 (2026-04-03):** P3-0 클린업 + P3-1 페이지네이션 구현 완료
-> **다음:** P3-2 이메일 알림 (Task 23)
-
-### Task 14: Vercel 환경변수 확인 + 배포 ← **수동 작업 (미완료)**
-
-**작업 내용 (수동 작업):**
-
-1. Vercel 프로젝트 Settings → Environment Variables에서 **8개** 변수 설정 확인:
-   - `DATABASE_URL` — Neon PostgreSQL 연결 문자열
-   - `NEXTAUTH_SECRET` — JWT 서명 키 (32자 이상)
-   - `PORTONE_API_KEY` — PortOne V2 API 키
-   - `PORTONE_STORE_ID` — PortOne 상점 ID
-   - `PORTONE_API_SECRET` — PortOne 환불 API 인증 **(⚠️ 환불 필수)**
-   - `BLOB_READ_WRITE_TOKEN` — Vercel Blob 토큰
-   - `CRON_SECRET` — 정산 크론 Bearer 토큰
-   - `NEXTAUTH_URL` — 프로덕션 URL (예: `https://liveorder.vercel.app`)
-
-2. 미설정 항목 추가 후 Redeploy
-
-3. 프로덕션 스모크 테스트:
-   - 셀러 회원가입 → 관리자 승인 → 상품 등록 → 코드 발급 + QR 확인
-   - 구매자 코드 입력 → PortOne 테스트 결제 → 주문 DB 확인
-   - 셀러 운송장 등록 → SHIPPING 전환
-   - `POST https://<프로덕션URL>/api/cron/settlements` (Bearer $CRON_SECRET) → Settlement 생성
-
-4. **커밋 없음** — 수동 확인 작업. 완료 후 TASKS.md에 완료 표기.
+> **Task 21 (P3-0 기술 부채 클린업):** 구현 완료 ✅ — 미커밋 상태
+> **Task 22 (P3-1 API 페이지네이션):** 구현 완료 ✅ — 미커밋 상태
+> **즉시 할 일:** 아래 2개 커밋 후 Task 23 시작
 
 ---
 
-## 📋 다음 작업 — Phase 3 (Task 14 완료 후 순서대로)
+### ⚡ 즉시: 미커밋 변경사항 커밋
 
-### Task 21: P3-0 기술 부채 클린업
+현재 워킹 트리에 완성된 변경사항이 있음. 2개 커밋으로 분리:
 
-**우선순위:** 배포 직후 즉시 — 1일 내 완료
+```bash
+# Task 21 커밋
+git add components/seller/SettlementDetailDrawer.tsx \
+        components/admin/RefundDialog.tsx \
+        stores/buyer-store.ts \
+        components/ui/skeleton.tsx
+git commit -m "fix: 기술 부채 클린업 — SettlementDrawer 에러 처리, RefundDialog 상태, buyer-store 타입"
 
-**파일 4개 수정:**
-
-**1. `components/seller/SettlementDetailDrawer.tsx`**
-- 현재: `.catch(() => {})` — 에러 무시
-- 수정: catch 블록에서 toast 에러 표시
-
-```typescript
-// 수정 전
-.catch(() => {});
-
-// 수정 후 (toast 라이브러리가 이미 있다면 그것 사용, 없으면 console.error + state)
-.catch((err) => {
-  console.error('[SettlementDetailDrawer] fetch failed:', err);
-  setError('상세 정보를 불러오지 못했습니다. 다시 시도해주세요.');
-});
-// 그리고 error state가 있으면 Drawer 내부에서 표시:
-// {error && <p className="text-sm text-red-500 p-4">{error}</p>}
+# Task 22 커밋
+git add lib/pagination.ts \
+        components/ui/Pagination.tsx \
+        app/api/seller/orders/route.ts \
+        app/api/seller/products/route.ts \
+        app/api/seller/codes/route.ts \
+        app/admin/orders/page.tsx \
+        app/seller/orders/page.tsx \
+        app/seller/products/page.tsx \
+        app/seller/codes/page.tsx
+git commit -m "feat: API 페이지네이션 구현 (P3-1) — 셀러/관리자 목록 4개 + Pagination 컴포넌트"
 ```
-
-**2. `app/admin/orders/page.tsx`**
-- 현재: 로딩 상태 없음
-- 수정: isLoading state + Skeleton 표시
-
-```typescript
-// 추가할 상태
-const [isLoading, setIsLoading] = useState(true);
-
-// fetch 시작 전: setIsLoading(true)
-// fetch 완료 후 (finally): setIsLoading(false)
-
-// JSX에서:
-{isLoading ? (
-  <div className="space-y-2">
-    {[...Array(5)].map((_, i) => (
-      <Skeleton key={i} className="h-12 w-full" />
-    ))}
-  </div>
-) : (
-  // 기존 테이블
-)}
-```
-
-**3. `components/admin/RefundDialog.tsx`**
-- 현재: 성공 후 `onClose()` 직접 호출로 내부 state가 초기화 안 됨
-- 수정: `handleClose` 함수 통해 state 초기화 후 닫기
-
-```typescript
-// 성공 핸들러에서:
-// onClose() 대신:
-setSuccess(false); // 또는 다른 내부 state
-setReason('');
-onClose();
-// 또는 handleClose() 함수가 이미 있다면 그것 호출
-```
-
-**4. `lib/store/buyer-store.ts` (또는 buyer 관련 store 파일)**
-- 현재: `Record<string, unknown>` 사용
-- 수정: 명시적 BuyerState 인터페이스 정의
-
-```typescript
-interface BuyerState {
-  code: string | null;
-  product: { id: string; name: string; price: number; imageUrl?: string } | null;
-  orderId: string | null;
-  // ... 실제 사용하는 필드들
-}
-```
-
-**커밋:** `fix: 기술 부채 클린업 — SettlementDrawer 에러 처리, 관리자 주문 로딩, RefundDialog 상태, buyer-store 타입`
 
 ---
 
-### Task 22: P3-1 API 페이지네이션
-
-**우선순위:** MED — MVP 배포 후 첫 번째 기능 작업
-
-**파일 수정 (4개 API + 1개 UI 컴포넌트 신규):**
-
-**Step 1: 공통 유틸 함수 `lib/pagination.ts`**
-```typescript
-export interface PaginationParams {
-  page: number;
-  limit: number;
-  skip: number;
-}
-
-export function parsePagination(searchParams: URLSearchParams): PaginationParams {
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '20')));
-  return { page, limit, skip: (page - 1) * limit };
-}
-
-export function buildPaginationResponse<T>(
-  data: T[],
-  total: number,
-  page: number,
-  limit: number
-) {
-  return {
-    data,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      hasNext: page * limit < total,
-      hasPrev: page > 1,
-    },
-  };
-}
-```
-
-**Step 2: API 4개 수정**
-- `app/api/seller/orders/route.ts` — GET에 pagination 추가
-- `app/api/seller/products/route.ts` — GET에 pagination 추가
-- `app/api/seller/codes/route.ts` — GET에 pagination 추가
-- `app/api/admin/orders/route.ts` — GET에 pagination 추가
-
-각 API에서 `prisma.$transaction([findMany({skip, take: limit}), count()])` 사용
-
-**Step 3: UI 컴포넌트 신규 `components/ui/Pagination.tsx`**
-```typescript
-// shadcn Pagination 컴포넌트 기반
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}
-// Prev / 페이지번호 (최대 5개) / Next 표시
-// totalPages가 1이면 렌더링 안 함
-```
-
-**Step 4: 목록 페이지 4개에 Pagination 컴포넌트 추가**
-- `app/seller/orders/page.tsx`
-- `app/seller/products/page.tsx`
-- `app/seller/codes/page.tsx`
-- `app/admin/orders/page.tsx`
-
-**커밋:** `feat: API 페이지네이션 구현 (P3-1) — 셀러/관리자 목록 4개 + Pagination 컴포넌트`
-
----
-
-### Task 23: P3-2 이메일 알림
+### Task 23: P3-2 이메일 알림 ← **커밋 후 바로 여기**
 
 **우선순위:** MED — P3-1 완료 후
 
@@ -225,6 +81,8 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 
 ---
 
+## 📋 다음 작업 — Phase 3 (순서대로)
+
 ### Task 24: P3-3 셀러 대시보드 차트
 
 **우선순위:** LOW — P3-2 완료 후
@@ -239,12 +97,55 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 
 ---
 
+### Task 25: P3-4 배송 추적
+
+**우선순위:** LOW — P3-3 완료 후
+
+**신규 파일 `lib/carrier-urls.ts`** (PLAN.md 3절 참고)
+
+**수정 파일:** 구매자 주문 조회 페이지에 "배송 추적" 버튼 추가 (택배사 홈페이지 새 탭)
+
+**커밋:** `feat: 배송 추적 링크 추가 (P3-4) — 택배사별 URL 매핑`
+
+---
+
+### Task 26: P3-5 셀러 이메일 인증
+
+**우선순위:** LOW — P3-4 완료 후 (P3-2 의존)
+
+**DB 변경 필요:**
+```prisma
+// prisma/schema.prisma Seller 모델에 추가
+emailVerified      Boolean  @default(false) @map("email_verified")
+emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
+```
+
+**마이그레이션:** `npx prisma migrate dev --name add-email-verification`
+
+**플로우:** (PLAN.md P3-5 절 참고)
+
+**커밋:** `feat: 셀러 이메일 인증 구현 (P3-5)`
+
+---
+
+### Task 27: P3-6 구매자 데이터 삭제권
+
+**우선순위:** MED — P3-5 완료 후
+
+**신규 파일 2개:**
+- `app/(buyer)/privacy/request/page.tsx`
+- `app/api/buyer/data-deletion/route.ts`
+
+**커밋:** `feat: 구매자 개인정보 삭제 요청 API + 페이지 (P3-6)`
+
+---
+
 ## ✅ 완료된 작업
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 22: P3-1 API 페이지네이션 — lib/pagination.ts, 4개 API, Pagination.tsx, 4개 목록 페이지 | TBD |
-| 2026-04-03 | Task 21: P3-0 기술 부채 클린업 — SettlementDrawer 에러 처리, 관리자 주문 로딩, RefundDialog 상태, buyer-store 타입 | TBD |
+| 2026-04-03 | Task 22: P3-1 API 페이지네이션 — `lib/pagination.ts`, `components/ui/Pagination.tsx`, API 4개, 프론트 4개 | 미커밋 |
+| 2026-04-03 | Task 21: P3-0 기술 부채 클린업 — SettlementDrawer 에러 처리, admin 로딩 Skeleton, RefundDialog 상태, buyer-store 타입 | 미커밋 |
 | 2026-04-03 | Task 12: QA 6개 항목 코드 레벨 검증 완료 — 결제/운송장/승인/크론/미들웨어/이미지 업로드 | 1a4164d |
 | 2026-04-03 | B-23: QR 코드 구현 — qrcode 패키지, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 | 882fe02 |
 | 2026-04-03 | B-24: PLAN.md에 `PORTONE_API_SECRET` 환경변수 추가 | 882fe02 |
@@ -270,3 +171,21 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 | 2026-04-01 | 미들웨어 JWE 복호화, auth() 레이아웃 루프 수정 | 2c30a67 |
 | 2026-04-01 | Neon HTTP 어댑터, Prisma 빌드 스크립트 | 3732637 |
 | 초기 | 셀러/관리자 인증, 상품/코드/주문/정산 전체 플로우 | - |
+
+---
+
+## 📌 수동 진행 항목 (개발 작업 아님)
+
+### Task 14: Vercel 환경변수 확인 + 배포 ← **진행 중 (수동)**
+
+**상태:** Phase 3 작업과 병행 가능
+
+**작업 내용:**
+1. Vercel 프로젝트 Settings → Environment Variables에서 8개 변수 확인:
+   - `DATABASE_URL`, `NEXTAUTH_SECRET`, `PORTONE_API_KEY`, `PORTONE_STORE_ID`
+   - `PORTONE_API_SECRET` (⚠️ 환불 필수), `BLOB_READ_WRITE_TOKEN`
+   - `CRON_SECRET`, `NEXTAUTH_URL`
+
+2. 미설정 항목 추가 후 Redeploy
+
+3. 프로덕션 스모크 테스트 (PLAN.md 2.2절 참고)
