@@ -65,8 +65,8 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-15 | **HIGH** | 결제 우회 엔드포인트 | `/api/orders` (POST)가 PortOne 결제 검증 없이 `status: "PAID"` 주문 생성 가능. `pgTid`가 null인 채로 주문이 생성되며, 정산 크론이 이 주문도 SETTLED 처리함. 프론트엔드는 `/api/payments/confirm`만 사용하므로 이 엔드포인트는 사용되지 않는 백도어임. **즉시 삭제 또는 내부 전용으로 보호 필요.** | `app/api/orders/route.ts` |
-| B-16 | **HIGH** | 관리자 정산 배치 버튼 인증 실패 | 관리자 페이지의 "정산 배치 실행" 버튼이 `/api/cron/settlements`를 직접 호출하지만, `CRON_SECRET`이 설정된 프로덕션 환경에서는 `Authorization` 헤더 없이 호출하므로 **항상 401 반환**. 수동 배치 기능이 실질적으로 동작 불가. | `app/admin/settlements/page.tsx:42`, `app/api/cron/settlements/route.ts:11-16` |
+| ~~B-15~~ | ~~HIGH~~ | ~~결제 우회 엔드포인트~~ | ✅ **2026-04-02 수정** — `app/api/orders/route.ts` 파일 삭제. 결제는 `/api/payments/confirm`으로만 가능. | `app/api/orders/route.ts` (삭제됨) |
+| ~~B-16~~ | ~~HIGH~~ | ~~관리자 정산 배치 버튼 인증 실패~~ | ✅ **2026-04-02 수정** — `/api/admin/settlements` POST 엔드포인트 신설, 서버사이드에서 CRON_SECRET 헤더 추가 후 cron API 호출. 클라이언트에서 직접 cron 호출 제거. | `app/api/admin/settlements/route.ts`, `app/admin/settlements/page.tsx` |
 
 ### P2 — 다음 스프린트
 
@@ -74,7 +74,7 @@
 |---|----------|------|------|------|
 | B-06 | LOW | 정산 상세 없음 | 정산 목록은 있으나 정산 건별 포함 주문 내역 없음 | `app/seller/settlements/page.tsx` |
 | B-07 | LOW | 환불 처리 미구현 | 관리자 환불 UI 없음. 현재 수동 처리 | `app/admin/` |
-| B-17 | **MED** | 비활성 상품에 코드 발급 가능 | 코드 발급 시 `product.isActive` 확인 없음. 셀러가 삭제(비활성화)한 상품에도 코드 발급 가능 → 구매자가 비활성 상품 코드 입력 시 상품 정보 노출 | `app/api/seller/codes/route.ts:39` |
+| ~~B-17~~ | ~~MED~~ | ~~비활성 상품에 코드 발급 가능~~ | ✅ **2026-04-02 수정** — 코드 발급 시 `isActive: true` 조건 추가. 비활성 상품은 404 반환. | `app/api/seller/codes/route.ts` |
 | B-18 | MED | 셀러 승인 후 JWT 세션 미갱신 | 관리자가 셀러를 APPROVED 전환해도 셀러의 JWT `sellerStatus`는 로그아웃 전까지 `PENDING` 유지. API는 DB 직접 조회로 정상 동작하나, 세션 기반 UI(대시보드 배너 등)는 재로그인 전까지 승인 상태 미반영. 명확한 안내 메시지 또는 세션 갱신 메커니즘 필요. | `lib/auth.ts` (JWT 전략 한계) |
 | B-19 | LOW | 연락처/전화번호 서버 검증 없음 | B-04로 프론트엔드는 수정됐으나, `buyerPhone` (`/api/orders`, `/api/payments/confirm`) 및 셀러 `phone` (`/api/sellers/register`) 서버 검증 부재. 직접 API 호출 시 임의 형식 저장 가능. | `app/api/orders/route.ts:8`, `app/api/sellers/register/route.ts:22` |
 | B-20 | LOW | 정산 배치 실행 UX | 배치 완료 시 `alert()` 사용 (blocking). 오류 발생 시(`res.ok` 미확인) 성공처럼 표시됨. | `app/admin/settlements/page.tsx:43-44` |
@@ -112,9 +112,9 @@
 | 동시 주문 레이스 컨디션 방지 (트랜잭션 내 수량 검증) | HIGH | ✅ 완료 |
 | `.env.example` PortOne/Blob/Cron 변수 추가 | MEDIUM | ✅ 완료 (2026-04-02) |
 | `/api/codes/[code]` seller status 쿼리 최적화 | LOW | ✅ 완료 (2026-04-02) |
-| `/api/orders` 결제 우회 엔드포인트 제거 | **HIGH** | ❌ 미처리 (B-15) |
-| 관리자 수동 정산 배치 CRON_SECRET 인증 문제 | **HIGH** | ❌ 미처리 (B-16) |
-| 코드 발급 시 `isActive` 상품 필터 추가 | MED | ❌ 미처리 (B-17) |
+| `/api/orders` 결제 우회 엔드포인트 제거 | **HIGH** | ✅ 완료 (2026-04-02, B-15) |
+| 관리자 수동 정산 배치 CRON_SECRET 인증 문제 | **HIGH** | ✅ 완료 (2026-04-02, B-16) |
+| 코드 발급 시 `isActive` 상품 필터 추가 | MED | ✅ 완료 (2026-04-02, B-17) |
 | buyer-store 타입 안전성 (`Record<string, unknown>` 개선) | LOW | 미처리 |
 
 ---
@@ -138,6 +138,6 @@ Phase 1 MVP 배포 가능 기준:
 - [x] T-09: 상품 이미지 업로드 (Vercel Blob) ✅ (2026-04-02)
 - [x] B-01: 정산 크론 인증 (CRON_SECRET Bearer) ✅ (2026-04-02)
 - [x] B-02: 동시 주문 레이스 컨디션 수정 ✅ (2026-04-02)
-- [ ] **B-15: `/api/orders` 결제 우회 엔드포인트 제거** ← 배포 전 필수
-- [ ] **B-16: 관리자 정산 배치 버튼 인증 수정** ← 배포 전 필수
+- [x] **B-15: `/api/orders` 결제 우회 엔드포인트 제거** ✅ (2026-04-02)
+- [x] **B-16: 관리자 정산 배치 버튼 인증 수정** ✅ (2026-04-02)
 - [ ] **수동 QA 6개 항목 통과** ← 진행 중

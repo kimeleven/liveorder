@@ -44,13 +44,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 상품이 셀러 본인의 것인지 확인
+    // 상품이 셀러 본인의 것이고 활성 상태인지 확인
     const product = await prisma.product.findFirst({
-      where: { id: productId, sellerId: session.user.id },
+      where: { id: productId, sellerId: session.user.id, isActive: true },
     });
     if (!product) {
       return NextResponse.json(
-        { error: "상품을 찾을 수 없습니다." },
+        { error: "상품을 찾을 수 없거나 비활성 상태입니다." },
         { status: 404 }
       );
     }

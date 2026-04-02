@@ -39,9 +39,13 @@ export default function AdminSettlementsPage() {
   }, []);
 
   async function runSettlementBatch() {
-    const res = await fetch("/api/cron/settlements", { method: "POST" });
+    const res = await fetch("/api/admin/settlements", { method: "POST" });
     const data = await res.json();
-    alert(`정산 처리 완료: ${data.processed}건`);
+    if (!res.ok) {
+      alert(`정산 처리 실패: ${data.error ?? res.status}`);
+      return;
+    }
+    alert(`정산 처리 완료: ${data.processed}건 (주문 ${data.totalOrders}건)`);
     // 새로고침
     const updated = await fetch("/api/admin/settlements").then((r) => r.json());
     if (Array.isArray(updated)) setSettlements(updated);
