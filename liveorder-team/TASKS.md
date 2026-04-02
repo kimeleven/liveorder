@@ -1,6 +1,36 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 QA 막바지, Phase 2 상세 스펙 확정)
+> 최종 업데이트: 2026-04-03 (Sanghun 직접 지시 반영)
+
+---
+
+## 🔴 UX 개선 (Sanghun 직접 요청 — 최우선)
+
+### UX-1: 상품 등록 시 코드 자동 발급
+
+**현재:** 상품 등록 → 코드 발급 페이지 별도 이동 → 상품 선택 → 코드 발급 (2단계)
+**개선:** 상품 등록 완료 시 코드 1개 자동 발급 + 추가 발급은 별도로
+
+**구현:**
+1. `app/api/seller/products/route.ts` POST 핸들러 수정
+   - 상품 INSERT 후 자동으로 Code 1개 생성 (유효기간 24시간, maxQty 0)
+   - 응답에 `codeKey` 포함
+2. `app/seller/products/new/page.tsx` 수정
+   - 등록 성공 시 "상품이 등록되었습니다! 코드: XXX-XXXX-XXXX" 표시
+   - "코드 복사" 버튼 + "추가 코드 발급" 링크 (/seller/codes/new?productId=xxx)
+3. 코드 발급 페이지(`/seller/codes/new`)는 "추가 발급" 용도로 유지
+
+### UX-2: 코드 발급 시 상품 선택 드롭다운 표시 수정
+
+**현재:** 상품 선택 후 SelectTrigger에 UUID가 표시될 수 있음
+**개선:** 항상 "상품명 (₩가격)" 형식으로 표시
+
+**구현:**
+- `app/seller/codes/new/page.tsx` 130행
+- `SelectItem`의 `value`는 `p.id` 유지 (API 전송용)
+- `SelectValue`에 선택된 상품명이 보이도록 확인
+- 현재 코드 확인: `SelectValue placeholder="상품을 선택하세요"` → shadcn Select는 SelectItem의 children 텍스트를 자동 표시하므로 정상일 수 있음
+- **실제 화면에서 UUID가 보이는지 확인 후 수정** (SelectTrigger 렌더링 이슈일 수 있음)
 
 ---
 
