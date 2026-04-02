@@ -1,87 +1,17 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Dev1 — B-27 수정 완료, Task 23 이메일 알림 구현 완료)
+> 최종 업데이트: 2026-04-03 (PM — Task 23 완료, Task 24 착수)
 
 ---
 
 ## 🔴 Dev1 현재 할당 — **Task 24: P3-3 셀러 대시보드 차트**
 
-> **B-27 (JSON.parse try/catch):** ✅ 완료 — 2e58865
-> **Task 23 (P3-2 이메일 알림):** ✅ 완료 — c16cd41
-> **다음:** Task 24 셀러 대시보드 차트
+> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅
+> **지금 할 일:** Task 24 — 셀러 대시보드 7일 매출 차트 구현
 
 ---
 
-### ⚡ 즉시: 미커밋 변경사항 커밋
-
-현재 워킹 트리에 완성된 변경사항이 있음. 2개 커밋으로 분리:
-
-```bash
-# Task 21 커밋
-git add components/seller/SettlementDetailDrawer.tsx \
-        components/admin/RefundDialog.tsx \
-        stores/buyer-store.ts \
-        components/ui/skeleton.tsx
-git commit -m "fix: 기술 부채 클린업 — SettlementDrawer 에러 처리, RefundDialog 상태, buyer-store 타입"
-
-# Task 22 커밋
-git add lib/pagination.ts \
-        components/ui/Pagination.tsx \
-        app/api/seller/orders/route.ts \
-        app/api/seller/products/route.ts \
-        app/api/seller/codes/route.ts \
-        app/admin/orders/page.tsx \
-        app/seller/orders/page.tsx \
-        app/seller/products/page.tsx \
-        app/seller/codes/page.tsx
-git commit -m "feat: API 페이지네이션 구현 (P3-1) — 셀러/관리자 목록 4개 + Pagination 컴포넌트"
-```
-
----
-
-### Task 23: P3-2 이메일 알림 ← **커밋 후 바로 여기**
-
-**우선순위:** MED — P3-1 완료 후
-
-**패키지 설치:** `npm i resend`
-
-**환경변수 추가:**
-- `RESEND_API_KEY` — `.env.example`에도 추가
-
-**신규 파일 `lib/email.ts`**
-```typescript
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return; // 환경변수 없으면 무시
-  try {
-    await resend.emails.send({
-      from: 'LiveOrder <noreply@liveorder.app>',
-      to,
-      subject,
-      html,
-    });
-  } catch (error) {
-    console.error('[email] send failed:', error);
-    // 이메일 실패는 비즈니스 로직에 영향 없음
-  }
-}
-```
-
-**API 수정 4곳:**
-
-1. `app/api/sellers/register/route.ts` — 가입 완료 후 관리자에게 알림
-2. `app/api/admin/sellers/[id]/route.ts` (또는 승인 API) — 승인 시 셀러에게 알림
-3. `app/api/payments/confirm/route.ts` — 주문 생성 성공 후 셀러에게 알림
-4. `app/api/cron/settlements/route.ts` — 정산 생성 완료 후 셀러에게 알림
-
-**커밋:** `feat: 이메일 알림 구현 (P3-2) — Resend 연동, 회원가입/승인/주문/정산 4개 알림`
-
----
-
-## 📋 다음 작업 — Phase 3 (순서대로)
+## 📋 Phase 3 남은 작업 (순서대로)
 
 ### Task 24: P3-3 셀러 대시보드 차트
 

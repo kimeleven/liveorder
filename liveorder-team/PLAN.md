@@ -1,7 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Phase 1+2 완전 완료, Phase 3 준비)
-> 현재 단계: **Task 14 Vercel 배포 (수동) → 완료 후 Phase 3 시작**
+> 최종 업데이트: 2026-04-03 (PM — Phase 3 진행 중)
+> 현재 단계: **Phase 3 — Task 24 (P3-3 셀러 대시보드 차트) 진행 중**
+> P3-0/P3-1/P3-2 완료. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -320,12 +321,12 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 
 | 항목 | 우선순위 | 계획 |
 |------|----------|------|
-| SettlementDetailDrawer 에러 토스트 없음 | LOW | P3-0 클린업 |
-| admin/orders/page.tsx 로딩 상태 없음 | LOW | P3-0 클린업 |
-| RefundDialog 성공 후 상태 초기화 우회 | LOW | P3-0 클린업 |
-| buyer-store 타입 안전성 | LOW | P3-0 클린업 |
-| API 전체 페이지네이션 없음 (B-21) | MED | P3-1 |
-| 이메일 알림 없음 (B-11) | MED | P3-2 |
+| SettlementDetailDrawer 에러 토스트 없음 | LOW | ✅ P3-0 완료 (Task 21) |
+| admin/orders/page.tsx 로딩 상태 없음 | LOW | ✅ P3-0 완료 (Task 21) |
+| RefundDialog 성공 후 상태 초기화 우회 | LOW | ✅ P3-0 완료 (Task 21) |
+| buyer-store 타입 안전성 | LOW | ✅ P3-0 완료 (Task 21) |
+| API 전체 페이지네이션 없음 (B-21) | MED | ✅ P3-1 완료 (Task 22) |
+| 이메일 알림 없음 (B-11) | MED | ✅ P3-2 완료 (Task 23) |
 | 셀러 대시보드 차트 없음 (B-13) | LOW | P3-3 |
 | 배송 추적 API 없음 (B-12) | LOW | P3-4 |
 | 셀러 이메일 인증 없음 | LOW | P3-5 |
