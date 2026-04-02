@@ -32,6 +32,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const phoneRegex = /^01[0-9]-\d{3,4}-\d{4}$/;
+    if (!phoneRegex.test(buyerPhone)) {
+      return NextResponse.json(
+        { error: "연락처 형식이 올바르지 않습니다. (예: 010-1234-5678)" },
+        { status: 400 }
+      );
+    }
+
     // PortOne API로 결제 검증
     const portoneData = await getPayment(portonePaymentId);
 

@@ -28,6 +28,8 @@ interface SettlementItem {
 
 export default function AdminSettlementsPage() {
   const [settlements, setSettlements] = useState<SettlementItem[]>([]);
+  const [batchResult, setBatchResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/settlements")
@@ -39,16 +41,23 @@ export default function AdminSettlementsPage() {
   }, []);
 
   async function runSettlementBatch() {
-    const res = await fetch("/api/admin/settlements", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(`정산 처리 실패: ${data.error ?? res.status}`);
-      return;
+    setBatchLoading(true);
+    setBatchResult(null);
+    try {
+      const res = await fetch("/api/admin/settlements", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setBatchResult({ type: "error", message: `정산 처리 실패: ${data.error ?? res.status}` });
+        return;
+      }
+      setBatchResult({ type: "success", message: `정산 처리 완료: ${data.processed}건 (주문 ${data.totalOrders}건)` });
+      const updated = await fetch("/api/admin/settlements").then((r) => r.json());
+      if (Array.isArray(updated)) setSettlements(updated);
+    } catch {
+      setBatchResult({ type: "error", message: "정산 처리 중 오류가 발생했습니다." });
+    } finally {
+      setBatchLoading(false);
     }
-    alert(`정산 처리 완료: ${data.processed}건 (주문 ${data.totalOrders}건)`);
-    // 새로고침
-    const updated = await fetch("/api/admin/settlements").then((r) => r.json());
-    if (Array.isArray(updated)) setSettlements(updated);
   }
 
   return (
@@ -56,8 +65,21 @@ export default function AdminSettlementsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">정산 관리</h1>
-          <Button onClick={runSettlementBatch}>정산 배치 실행</Button>
+          <Button onClick={runSettlementBatch} disabled={batchLoading}>
+            {batchLoading ? "처리 중..." : "정산 배치 실행"}
+          </Button>
         </div>
+        {batchResult && (
+          <div
+            className={`rounded-md px-4 py-3 text-sm font-medium ${
+              batchResult.type === "success"
+                ? "bg-green-50 text-green-800 border border-green-200"
+                : "bg-red-50 text-red-800 border border-red-200"
+            }`}
+          >
+            {batchResult.message}
+          </div>
+        )}
 
         <Card>
           <Table>
