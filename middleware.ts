@@ -11,28 +11,27 @@ async function getRole(req: NextRequest): Promise<string | null> {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) return null;
 
-  let token: string | undefined;
-  for (const name of COOKIE_NAMES) {
-    const val = req.cookies.get(name)?.value;
-    if (val) { token = val; break; }
-  }
-  if (!token) return null;
+  const keyMaterial = new TextEncoder().encode(secret);
 
-  try {
-    const salt = "authjs.session-token";
-    const keyMaterial = new TextEncoder().encode(secret);
-    const derived = await hkdf(
-      "sha256",
-      keyMaterial,
-      salt,
-      `Auth.js Generated Encryption Key (${salt})`,
-      64
-    );
-    const { payload } = await jwtDecrypt(token, derived);
-    return (payload as { role?: string }).role ?? null;
-  } catch {
-    return null;
+  for (const name of COOKIE_NAMES) {
+    const token = req.cookies.get(name)?.value;
+    if (!token) continue;
+
+    try {
+      const derived = await hkdf(
+        "sha256",
+        keyMaterial,
+        name,
+        `Auth.js Generated Encryption Key (${name})`,
+        64
+      );
+      const { payload } = await jwtDecrypt(token, derived);
+      return (payload as { role?: string }).role ?? null;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 export async function middleware(req: NextRequest) {
