@@ -23,6 +23,7 @@ interface OrderResult {
 const statusLabel: Record<string, string> = {
   PAID: "결제완료",
   SHIPPING: "배송중",
+  DELIVERED: "배송완료",
   SETTLED: "정산완료",
   REFUNDED: "환불",
 };

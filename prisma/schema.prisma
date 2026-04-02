@@ -128,6 +128,7 @@ model Order {
 enum OrderStatus {
   PAID      // 결제 완료
   SHIPPING  // 배송 중 (선택)
+  DELIVERED // 배송 완료
   SETTLED   // 정산 완료
   REFUNDED  // 환불
 }

@@ -55,6 +55,7 @@ interface OrderItem {
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   PAID: { label: "결제완료", variant: "default" },
   SHIPPING: { label: "배송중", variant: "secondary" },
+  DELIVERED: { label: "배송완료", variant: "secondary" },
   SETTLED: { label: "정산완료", variant: "outline" },
   REFUNDED: { label: "환불", variant: "destructive" },
 };

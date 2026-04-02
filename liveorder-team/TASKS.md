@@ -106,26 +106,24 @@ if (seller?.status !== 'APPROVED') {
 
 ## Dev1 (다음 작업) — P1 Tasks
 
-### Task 5: OrderStatus에 DELIVERED 추가
+### Task 5: OrderStatus에 DELIVERED 추가 ✅ 완료
+**완료 내용:** schema.prisma에 DELIVERED 추가. 마이그레이션 SQL 파일 수동 생성 (DATABASE_URL 로컬 없음 — Vercel 배포 시 적용). 주문관리/주문조회 UI에 '배송완료' 표시 추가.
 **파일:**
 - `prisma/schema.prisma` — OrderStatus enum에 `DELIVERED` 추가 (SHIPPING과 SETTLED 사이)
-- 마이그레이션 실행: `npx prisma migrate dev --name add_delivered_status`
+- `prisma/migrations/20260402000001_add_delivered_status/migration.sql` — 마이그레이션 SQL
 - `app/seller/orders/page.tsx` — statusMap에 DELIVERED 추가
 - `app/(buyer)/lookup/page.tsx` — statusLabel에 DELIVERED 추가
 
-### Task 6: 상품 수정/삭제 기능
+### Task 6: 상품 수정/삭제 기능 ✅ 완료
+**완료 내용:** 상품 수정(PUT)/삭제(DELETE soft delete) API 구현. 상품 수정 페이지 신규 생성. 상품 목록에 수정/삭제 버튼(Dialog 확인) 추가.
 **파일:**
-- `app/api/seller/products/[id]/route.ts` — 새 파일 생성
-  - `PUT`: 상품 정보 수정 (name, description, price, stock, category)
-  - `DELETE`: soft delete (isActive = false)
-- `app/seller/products/page.tsx` — 수정/삭제 버튼 추가
-- `app/seller/products/[id]/edit/page.tsx` — 상품 수정 페이지 (new/page.tsx 기반)
+- `app/api/seller/products/[id]/route.ts` — GET/PUT/DELETE (소유권 확인 포함)
+- `app/seller/products/page.tsx` — 수정/삭제 버튼 + 삭제 확인 Dialog
+- `app/seller/products/[id]/edit/page.tsx` — 상품 수정 페이지 (데이터 preload)
 
-### Task 7: 셀러 정산 페이지 점검/구현
+### Task 7: 셀러 정산 페이지 개선 ✅ 완료
+**완료 내용:** 기존 기본 테이블에 상태별 필터(전체/대기/완료/실패) + 합계 카드(총 거래금액, 수수료, PG수수료, 실지급액) 추가.
 **파일:** `app/seller/settlements/page.tsx`
-- 정산 목록 테이블 (날짜, 금액, 수수료, 실지급액, 상태)
-- 상태별 필터 (전체, 대기, 완료)
-- 합계 표시 (총 정산액, 총 수수료, 총 실지급액)
 
 ---
 
