@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Dev1 — Task 12 코드 레벨 QA 완료, Task 14 배포 단계로 진행)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 14 Vercel 배포 진행 중, 모든 QA 버그 해결 완료)
 
 ---
 
@@ -45,11 +45,17 @@
 
 ---
 
-### Task 14: Vercel 환경변수 확인 + 배포 (Task 12 완료 후)
+### Task 14: Vercel 환경변수 확인 + 배포 ← **지금 여기**
 
-1. Vercel 프로젝트 Settings → Environment Variables에서 7개 변수 설정 확인:
-   - `DATABASE_URL`, `NEXTAUTH_SECRET`, `PORTONE_API_KEY`, `PORTONE_STORE_ID`
-   - `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`, `NEXTAUTH_URL`
+1. Vercel 프로젝트 Settings → Environment Variables에서 **8개** 변수 설정 확인:
+   - `DATABASE_URL` — Neon PostgreSQL 연결 문자열
+   - `NEXTAUTH_SECRET` — JWT 서명 키 (32자 이상)
+   - `PORTONE_API_KEY` — PortOne V2 API 키
+   - `PORTONE_STORE_ID` — PortOne 상점 ID
+   - `PORTONE_API_SECRET` — PortOne 환불 API 인증 **(⚠️ 환불 필수)**
+   - `BLOB_READ_WRITE_TOKEN` — Vercel Blob 토큰
+   - `CRON_SECRET` — 정산 크론 Bearer 토큰
+   - `NEXTAUTH_URL` — 프로덕션 URL (예: `https://liveorder.vercel.app`)
 2. 미설정 항목 추가 후 Redeploy
 3. 프로덕션 URL에서 QA 항목 1~6 재검증
 4. **커밋:** `chore: 프로덕션 배포 확인 및 환경변수 체크 완료`
