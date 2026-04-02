@@ -46,8 +46,8 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-01 | HIGH | 정산 크론 인증 없음 | `POST /api/cron/settlements`에 인증 없음. 외부에서 직접 호출 시 정산이 임의로 실행되어 중복 Settlement 레코드 생성 가능 | `app/api/cron/settlements/route.ts:8` |
-| B-02 | HIGH | 동시 주문 레이스 컨디션 | 결제 확인 시 코드 수량 초과 검사(line 72-80)가 트랜잭션 밖에서 실행됨. 동시 요청 시 두 요청 모두 통과 → maxQty 초과 주문 가능 | `app/api/payments/confirm/route.ts:72-105` |
+| ~~B-01~~ | ~~HIGH~~ | ~~정산 크론 인증 없음~~ | ✅ **2026-04-02 수정** — `CRON_SECRET` 환경변수 기반 Bearer 토큰 인증 추가. 미설정 시 경고 없이 통과하지 않도록 방어 처리. | `app/api/cron/settlements/route.ts` |
+| ~~B-02~~ | ~~HIGH~~ | ~~동시 주문 레이스 컨디션~~ | ✅ **2026-04-02 수정** — 수량 검사를 트랜잭션 내부의 원자적 조건부 `UPDATE ... WHERE ... RETURNING id`로 교체. 동시 요청 시 한 건만 성공 보장. | `app/api/payments/confirm/route.ts` |
 
 ### P2 — 다음 스프린트
 
@@ -88,8 +88,8 @@
 
 | 항목 | 우선순위 | 상태 |
 |------|----------|------|
-| `/api/cron/settlements` 인증 추가 | HIGH (배포 전) | 미처리 |
-| 동시 주문 레이스 컨디션 방지 (트랜잭션 내 수량 검증) | HIGH | 미처리 |
+| `/api/cron/settlements` 인증 추가 | HIGH (배포 전) | ✅ 완료 |
+| 동시 주문 레이스 컨디션 방지 (트랜잭션 내 수량 검증) | HIGH | ✅ 완료 |
 | `.env.example` PortOne 변수 추가 | MEDIUM | 미처리 |
 | `/api/codes/[code]` seller status 쿼리 최적화 | LOW | 미처리 |
 | buyer-store 타입 안전성 (`Record<string, unknown>` 개선) | LOW | 미처리 |
@@ -113,6 +113,6 @@ Phase 1 MVP 배포 가능 기준:
 - [x] 핵심 플로우 15단계 모두 ✅
 - [x] B-02 debug 엔드포인트 제거 ✅ (2026-04-02 완료)
 - [x] B-01 이미지 업로드 ✅ (2026-04-02 완료)
-- [ ] **B-01 (크론 인증)** — CRON_SECRET 헤더 검증 추가 권고
-- [ ] **B-02 (레이스 컨디션)** — 트랜잭션 내 수량 검증 이동 권고
+- [x] **B-01 (크론 인증)** — CRON_SECRET Bearer 토큰 인증 추가 완료 (2026-04-02)
+- [x] **B-02 (레이스 컨디션)** — 트랜잭션 내 원자적 조건부 UPDATE로 교체 완료 (2026-04-02)
 - [ ] 수동 QA 6개 항목 통과

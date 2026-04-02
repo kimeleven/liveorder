@@ -4,6 +4,19 @@
 
 ---
 
+## 버그 수정 ✅ (2026-04-02)
+
+### B-01: 정산 크론 인증 추가 ✅
+`app/api/cron/settlements/route.ts` — `CRON_SECRET` 환경변수 기반 Bearer 토큰 인증.
+설정된 경우 `Authorization: Bearer <CRON_SECRET>` 헤더 없으면 401 반환.
+
+### B-02: 동시 주문 레이스 컨디션 수정 ✅
+`app/api/payments/confirm/route.ts` — 수량 초과 검사를 트랜잭션 외부 read-check에서
+트랜잭션 내부 원자적 `UPDATE ... WHERE (maxQty=0 OR usedQty+qty <= maxQty) RETURNING id`로 교체.
+0 rows 반환 시 QUANTITY_EXCEEDED 에러로 400 응답.
+
+---
+
 ## 완료된 P2 작업 ✅
 
 ### Task 8: debug 엔드포인트 제거 (보안) ✅ 완료

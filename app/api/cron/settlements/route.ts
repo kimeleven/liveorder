@@ -1,11 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE) || 0.025;
 const PG_FEE_RATE = 0.022; // 포트원 + 이니시스 ~2.2%
 const SETTLEMENT_DELAY_DAYS = Number(process.env.SETTLEMENT_DELAY_DAYS) || 3;
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // CRON_SECRET 인증: Vercel Cron 또는 수동 트리거 모두 Authorization 헤더 필요
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "인증 실패" }, { status: 401 });
+    }
+  }
   try {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - SETTLEMENT_DELAY_DAYS);
