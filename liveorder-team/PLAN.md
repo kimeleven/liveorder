@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Task 24/25 완료 반영, Task 26 착수)
-> 현재 단계: **Phase 3 — Task 26 (P3-5 셀러 이메일 인증) 진행 중**
-> P3-0/P3-1/P3-2/P3-3/P3-4 완료. Task 26 (DB 변경 필요), Task 27 (GDPR 삭제권) 대기. Task 14 (Vercel 배포) 병행 진행 중.
+> 최종 업데이트: 2026-04-03 (PM — Task 26 완료 반영, Task 27 착수)
+> 현재 단계: **Phase 3 — Task 27 (P3-6 구매자 데이터 삭제권) 진행 중**
+> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5 완료. Task 27 (GDPR 삭제권) 진행 중. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -331,8 +331,8 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 | 이메일 알림 없음 (B-11) | MED | ✅ P3-2 완료 (Task 23) |
 | 셀러 대시보드 차트 없음 (B-13) | LOW | ✅ P3-3 완료 (Task 24, fbadce1) |
 | 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
-| 셀러 이메일 인증 없음 | LOW | 🔄 P3-5 진행 중 (Task 26) |
-| 구매자 데이터 삭제권 없음 (GDPR) | MED | P3-6 (Task 27 예정) |
+| 셀러 이메일 인증 없음 | LOW | ✅ P3-5 완료 (Task 26, 17fc5ce) |
+| 구매자 데이터 삭제권 없음 (GDPR) | MED | 🔄 P3-6 진행 중 (Task 27) |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 

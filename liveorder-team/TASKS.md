@@ -1,13 +1,13 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM — Task 24/25 완료 반영, Task 26 배정 확인)
+> 최종 업데이트: 2026-04-03 (PM — Task 26 완료 반영, Task 27 착수)
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 27: P3-6 구매자 데이터 삭제권**
+## 🟢 Dev1 현재 할당 — **Task 27: P3-6 구매자 데이터 삭제권 (GDPR)**
 
 > **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅
-> **지금 할 일:** Task 27 — 구매자 개인정보 삭제권 (GDPR)
+> **지금 할 일:** Task 27 — 구매자 개인정보 삭제권 구현 (PLAN.md P3-6 섹션 참고)
 
 ---
 
@@ -209,13 +209,49 @@ import { getTrackingUrl } from '@/lib/carrier-urls';
 
 ---
 
-### Task 27: P3-6 구매자 데이터 삭제권
+### Task 27: P3-6 구매자 데이터 삭제권 (GDPR)
 
-**우선순위:** MED — Task 26 완료 후
+**우선순위:** MED — Task 26 완료 후 ← **현재 진행**
+**상태:** 🔄 진행 중
 
-**신규 파일 2개:**
-- `app/(buyer)/privacy/request/page.tsx`
-- `app/api/buyer/data-deletion/route.ts`
+#### Step 1: API 구현 — `app/api/buyer/data-deletion/route.ts` 신규 생성
+
+```typescript
+// POST /api/buyer/data-deletion
+// Body: { name: string, phone: string }
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+export async function POST(req: NextRequest) {
+  const { name, phone } = await req.json();
+  if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호를 입력해 주세요.' }, { status: 400 });
+
+  // 해당 전화번호의 주문에서 개인정보만 마스킹 (정산 무결성 유지)
+  const result = await prisma.order.updateMany({
+    where: { buyerPhone: phone, buyerName: name },
+    data: {
+      buyerName: '[삭제됨]',
+      buyerPhone: '[삭제됨]',
+      address: '[삭제됨]',
+      addressDetail: '[삭제됨]',
+      memo: '[삭제됨]',
+    },
+  });
+
+  return NextResponse.json({ deleted: result.count });
+}
+```
+
+#### Step 2: 요청 페이지 — `app/(buyer)/privacy/request/page.tsx` 신규 생성
+
+- 이름 + 전화번호 입력 폼
+- 제출 후 "처리 완료 — N건의 주문 개인정보가 삭제되었습니다" 메시지 표시
+- 0건이면 "해당 정보로 등록된 주문이 없습니다"
+
+#### Step 3: 개인정보처리방침 페이지 링크 추가
+
+- `app/(buyer)/privacy/page.tsx` 존재 여부 확인 후 삭제 요청 링크 추가
+  - 없으면 간단한 페이지 생성 (링크 포함)
 
 **커밋:** `feat: 구매자 개인정보 삭제 요청 API + 페이지 (P3-6)`
 
@@ -225,7 +261,7 @@ import { getTrackingUrl } from '@/lib/carrier-urls';
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | (최신) |
+| 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | 17fc5ce |
 | 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | fbadce1 |
 | 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | fbadce1 |
 | 2026-04-03 | B-27: chat/page.tsx JSON.parse try/catch 추가 — sessionStorage 손상 시 크래시 방지 | 2e58865 |
