@@ -1,6 +1,6 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Phase 2 완료 항목 반영)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 19 완료 확인, B-06 해결)
 > QA 단계: Phase 1 MVP — 배포 전 최종 검증
 
 ---
@@ -72,7 +72,7 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-06 | LOW | 정산 상세 없음 | 🔄 **2026-04-03 진행 중** — 스키마(settlementId FK)+크론 수정 완료, API+UI 미완 (Task 19) | `app/seller/settlements/page.tsx` |
+| ~~B-06~~ | ~~LOW~~ | ~~정산 상세 없음~~ | ✅ **2026-04-03 완료** — SettlementDetailDrawer (Sheet 슬라이드아웃) + `/api/seller/settlements/[id]` (포함 주문 포함) + 정산 목록에 "상세 보기" 버튼 (Task 19) | `components/seller/SettlementDetailDrawer.tsx` |
 | ~~B-07~~ | ~~LOW~~ | ~~환불 처리 미구현~~ | ✅ **2026-04-03 완료** — 관리자 주문 목록 + RefundDialog + 환불 API 구현 (048ac72, P2-1) | `app/admin/orders/`, `components/admin/RefundDialog.tsx` |
 | ~~B-17~~ | ~~MED~~ | ~~비활성 상품에 코드 발급 가능~~ | ✅ **2026-04-02 수정** — 코드 발급 시 `isActive: true` 조건 추가. 비활성 상품은 404 반환. | `app/api/seller/codes/route.ts` |
 | ~~B-18~~ | ~~MED~~ | ~~셀러 승인 후 JWT 세션 미갱신~~ | ✅ **2026-04-03 완료** — PENDING 배너에 "승인 확인" 버튼 추가. 승인 시 자동 로그아웃 후 안내 메시지 표시 (49a984b) | `app/seller/dashboard/page.tsx`, `app/api/seller/me/route.ts` |
@@ -98,7 +98,7 @@
 | 기능 | 기획 여부 | 상태 |
 |------|-----------|------|
 | 환불 UI (관리자) | 기획서 명시 | ✅ 완료 (2026-04-03, P2-1) |
-| 정산 상세 드릴다운 | 기획서 명시 | 🔄 진행 중 (Task 19) |
+| 정산 상세 드릴다운 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 19) |
 | 셀러 이메일 인증 | 기획서 명시 | Phase 2 예정 |
 | 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | 미반영 |
 
