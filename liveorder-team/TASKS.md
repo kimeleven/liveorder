@@ -20,7 +20,34 @@
    - "코드 복사" 버튼 + "추가 코드 발급" 링크 (/seller/codes/new?productId=xxx)
 3. 코드 발급 페이지(`/seller/codes/new`)는 "추가 발급" 용도로 유지
 
-### UX-2: 코드 발급 시 상품 선택 드롭다운 표시 수정
+### UX-2: 코드 발급 시 QR코드 자동 생성
+
+**현재:** 코드 발급 → 텍스트 코드만 표시 (셀러가 코드를 읽어줘야 함)
+**개선:** 코드 발급 시 QR코드 자동 생성 → 구매자가 QR 스캔하면 코드 입력까지 자동 완료
+
+**동작:**
+1. 셀러가 코드 발급 → QR코드 이미지 자동 생성
+2. QR 내용: `https://liveorder.kr/order/{codeKey}` (코드가 URL에 포함)
+3. 구매자가 QR 스캔 → 바로 상품 확인 페이지로 이동 (코드 입력 스킵)
+4. 셀러는 QR을 라이브 방송 화면에 띄우면 됨
+
+**구현:**
+1. QR 생성 라이브러리 설치: `npm install qrcode`
+2. `app/api/seller/codes/route.ts` 수정
+   - 코드 생성 후 QR URL 함께 반환: `qrUrl: https://liveorder.kr/order/${codeKey}`
+3. `app/seller/codes/new/page.tsx` 수정 (코드 발급 성공 화면)
+   - QR코드 이미지 표시 (qrcode 라이브러리로 canvas/SVG 렌더링)
+   - "QR 다운로드" 버튼 추가
+   - 기존 "코드 복사" 버튼 유지
+4. `app/seller/codes/page.tsx` (코드 목록)
+   - 각 코드 옆에 QR 아이콘 → 클릭 시 QR 팝업
+5. `app/(buyer)/order/[code]/page.tsx` 수정 (또는 신규 생성)
+   - URL 파라미터에서 코드 자동 추출 → 코드 입력 페이지 스킵 → 바로 상품 확인
+6. 현재 구매자 메인(`app/(buyer)/page.tsx`)의 코드 입력도 유지 (QR 없이 직접 입력하는 경우)
+
+**참고:** QR에 포함되는 URL은 짧은 코드 기반이므로 별도 단축 URL 불필요
+
+### UX-3: 코드 발급 시 상품 선택 드롭다운 표시 수정
 
 **현재:** 상품 선택 후 SelectTrigger에 UUID가 표시될 수 있음
 **개선:** 항상 "상품명 (₩가격)" 형식으로 표시
