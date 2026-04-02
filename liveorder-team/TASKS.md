@@ -1,10 +1,10 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — B-15/B-16/B-17 보안 수정 완료, QA 진행 중, B-18 세션 이슈 주의)
+> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 QA 막바지, Phase 2 상세 스펙 확정)
 
 ---
 
-## 🔴 Dev1 현재 할당 — 배포 완료까지 순서대로 진행
+## 🔴 Dev1 현재 할당 — Phase 1 배포까지
 
 ### Task 12: 수동 QA 6개 항목 통과 (진행 중)
 
@@ -15,8 +15,7 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 1. 결제 플로우: PortOne 테스트 결제창 → 서버 검증 → 주문 DB 생성 확인
 2. 운송장 등록: PAID 주문 → Dialog → 제출 → SHIPPING 전환
 3. 관리자 승인: 신규 셀러 → 관리자 승인 → **셀러 재로그인** → PENDING 배너 사라짐 확인
-   > ⚠️ **B-18 주의:** JWT 세션은 재로그인 전까지 갱신 안 됨. API는 DB 직접 조회라 정상 동작하나,
-   > 대시보드 배너는 재로그인 후 사라짐. QA 시 로그아웃 → 재로그인 과정 포함해서 확인할 것.
+   > ⚠️ **B-18 주의:** JWT 세션은 재로그인 전까지 갱신 안 됨. 재로그인 과정 포함해서 확인.
 4. 정산 크론: `Authorization: Bearer $CRON_SECRET` 헤더로 POST → Settlement 생성
 5. 미들웨어: 비로그인 상태 `/seller/dashboard` 접근 → `/seller/login` 리다이렉트
 6. 이미지 업로드: 5MB 초과 → 오류 메시지, 정상 이미지 → Blob URL 저장
@@ -28,135 +27,265 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 ### Task 15: 배포 전 빠른 픽스 (선택, Task 12와 병행 가능)
 
-QA 통과 가능성 높이고 배포 품질 개선을 위한 선택적 수정 2건.
-큰 작업 아님 — 각 30분 내외.
-
-**B-19: 서버측 전화번호 형식 검증 추가 (LOW)**
-- `app/api/sellers/register/route.ts` — `phone` 필드 정규식 검증 추가
-- `app/api/payments/confirm/route.ts` — `buyerPhone` 필드 정규식 검증 추가
+**B-19: 서버측 전화번호 형식 검증 (LOW, ~30분)**
+- `app/api/sellers/register/route.ts` — `phone` 필드 검증 추가
+- `app/api/payments/confirm/route.ts` — `buyerPhone` 필드 검증 추가
   ```typescript
   const phoneRegex = /^01[0-9]-\d{3,4}-\d{4}$/;
   if (!phoneRegex.test(phone)) return Response.json({ error: "연락처 형식 오류" }, { status: 400 });
   ```
 - **커밋:** `fix: 서버측 전화번호 형식 검증 추가 (B-19)`
 
-**B-20: 정산 배치 UX — alert() 제거 (LOW)**
-- `app/admin/settlements/page.tsx:43-44` — `alert()` → toast/상태 메시지로 교체
-- 오류 시 `res.ok` 체크하여 실패 메시지 표시
+**B-20: 정산 배치 UX — alert() 제거 (LOW, ~20분)**
+- `app/admin/settlements/page.tsx:41-52` — `alert()` → inline 상태 메시지로 교체
+  ```typescript
+  // 기존 alert() 2곳 제거
+  // useState<{type: 'success'|'error', message: string} | null> 추가
+  // JSX에서 결과 메시지 렌더링 (성공: 초록, 실패: 빨강)
+  ```
 - **커밋:** `fix: 정산 배치 UX 개선 — alert() 제거, 오류 처리 추가 (B-20)`
 
 ---
 
 ### Task 14: Vercel 환경변수 확인 + 배포 (Task 12 완료 후)
 
-**순서:**
-1. Vercel 프로젝트 Settings → Environment Variables 접속
-2. 아래 7개 변수 모두 설정 여부 확인:
-   - `DATABASE_URL` — Neon PostgreSQL 연결 문자열
-   - `NEXTAUTH_SECRET` — JWT 서명 키
-   - `PORTONE_API_KEY` — PortOne V2 API 키
-   - `PORTONE_STORE_ID` — PortOne 상점 ID
-   - `BLOB_READ_WRITE_TOKEN` — Vercel Blob 토큰
-   - `CRON_SECRET` — 정산 크론 Bearer 토큰
-   - `NEXTAUTH_URL` — 프로덕션 URL
-3. 미설정 항목 있으면 추가 후 Redeploy
-4. 배포 완료 후 프로덕션 URL에서 QA 항목 1~6 재검증
-
-**커밋:** `chore: 프로덕션 배포 확인 및 환경변수 체크 완료`
+1. Vercel 프로젝트 Settings → Environment Variables에서 7개 변수 설정 확인:
+   - `DATABASE_URL`, `NEXTAUTH_SECRET`, `PORTONE_API_KEY`, `PORTONE_STORE_ID`
+   - `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`, `NEXTAUTH_URL`
+2. 미설정 항목 추가 후 Redeploy
+3. 프로덕션 URL에서 QA 항목 1~6 재검증
+4. **커밋:** `chore: 프로덕션 배포 확인 및 환경변수 체크 완료`
 
 ---
 
-### ✅ Task 13: B-05 코드 검증 N+1 쿼리 최적화 (완료 — 2026-04-02)
+## 🟡 Phase 2 — 배포 완료 후 (우선순위 순)
 
-seller select에 `status` 필드 추가 → 별도 seller 쿼리 제거로 단일 쿼리 최적화.
-응답에서 status는 destructuring으로 제외.
+### Task 16: 관리자 주문 목록 + 환불 UI (HIGH)
 
-**커밋:** `perf: 코드 검증 API N+1 쿼리 최적화 (B-05)`
+> REFUNDED 상태는 스키마에 이미 존재. 스키마 변경 불필요.
 
----
+**신규 파일 3개:**
 
-## 🟡 Phase 2 다음 스프린트 (배포 완료 후)
-
-### [P2-1] 환불/취소 처리 (HIGH)
-
-**신규 파일:**
-- `app/admin/orders/page.tsx` — 관리자 주문 목록 (주문번호, 구매자, 상품, 금액, 상태)
-- `app/api/admin/orders/[id]/refund/route.ts` — PortOne cancelPayment 호출 + DB 업데이트
-
-**스키마 변경 필요:**
-```prisma
-// prisma/schema.prisma
-enum OrderStatus {
-  // ... 기존 ...
-  REFUNDED  // 추가
-}
+**① `app/admin/orders/page.tsx`** — 관리자 주문 목록 페이지
+```typescript
+// "use client"
+// AdminShell 레이아웃 사용
+// 상단: 상태 필터 셀렉트 (전체/PAID/SHIPPING/DELIVERED/REFUNDED)
+// 테이블 컬럼: 주문번호(8자), 셀러명, 상품명, 구매자, 금액, 상태 Badge, 결제일, 액션
+// PAID/SHIPPING/DELIVERED 행에 "환불" 버튼 → RefundDialog 열기
+// 상태 Badge 색상: PAID=blue, SHIPPING=orange, DELIVERED=green, SETTLED=gray, REFUNDED=red
 ```
-마이그레이션: `npx prisma migrate dev --name add_refunded_status`
 
-**API 스펙:**
+**② `components/admin/RefundDialog.tsx`** — 환불 처리 Dialog
+```typescript
+interface RefundDialogProps {
+  order: { id: string; amount: number; buyerName: string; productName: string };
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+// Dialog 내부:
+// - 주문 정보 표시 (상품명, 구매자, 금액)
+// - 환불 사유 textarea (필수, minLength=5)
+// - 부분 환불 금액 input (선택, 미입력 시 전액 환불)
+// - "환불 처리" 버튼 → POST /api/admin/orders/[id]/refund
+// - 성공: onSuccess() 콜백 + 목록 갱신
+// - 실패: 에러 메시지 인라인 표시
+```
+
+**③ `app/api/admin/orders/route.ts`** — GET 주문 목록
+```typescript
+// GET /api/admin/orders?status=&page=1
+// adminAuth() 체크 필수
+const orders = await prisma.order.findMany({
+  where: { status: params.status ?? undefined },
+  include: {
+    code: {
+      include: {
+        product: { select: { name: true, seller: { select: { name: true } } } }
+      }
+    }
+  },
+  orderBy: { createdAt: 'desc' },
+  take: 50,
+  skip: (page - 1) * 50,
+});
+return Response.json({ orders, total });
+```
+
+**④ `app/api/admin/orders/[id]/refund/route.ts`** — POST 환불 처리
 ```typescript
 // POST /api/admin/orders/[id]/refund
 // body: { reason: string, amount?: number }
-// 1. 관리자 인증 확인
-// 2. PortOne API: POST https://api.portone.io/payments/{paymentId}/cancel
-// 3. prisma: order.status = REFUNDED
-// 4. AuditLog 기록 (action: "REFUND", targetId: orderId)
+// 1. adminAuth() 확인
+// 2. order 조회 → status 검증 (PAID/SHIPPING/DELIVERED만 가능)
+// 3. PortOne API 호출:
+//    fetch(`https://api.portone.io/payments/${order.pgTid}/cancel`, {
+//      method: 'POST',
+//      headers: { Authorization: `PortOne ${process.env.PORTONE_API_KEY}` },
+//      body: JSON.stringify({ reason, cancelAmount: amount })
+//    })
+// 4. prisma.$transaction([
+//      prisma.order.update({ where: { id }, data: { status: 'REFUNDED' } }),
+//      prisma.sellerAuditLog.create({ data: { action: 'REFUND', ... } })
+//    ])
+// 응답: { success: true, refundedAt: string }
 ```
 
-**UI:**
-- 주문 목록 테이블에 PAID/SHIPPING/DELIVERED 상태 주문에 "환불" 버튼
-- 클릭 → Dialog: 환불 사유 입력 → "환불 처리" → API 호출
+**AdminShell 네비게이션 수정:** `components/admin/AdminShell.tsx`
+- "주문 관리" 메뉴 항목 추가 (`/admin/orders`)
+
+**커밋:** `feat: 관리자 주문 목록 + 환불 UI 구현 (P2-1)`
 
 ---
 
-### ✅ [P2-2] 구매자 채팅 오류 재시도 버튼 (B-08) — 완료 (2026-04-02 조기 완료)
+### Task 17: 셀러 대시보드 최근 주문 데이터 표시 (LOW, ~1시간)
 
-`ChatMessage.tsx`에 `retryAction` 필드 기반 "다시 시도" 버튼 구현 완료.
+**문제:** `app/seller/dashboard/page.tsx:98` — "아직 주문이 없습니다" placeholder 하드코딩 (B-22)
+
+**① `app/api/seller/dashboard/route.ts` 수정** — `recentOrders` 추가
+```typescript
+// 기존 응답 객체에 추가
+recentOrders: await prisma.order.findMany({
+  where: {
+    code: { product: { sellerId } },
+    status: { not: 'REFUNDED' }
+  },
+  include: {
+    code: { include: { product: { select: { name: true } } } }
+  },
+  orderBy: { createdAt: 'desc' },
+  take: 5,
+})
+```
+
+**② `app/seller/dashboard/page.tsx` 수정**
+```typescript
+// DashboardStats 인터페이스에 recentOrders 필드 추가
+// "최근 주문" Card를 조건부 테이블로 교체:
+//   - 데이터 있으면: 테이블 (주문번호 8자, 상품명, 금액, 상태 Badge, 날짜)
+//   - 데이터 없으면: 기존 placeholder 텍스트
+```
+
+**커밋:** `feat: 셀러 대시보드 최근 주문 실데이터 표시 (B-22)`
 
 ---
 
-### [P2-3] 정산 상세 드릴다운 (B-06, MEDIUM)
+### Task 18: JWT 세션 갱신 UX 개선 (MEDIUM, ~1시간)
 
-**신규 파일:** `app/api/seller/settlements/[id]/route.ts`
+**문제:** 관리자가 셀러 승인 후 셀러 JWT 세션에 반영 안 됨. 재로그인 전까지 PENDING 배너 표시.
+
+**① `app/api/seller/me/route.ts` 신규** — 실시간 셀러 상태 조회
+```typescript
+// GET /api/seller/me — 미들웨어 인증 통과 후
+import { auth } from "@/lib/auth";
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const seller = await prisma.seller.findUnique({
+    where: { id: session.user.id },
+    select: { status: true, name: true }
+  });
+  return Response.json(seller);
+}
+```
+
+**② `app/seller/dashboard/page.tsx` 수정** — PENDING 배너에 버튼 추가
+```typescript
+// PENDING 배너 내 "승인 확인" 버튼 추가
+// 클릭 시:
+//   1. GET /api/seller/me 호출
+//   2. status === 'APPROVED'면 → signOut({ callbackUrl: '/seller/login?message=approved' })
+//   3. status === 'PENDING'이면 → "아직 승인 대기 중입니다." 안내
+async function checkApprovalStatus() {
+  const res = await fetch('/api/seller/me');
+  const data = await res.json();
+  if (data.status === 'APPROVED') {
+    await signOut({ callbackUrl: '/seller/login?message=approved' });
+  } else {
+    setCheckMessage('아직 승인 대기 중입니다. 관리자에게 문의하세요.');
+  }
+}
+```
+
+**③ `app/seller/auth/login/page.tsx` 수정** — 승인 안내 메시지 표시
+```typescript
+// URL searchParams에서 message=approved 감지
+// → "승인되었습니다. 다시 로그인해주세요." 초록 배너 표시
+```
+
+**커밋:** `feat: 셀러 승인 후 세션 갱신 UX 개선 (B-18)`
+
+---
+
+### Task 19: 정산 상세 드릴다운 (MEDIUM, ~2시간)
+
+> **스키마 변경 포함** — 먼저 마이그레이션 실행
+
+**① 스키마 변경:** `prisma/schema.prisma`
+```prisma
+model Order {
+  // 기존 필드들 유지...
+  settlementId  String?  @map("settlement_id") @db.Uuid  // 추가
+
+  code       Code        @relation(fields: [codeId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])  // 추가
+}
+
+model Settlement {
+  // 기존 필드들 유지...
+  orders Order[]  // 추가
+}
+```
+마이그레이션: `npx prisma migrate dev --name add_settlement_id_to_orders`
+
+**② 크론 수정:** `app/api/cron/settlements/route.ts`
+- Settlement 생성 후 해당 주문들의 `settlementId` 업데이트 추가
+```typescript
+// 기존 settlement 생성 트랜잭션 내 추가:
+prisma.order.updateMany({
+  where: { id: { in: orderIds } },
+  data: { status: 'SETTLED', settlementId: settlement.id }
+})
+```
+
+**③ API 신규:** `app/api/seller/settlements/[id]/route.ts`
 ```typescript
 // GET /api/seller/settlements/[id]
 const settlement = await prisma.settlement.findUnique({
   where: { id, sellerId: session.user.id },
   include: {
     orders: {
-      include: { product: { select: { name: true } } }
+      include: {
+        code: { include: { product: { select: { name: true } } } }
+      }
     }
   }
 });
+if (!settlement) return Response.json({ error: "Not found" }, { status: 404 });
+return Response.json(settlement);
 ```
 
-**파일 수정:** `app/seller/settlements/page.tsx`
-- Settlement 카드에 "상세 보기" 버튼 → Drawer 슬라이드아웃
-- Drawer 내: 포함 주문 목록 (주문번호, 상품명, 금액, 결제일)
+**④ UI:** `app/seller/settlements/page.tsx` 수정
+- Settlement 카드에 "상세 보기" 버튼 추가 → `SettlementDetailDrawer` 열기
+
+**⑤ 신규 컴포넌트:** `components/seller/SettlementDetailDrawer.tsx`
+- shadcn `Sheet` 컴포넌트 사용 (우측 슬라이드아웃)
+- 포함 주문 테이블: 주문번호, 상품명, 금액, 결제일
+
+**커밋:** `feat: 정산 상세 드릴다운 구현 (P2-3, B-06)`
 
 ---
 
-### ✅ [P2-4] 주문 완료 후 새 코드 입력 버튼 (B-09) — 완료 (2026-04-02 조기 완료)
-
-`OrderConfirmation.tsx` 하단에 "새 코드 입력하기" 버튼 추가 완료.
-
----
-
-### ✅ [P2-5] .env.example 업데이트 — 완료 (2026-04-02)
-
-PortOne/Blob/Cron 변수 추가 완료.
-
----
-
-## ✅ Dev1 완료 — Phase 1 + Phase 2 일부
-
-### 완료 목록 (역순)
+## ✅ 완료된 작업
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-02 | B-15 결제 우회 엔드포인트 삭제, B-16 관리자 배치 인증 수정, B-17 비활성 상품 코드 발급 차단 | fix |
-| 2026-04-02 | B-05 N+1 쿼리 최적화, B-08 재시도 버튼, B-09 새 코드 입력 버튼, .env.example | feat/perf |
-| 2026-04-02 | B-03 카테고리 미선택 UX, B-04 연락처 검증 | b5c9043 |
+| 2026-04-02 | B-15 결제 우회 엔드포인트 삭제, B-16 관리자 배치 인증 수정, B-17 비활성 상품 코드 발급 차단 | ac653d0 |
+| 2026-04-02 | 미들웨어 HKDF salt 버그 수정 | 876bb02 |
+| 2026-04-02 | 관리자 계정 DB seed 수정 | cc08f64 |
+| 2026-04-02 | B-05 N+1 쿼리 최적화, B-08 재시도 버튼, B-09 새 코드 입력 버튼, .env.example | d77750f |
+| 2026-04-02 | B-03 카테고리 미선택 UX, B-04 연락처 검증 (프론트) | b5c9043 |
 | 2026-04-02 | B-01 크론 인증, B-02 레이스컨디션 수정 | 1485f74 |
 | 2026-04-02 | debug 엔드포인트 제거, 상품 이미지 업로드 (Vercel Blob) | af0cc28 |
 | 2026-04-02 | DELIVERED 상태, 상품 수정/삭제, 정산 필터 | cad9243 |
