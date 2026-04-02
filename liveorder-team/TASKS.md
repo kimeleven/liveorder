@@ -1,6 +1,42 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02 (PM)
+> 최종 업데이트: 2026-04-02 (PM 조율 — B-03/B-04 반영, Task 13 신규 할당)
+
+---
+
+## 🔴 Dev1 현재 할당 — 배포 직전 최종 작업
+
+### Task 12: 수동 QA 6개 항목 통과 (진행 중)
+
+QA_REPORT.md "검증 필요 항목" 6개를 로컬/스테이징 환경에서 확인 후 결과 기록.
+각 항목 통과 시 QA_REPORT.md "검증 필요 항목" 옆에 ✅ 표기.
+**모두 통과 → PM에게 배포 승인 요청.**
+
+---
+
+### Task 13: B-05 코드 검증 N+1 쿼리 최적화 (Task 12 완료 후)
+
+**우선순위:** MED (배포 직후 처리 가능, QA 완료 후 진행)
+
+**파일:** `app/api/codes/[code]/route.ts` (라인 60-72)
+
+**문제:** 코드 유효성 확인 시 `seller`를 include로 가져온 후 `status` 확인을 위해 별도 쿼리 실행. N+1 패턴.
+
+**해결책:**
+```typescript
+// 현재 (N+1):
+const code = await prisma.code.findUnique({ where: { code }, include: { seller: true } });
+const seller = await prisma.seller.findUnique({ where: { id: code.sellerId } }); // 불필요
+
+// 개선 (단일 쿼리):
+const code = await prisma.code.findUnique({
+  where: { code },
+  include: { seller: { select: { status: true, businessName: true } } },
+});
+// code.seller.status로 직접 접근
+```
+
+커밋 메시지: `perf: 코드 검증 API N+1 쿼리 최적화 (B-05)`
 
 ---
 
@@ -31,12 +67,7 @@
 
 ---
 
-### Task 12: 수동 QA 6개 항목 통과 지원
-
-QA_REPORT.md의 "검증 필요 항목" 6개를 로컬/스테이징 환경에서 확인 후 결과 기록.
-각 항목 통과 시 QA_REPORT.md "검증 필요 항목" 옆에 ✅ 표기.
-
-배포 가능 기준 마지막 항목 (`[ ] 수동 QA 6개 항목 통과`) 완료 시 → PM에게 보고.
+### Task 12: 수동 QA 6개 항목 통과 지원 ← **진행 중, 상단 섹션 참조**
 
 ---
 

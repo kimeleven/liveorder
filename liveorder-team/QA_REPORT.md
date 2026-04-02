@@ -1,6 +1,6 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-02
+> 최종 업데이트: 2026-04-02 (PM 조율 반영)
 > QA 단계: Phase 1 MVP — 배포 전 최종 검증
 
 ---
@@ -53,8 +53,8 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-03 | MED | 카테고리 필수 검증 UX | 상품 등록 폼에서 카테고리 미선택 시 shadcn Select의 `required`가 브라우저 네이티브 팝업 없이 서버 오류 반환. 서버 검증은 정상이나 클라이언트 피드백 부재 | `app/seller/products/new/page.tsx:181`, `app/api/seller/products/route.ts:38-43` |
-| B-04 | MED | 연락처 형식 미검증 | 배송지 입력 폼 전화번호 필드가 `type="tel"`만 있고 형식 검증(01X-XXXX-XXXX) 없음. 잘못된 번호로 주문 생성 시 주문 조회 불가 | `components/buyer/cards/AddressForm.tsx:80-87` |
+| ~~B-03~~ | ~~MED~~ | ~~카테고리 필수 검증 UX~~ | ✅ **2026-04-02 수정** — `categoryError` state 추가, 미선택 시 에러 메시지 + 빨간 테두리 표시. 커밋: `b5c9043` | `app/seller/products/new/page.tsx` |
+| ~~B-04~~ | ~~MED~~ | ~~연락처 형식 미검증~~ | ✅ **2026-04-02 수정** — 정규식 `/^01[0-9]-\d{3,4}-\d{4}$/` 검증 추가, placeholder 및 에러 메시지 표시. 커밋: `b5c9043` | `components/buyer/cards/AddressForm.tsx` |
 | B-05 | MED | 코드 검증 N+1 쿼리 | 코드 유효성 API에서 seller 정보를 include로 받아온 후 status만 위해 별도 쿼리 실행 | `app/api/codes/[code]/route.ts:60-72` |
 | B-06 | LOW | 정산 상세 없음 | 정산 목록은 있으나 정산 건별 포함 주문 내역 없음 | `app/seller/settlements/page.tsx` |
 | B-07 | LOW | 환불 처리 미구현 | 관리자 환불 UI 없음. 현재 수동 처리 | `app/admin/` |
