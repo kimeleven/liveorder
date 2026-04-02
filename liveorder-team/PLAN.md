@@ -1,7 +1,7 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 배포 완료 목표, Phase 2 로드맵 확정)
-> 현재 단계: **Phase 1 MVP — 배포 직전 최종 단계 (QA → 배포 → B-05)**
+> 최종 업데이트: 2026-04-02 (PM 조율 — Phase 1 QA 진행 중, B-05/B-08/B-09 조기 완료)
+> 현재 단계: **Phase 1 MVP — 수동 QA 6개 항목 통과 → Vercel 배포**
 
 ---
 
@@ -141,28 +141,10 @@ if (code.seller.status !== "APPROVED") {
 - PAID/SHIPPING/DELIVERED 상태 주문에 "환불" 버튼
 - 환불 사유 입력 Dialog → 확인 → 처리
 
-#### 4.2 구매자 채팅 오류 재시도 버튼 (B-08)
+#### ~~4.2 구매자 채팅 오류 재시도 버튼 (B-08)~~ ✅ 완료 (2026-04-02)
 
-**파일:** `app/(buyer)/chat/page.tsx:103-109` 근처
-
-**현재 문제:** 코드 검증 실패, 결제 실패 시 사용자가 수동으로 페이지 새로고침해야 함
-
-**구현:**
-```tsx
-// 오류 상태 시 표시
-{error && (
-  <div className="flex flex-col items-center gap-3">
-    <p className="text-red-500">{error}</p>
-    <Button onClick={() => { setError(null); handleRetry(); }} variant="outline">
-      다시 시도
-    </Button>
-  </div>
-)}
-```
-
-**handleRetry 로직:**
-- 코드 검증 오류 → `setStep("code")`, 코드 입력 초기화
-- 결제 오류 → `setStep("payment")` (배송지 유지)
+`components/buyer/ChatMessage.tsx`에 `retryAction` 필드 기반 "다시 시도" 버튼 추가 완료.
+코드 오류 → idle 초기화, 결제 오류 → payment_pending 복원.
 
 ### 우선순위 MEDIUM
 
@@ -187,20 +169,10 @@ const settlement = await prisma.settlement.findUnique({
 });
 ```
 
-#### 4.4 주문 완료 후 새 코드 입력 버튼 (B-09)
+#### ~~4.4 주문 완료 후 새 코드 입력 버튼 (B-09)~~ ✅ 완료 (2026-04-02)
 
-**파일:** `components/buyer/cards/OrderConfirmation.tsx`
-
-**구현:** 주문 완료 화면 하단에 버튼 추가
-```tsx
-<Button
-  variant="outline"
-  onClick={() => window.location.href = "/"}
-  className="mt-4 w-full"
->
-  새 코드 입력하기
-</Button>
-```
+`components/buyer/cards/OrderConfirmation.tsx` 하단에 "새 코드 입력하기" 버튼 추가 완료.
+클릭 시 `window.location.href = "/"` 이동.
 
 ### 우선순위 LOW
 
@@ -232,8 +204,8 @@ const settlement = await prisma.settlement.findUnique({
 
 | 항목 | 우선순위 | 현재 상태 |
 |------|----------|-----------|
-| B-05: 코드 검증 N+1 쿼리 | MED | Task 13 할당됨 |
-| `.env.example` PortOne/Blob 변수 추가 | MED | 미처리 |
+| B-05: 코드 검증 N+1 쿼리 | MED | ✅ 완료 (2026-04-02) |
+| `.env.example` PortOne/Blob 변수 추가 | MED | ✅ 완료 (2026-04-02) |
 | buyer-store `Record<string, unknown>` 타입 개선 | LOW | 미처리 |
 | CSV 다운로드 페이지네이션 (대용량 대비) | LOW | 미처리 |
 | Redis 캐싱 (코드 조회) | LOW | MVP 이후 |

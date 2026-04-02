@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02 (PM 조율 — 배포 직전 최종 단계, Phase 2 로드맵 추가)
+> 최종 업데이트: 2026-04-02 (PM 조율 — QA 진행 중, B-08/B-09 조기 완료 반영)
 
 ---
 
@@ -86,18 +86,9 @@ enum OrderStatus {
 
 ---
 
-### [P2-2] 구매자 채팅 오류 재시도 버튼 (B-08, MEDIUM)
+### ✅ [P2-2] 구매자 채팅 오류 재시도 버튼 (B-08) — 완료 (2026-04-02 조기 완료)
 
-**파일:** `app/(buyer)/chat/page.tsx`
-
-**현재 문제:** 코드 검증 실패, 결제 실패 시 재시도 방법 없음
-
-**구현:**
-- 오류 상태 시 에러 메시지 아래 "다시 시도" 버튼 표시
-- 코드 오류 → `setStep("code")`, 코드 state 초기화
-- 결제 오류 → `setStep("payment")` (배송지 state 유지)
-
-**커밋:** `feat: 채팅 결제/코드 오류 재시도 버튼 추가 (B-08)`
+`ChatMessage.tsx`에 `retryAction` 필드 기반 "다시 시도" 버튼 구현 완료.
 
 ---
 
@@ -122,53 +113,15 @@ const settlement = await prisma.settlement.findUnique({
 
 ---
 
-### [P2-4] 주문 완료 후 새 코드 입력 버튼 (B-09, MEDIUM)
+### ✅ [P2-4] 주문 완료 후 새 코드 입력 버튼 (B-09) — 완료 (2026-04-02 조기 완료)
 
-**파일:** `components/buyer/cards/OrderConfirmation.tsx`
-
-**구현:**
-```tsx
-// 주문 완료 화면 하단
-<Button
-  variant="outline"
-  onClick={() => window.location.href = "/"}
-  className="mt-4 w-full"
->
-  새 코드 입력하기
-</Button>
-```
-
-**커밋:** `feat: 주문 완료 후 새 코드 입력 버튼 추가 (B-09)`
+`OrderConfirmation.tsx` 하단에 "새 코드 입력하기" 버튼 추가 완료.
 
 ---
 
-### [P2-5] .env.example 업데이트 (기술 부채)
+### ✅ [P2-5] .env.example 업데이트 — 완료 (2026-04-02)
 
-**파일:** `.env.example` (루트)
-
-현재 PortOne, Blob 관련 변수 누락. 신규 기여자/배포 시 참조용.
-
-**추가할 내용:**
-```bash
-# Database
-DATABASE_URL=postgresql://...
-
-# Auth
-NEXTAUTH_SECRET=your-secret-here
-NEXTAUTH_URL=http://localhost:3000
-
-# PortOne
-PORTONE_API_KEY=your-portone-api-key
-PORTONE_STORE_ID=your-store-id
-
-# Vercel Blob
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
-
-# Cron
-CRON_SECRET=your-cron-secret
-```
-
-**커밋:** `chore: .env.example PortOne/Blob/Cron 변수 추가`
+PortOne/Blob/Cron 변수 추가 완료.
 
 ---
 
@@ -178,7 +131,7 @@ CRON_SECRET=your-cron-secret
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-02 | B-05 N+1 쿼리 최적화, B-08 재시도 버튼, B-09 새 코드 입력 버튼, .env.example | (이번) |
+| 2026-04-02 | B-05 N+1 쿼리 최적화, B-08 재시도 버튼, B-09 새 코드 입력 버튼, .env.example | feat/perf |
 | 2026-04-02 | B-03 카테고리 미선택 UX, B-04 연락처 검증 | b5c9043 |
 | 2026-04-02 | B-01 크론 인증, B-02 레이스컨디션 수정 | 1485f74 |
 | 2026-04-02 | debug 엔드포인트 제거, 상품 이미지 업로드 (Vercel Blob) | af0cc28 |
