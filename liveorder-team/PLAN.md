@@ -1,7 +1,7 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-02 (Planner)
-> 현재 단계: **Phase 1 MVP — 배포 전 마지막 작업 2건 남음**
+> 최종 업데이트: 2026-04-02 (PM)
+> 현재 단계: **Phase 1 MVP — 수동 QA 진행 중, 배포 직전**
 
 ---
 
@@ -41,8 +41,12 @@
 
 | # | 항목 | 심각도 | 상태 |
 |---|------|--------|------|
-| T-08 | `app/api/debug/route.ts` 삭제 | **P1-CRITICAL** (보안) | ❌ 미완료 |
-| T-09 | 상품 이미지 업로드 (Vercel Blob) | **P2** | ❌ 미완료 |
+| T-08 | `app/api/debug/route.ts` 삭제 | **P1-CRITICAL** (보안) | ✅ 완료 (2026-04-02) |
+| T-09 | 상품 이미지 업로드 (Vercel Blob) | **P2** | ✅ 완료 (2026-04-02) |
+| B-01 | 정산 크론 인증 (CRON_SECRET Bearer) | **P1** | ✅ 완료 (2026-04-02) |
+| B-02 | 동시 주문 레이스 컨디션 수정 | **P1** | ✅ 완료 (2026-04-02) |
+
+**남은 배포 전 작업:** 수동 QA 6개 항목 통과
 
 ---
 
@@ -216,11 +220,13 @@ Vercel 프로젝트 설정 → Storage → Blob → 연결 후 토큰 발급
 
 Phase 1 MVP 배포 가능 기준:
 
-- [x] 핵심 플로우 14단계 모두 ✅
-- [ ] **T-08: debug 엔드포인트 제거** (보안 필수)
-- [ ] T-09: 이미지 업로드 (없어도 텍스트 상품명으로 운영 가능 — 배포 차단 아님)
-- [ ] 수동 QA 5개 항목 통과 (QA_REPORT.md 참조)
-- [ ] Vercel 환경변수 확인 (DATABASE_URL, NEXTAUTH_SECRET, PORTONE_API_KEY 등)
+- [x] 핵심 플로우 15단계 모두 ✅
+- [x] **T-08: debug 엔드포인트 제거** (보안 필수) ✅
+- [x] T-09: 이미지 업로드 (Vercel Blob) ✅
+- [x] B-01: 정산 크론 인증 (CRON_SECRET) ✅
+- [x] B-02: 레이스 컨디션 수정 (원자적 UPDATE) ✅
+- [ ] **수동 QA 6개 항목 통과** (QA_REPORT.md 참조) ← 현재 진행 중
+- [ ] Vercel 환경변수 확인 (DATABASE_URL, NEXTAUTH_SECRET, PORTONE_API_KEY, BLOB_READ_WRITE_TOKEN, CRON_SECRET)
 
 ---
 
