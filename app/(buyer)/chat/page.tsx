@@ -26,8 +26,12 @@ export default function ChatPage() {
     const pending = sessionStorage.getItem("pendingCode");
     if (pending) {
       sessionStorage.removeItem("pendingCode");
-      const { code, data } = JSON.parse(pending);
-      handleCodeData(code, data);
+      try {
+        const { code, data } = JSON.parse(pending);
+        handleCodeData(code, data);
+      } catch {
+        // 손상된 데이터 무시, 사용자에게 코드 직접 입력 유도
+      }
     }
   }, []);
 
