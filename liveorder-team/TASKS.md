@@ -4,9 +4,9 @@
 
 ---
 
-## 🔴 Dev1 현재 할당 — Phase 1 배포까지
+## 🟡 Dev1 현재 할당 — Phase 1 배포 QA 진행 중
 
-### Task 20: UX-3 코드 발급 드롭다운 상품명 표시 수정 ← **먼저 처리**
+### ~~Task 20: UX-3 코드 발급 드롭다운 상품명 표시 수정~~ ← **✅ 확인 완료 (shadcn 자동 처리)**
 
 **파일:** `app/seller/codes/new/page.tsx` (~130행)
 
@@ -63,6 +63,11 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | B-23: QR 코드 구현 — `qrcode` 패키지 설치, 발급 성공 화면 QR 표시 + 다운로드, `/order/[code]` 라우트 | (current) |
+| 2026-04-03 | B-24: PLAN.md에 `PORTONE_API_SECRET` 환경변수 추가 | (current) |
+| 2026-04-03 | B-25: 정산 테이블 `colSpan={7}` → `{8}` 수정 | (current) |
+| 2026-04-03 | B-26: `/api/seller/products` GET에 `isActive: true` 필터 추가 | (current) |
+| 2026-04-03 | Task 20: UX-3 확인 — shadcn SelectItem 자동 처리, 수정 불필요 | - |
 | 2026-04-03 | Task 19: 정산 상세 드릴다운 (P2-3, B-06) — SettlementDetailDrawer + `/api/seller/settlements/[id]` + settlementId FK | (uncommitted) |
 | 2026-04-03 | UX-1: 상품 등록 시 코드 자동 발급 — `autoCode` 응답 + 코드 표시 UI | (uncommitted) |
 | 2026-04-03 | UX-2: 코드 발급 시 QR코드 자동 생성 — QR 스캔으로 코드 입력 자동화 | c0bb241 |

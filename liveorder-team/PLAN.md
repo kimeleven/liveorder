@@ -110,6 +110,7 @@
 | `NEXTAUTH_SECRET` | JWT 서명 키 (32자 이상) |
 | `PORTONE_API_KEY` | PortOne V2 API 키 |
 | `PORTONE_STORE_ID` | PortOne 상점 ID |
+| `PORTONE_API_SECRET` | PortOne 환불 API 인증 시크릿 **(⚠️ 환불 기능에 필수)** |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob 토큰 |
 | `CRON_SECRET` | 정산 크론 Bearer 토큰 |
 | `NEXTAUTH_URL` | 프로덕션 URL (예: `https://liveorder.vercel.app`) |

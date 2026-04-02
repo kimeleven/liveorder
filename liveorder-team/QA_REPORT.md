@@ -11,7 +11,7 @@
 |------|--------|------|------|
 | SELLER | 회원가입 → 사업자 인증 | ✅ | 관리자 승인 후 APPROVED 전환 |
 | SELLER | 상품 등록 → 코드 자동 발급 (UX-1) | ✅ | autoCode 반환 + 성공 화면 표시 |
-| SELLER | 코드 발급 페이지 QR 코드 (UX-2) | ❌ | `qrcode` 미설치, 구현 없음 |
+| SELLER | 코드 발급 페이지 QR 코드 (UX-2) | ✅ | `qrcode` 설치, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 |
 | SELLER | 코드 발급 드롭다운 상품명 표시 (UX-3) | ✅ | shadcn SelectItem children 자동 표시 |
 | SELLER | 코드 API 보안 | ✅ | `/api/seller/codes` 정상 |
 | SELLER | 상품 수정/삭제 | ✅ | Soft delete 정상 |
@@ -58,10 +58,10 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-23 | **HIGH** | UX-2 QR 코드 미구현 | `qrcode` 패키지 미설치(`package.json` 확인). 커밋 c0bb241에서 완료 표시되었으나 실제 구현 없음. `codes/new/page.tsx` 발급 완료 화면에 QR 없음, `codes/page.tsx` 목록에 QR 열 없음, buyer 랜딩에 QR 스캔 버튼 없음, `/order/[code]` 라우트 없음 | `app/seller/codes/new/page.tsx:74-107`, `package.json` |
-| B-24 | **HIGH** | 환불 API 환경변수 배포 누락 위험 | `api/admin/orders/[id]/refund/route.ts:63`에서 `PORTONE_API_SECRET` 사용. PLAN.md 배포 체크리스트에는 `PORTONE_API_KEY`만 있어 `PORTONE_API_SECRET` 누락 시 환불 기능이 프로덕션에서 502 오류 발생 | `app/api/admin/orders/[id]/refund/route.ts:63`, `liveorder-team/PLAN.md:2.3절` |
-| B-25 | **MED** | 정산 테이블 `colSpan` 불일치 | `settlements/page.tsx:166` — `colSpan={7}`이지만 실제 테이블 헤더는 8열(정산예정일, 거래금액, 플랫폼수수료, PG수수료, 실지급액, 상태, 정산일, 상세보기). "정산 내역 없음" 메시지가 마지막 1열을 채우지 못함 | `app/seller/settlements/page.tsx:166` |
-| B-26 | **MED** | 코드 발급 드롭다운에 soft-deleted 상품 표시 | `api/seller/products/route.ts:12-16` GET에 `isActive: true` 필터 없음. 셀러가 삭제한 상품이 `/seller/codes/new` 드롭다운에 표시되어 발급 시도 시 404 오류 발생 | `app/api/seller/products/route.ts:12` |
+| ~~B-23~~ | ~~HIGH~~ | ~~UX-2 QR 코드 미구현~~ | ✅ **2026-04-03 완료** — `qrcode` 설치, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 생성 | `app/seller/codes/new/page.tsx`, `app/(buyer)/order/[code]/page.tsx` |
+| ~~B-24~~ | ~~HIGH~~ | ~~환불 API 환경변수 배포 누락 위험~~ | ✅ **2026-04-03 완료** — PLAN.md 2.3절에 `PORTONE_API_SECRET` 추가 | `liveorder-team/PLAN.md:2.3절` |
+| ~~B-25~~ | ~~MED~~ | ~~정산 테이블 `colSpan` 불일치~~ | ✅ **2026-04-03 완료** — `colSpan={8}` 수정 | `app/seller/settlements/page.tsx:166` |
+| ~~B-26~~ | ~~MED~~ | ~~코드 발급 드롭다운에 soft-deleted 상품 표시~~ | ✅ **2026-04-03 완료** — `isActive: true` 필터 추가 | `app/api/seller/products/route.ts:12` |
 
 ### P2 — 이전 스프린트 수정 완료
 
@@ -144,10 +144,10 @@ Phase 1 MVP 배포 가능 기준:
 - [x] B-02: 동시 주문 레이스 컨디션 수정 ✅
 - [x] B-15: `/api/orders` 결제 우회 엔드포인트 제거 ✅
 - [x] B-16: 관리자 정산 배치 버튼 인증 수정 ✅
-- [ ] **B-23: UX-2 QR 코드 미구현 — 배포 전 결정 필요** (MVP에서 제외 또는 구현)
-- [ ] **B-24: `PORTONE_API_SECRET` Vercel 환경변수 추가 — 배포 전 필수**
-- [ ] **B-25: 정산 테이블 colSpan=8 수정 — 간단 버그픽스**
-- [ ] **B-26: `/api/seller/products` isActive 필터 추가 — 간단 버그픽스**
+- [x] **B-23: UX-2 QR 코드 구현 완료** — `qrcode` 설치, 발급 성공 화면 QR 표시, `/order/[code]` 라우트
+- [x] **B-24: `PORTONE_API_SECRET` PLAN.md 체크리스트 추가 완료**
+- [x] **B-25: 정산 테이블 colSpan=8 수정 완료**
+- [x] **B-26: `/api/seller/products` isActive 필터 추가 완료**
 - [ ] 수동 QA 6개 항목 통과 ← Task 12
 
 ---
