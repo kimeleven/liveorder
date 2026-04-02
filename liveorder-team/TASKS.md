@@ -1,14 +1,14 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 21/22 구현 완료 확인, Task 23 이메일 알림 배정)
+> 최종 업데이트: 2026-04-03 (Dev1 — B-27 수정 완료, Task 23 이메일 알림 구현 완료)
 
 ---
 
-## 🔴 Dev1 현재 할당 — **Step 1: 미커밋 변경사항 커밋 → Step 2: Task 23 이메일 알림**
+## 🔴 Dev1 현재 할당 — **Task 24: P3-3 셀러 대시보드 차트**
 
-> **Task 21 (P3-0 기술 부채 클린업):** 구현 완료 ✅ — 미커밋 상태
-> **Task 22 (P3-1 API 페이지네이션):** 구현 완료 ✅ — 미커밋 상태
-> **즉시 할 일:** 아래 2개 커밋 후 Task 23 시작
+> **B-27 (JSON.parse try/catch):** ✅ 완료 — 2e58865
+> **Task 23 (P3-2 이메일 알림):** ✅ 완료 — c16cd41
+> **다음:** Task 24 셀러 대시보드 차트
 
 ---
 
@@ -144,8 +144,10 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 22: P3-1 API 페이지네이션 — `lib/pagination.ts`, `components/ui/Pagination.tsx`, API 4개, 프론트 4개 | 미커밋 |
-| 2026-04-03 | Task 21: P3-0 기술 부채 클린업 — SettlementDrawer 에러 처리, admin 로딩 Skeleton, RefundDialog 상태, buyer-store 타입 | 미커밋 |
+| 2026-04-03 | B-27: chat/page.tsx JSON.parse try/catch 추가 — sessionStorage 손상 시 크래시 방지 | 2e58865 |
+| 2026-04-03 | Task 23: P3-2 이메일 알림 — Resend 연동, `lib/email.ts`, 회원가입/승인/주문/정산 4개 알림 | c16cd41 |
+| 2026-04-03 | Task 22: P3-1 API 페이지네이션 — `lib/pagination.ts`, `components/ui/Pagination.tsx`, API 4개, 프론트 4개 | 83fdb78 |
+| 2026-04-03 | Task 21: P3-0 기술 부채 클린업 — SettlementDrawer 에러 처리, admin 로딩 Skeleton, RefundDialog 상태, buyer-store 타입 | 83fdb78 |
 | 2026-04-03 | Task 12: QA 6개 항목 코드 레벨 검증 완료 — 결제/운송장/승인/크론/미들웨어/이미지 업로드 | 1a4164d |
 | 2026-04-03 | B-23: QR 코드 구현 — qrcode 패키지, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 | 882fe02 |
 | 2026-04-03 | B-24: PLAN.md에 `PORTONE_API_SECRET` 환경변수 추가 | 882fe02 |

@@ -60,7 +60,7 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-27 | **MED** | 바이어 채팅 플로우 | `sessionStorage.getItem("pendingCode")` 값을 `JSON.parse()` 할 때 try/catch 없음. sessionStorage 데이터 손상 시 unhandled exception으로 채팅 페이지 전체 크래시 | `app/(buyer)/chat/page.tsx:29` |
+| ~~B-27~~ | ~~MED~~ | ~~바이어 채팅 플로우~~ | ✅ **2026-04-03 완료** — try/catch 추가 (2e58865) | ~~`app/(buyer)/chat/page.tsx:29`~~ |
 
 **B-27 재현 조건:** 다른 탭/앱이 `liveorder-buyer` 키 근처 sessionStorage에 잘못된 JSON을 쓰거나, 브라우저 확장이 sessionStorage를 수정하는 경우. 드물지만 크래시 위험 있음.
 
@@ -135,7 +135,7 @@ if (pending) {
 | 환불 UI (관리자) | 기획서 명시 | ✅ 완료 (2026-04-03, P2-1) |
 | 정산 상세 드릴다운 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 19) |
 | API 페이지네이션 (셀러 목록) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 22) |
-| 이메일 알림 (Resend) | 기획서 명시 | ⏳ Task 23 진행 예정 |
+| 이메일 알림 (Resend) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 23) |
 | 셀러 이메일 인증 | 기획서 명시 | Phase 3 예정 |
 | 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | Phase 3 예정 |
 
@@ -145,7 +145,7 @@ if (pending) {
 
 | 항목 | 우선순위 | 상태 |
 |------|----------|------|
-| `chat/page.tsx` JSON.parse 예외처리 누락 (B-27) | MED | ⚠️ 신규 발견 — 수정 필요 |
+| `chat/page.tsx` JSON.parse 예외처리 누락 (B-27) | MED | ✅ 수정 완료 (2e58865) |
 | `admin/orders` API — `parsePagination()` 미사용, 응답 형식 불일치 (B-28) | LOW | 미처리 (동작은 정상) |
 | `seller/orders` fetch 에러 무시 (B-29) | LOW | 미처리 |
 | `SettlementDetailDrawer` fetch 에러 사용자 피드백 없음 | LOW | ✅ **Task 21에서 수정** |
@@ -188,7 +188,7 @@ Phase 1 MVP 배포 가능 기준:
 - [x] 수동 QA 6개 항목 코드 검증 완료 (Task 12) ✅
 - [x] P3-0 기술 부채 4개 항목 수정 완료 (Task 21) ✅
 - [x] P3-1 API 페이지네이션 구현 완료 (Task 22) ✅
-- [ ] **B-27: chat/page.tsx JSON.parse try/catch 추가 필요** ⚠️
+- [x] **B-27: chat/page.tsx JSON.parse try/catch 추가** ✅
 
 ---
 
@@ -204,4 +204,4 @@ Phase 1 MVP 배포 가능 기준:
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob | PLAN.md 기재 |
 | `CRON_SECRET` | 정산 크론 Bearer 토큰 | PLAN.md 기재 |
 | `NEXTAUTH_URL` | 프로덕션 URL | PLAN.md 기재 |
-| `RESEND_API_KEY` | 이메일 알림 (Task 23 예정) | ⏳ Task 23 완료 후 추가 |
+| `RESEND_API_KEY` | 이메일 알림 | ✅ .env.example 추가 완료 (Task 23) |
