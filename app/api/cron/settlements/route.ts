@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { sendEmail } from "@/lib/email";
 
 const PLATFORM_FEE_RATE = Number(process.env.PLATFORM_FEE_RATE) || 0.025;
 const PG_FEE_RATE = 0.022; // 포트원 + 이니시스 ~2.2%
@@ -81,6 +82,26 @@ export async function POST(req: NextRequest) {
           data: { status: "SETTLED", settlementId: settlement.id },
         });
       });
+
+      // 셀러에게 정산 완료 알림
+      const seller = await prisma.seller.findUnique({
+        where: { id: group.sellerId },
+        select: { email: true, name: true },
+      });
+      if (seller) {
+        await sendEmail(
+          seller.email,
+          '[LiveOrder] 정산이 완료되었습니다',
+          `<p>${seller.name} 님, 정산이 완료되었습니다.</p>
+          <ul>
+            <li>총 결제금액: ${group.totalAmount.toLocaleString()}원</li>
+            <li>플랫폼 수수료: ${fee.toLocaleString()}원</li>
+            <li>PG 수수료: ${pgFee.toLocaleString()}원</li>
+            <li>정산 금액: ${netAmount.toLocaleString()}원</li>
+          </ul>
+          <p>셀러 대시보드 정산 탭에서 상세 내역을 확인해 주세요.</p>`
+        );
+      }
 
       processed++;
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { sendEmail } from "@/lib/email";
 
 export async function PATCH(
   req: NextRequest,
@@ -32,6 +33,23 @@ export async function PATCH(
       detail: { changedBy: session.user.id },
     },
   });
+
+  // 승인/정지 시 셀러에게 이메일 알림
+  if (status === 'APPROVED') {
+    await sendEmail(
+      seller.email,
+      '[LiveOrder] 셀러 계정이 승인되었습니다',
+      `<p>${seller.name} 님, 셀러 계정이 승인되었습니다.</p>
+      <p>지금 바로 로그인하여 상품을 등록하고 코드를 발급해 보세요.</p>`
+    );
+  } else if (status === 'SUSPENDED') {
+    await sendEmail(
+      seller.email,
+      '[LiveOrder] 셀러 계정이 정지되었습니다',
+      `<p>${seller.name} 님, 셀러 계정이 정지되었습니다.</p>
+      <p>자세한 사유는 관리자에게 문의해 주세요.</p>`
+    );
+  }
 
   return NextResponse.json(seller);
 }

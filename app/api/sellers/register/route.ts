@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { sendEmail, ADMIN_EMAIL } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,6 +61,19 @@ export async function POST(req: NextRequest) {
         status: "PENDING",
       },
     });
+
+    // 관리자에게 신규 셀러 가입 알림
+    await sendEmail(
+      ADMIN_EMAIL,
+      '[LiveOrder] 신규 셀러 가입 승인 요청',
+      `<p>새 셀러가 가입 승인을 요청했습니다.</p>
+      <ul>
+        <li>상호명: ${seller.name}</li>
+        <li>이메일: ${seller.email}</li>
+        <li>사업자번호: ${seller.businessNo}</li>
+      </ul>
+      <p>관리자 페이지에서 승인 처리해 주세요.</p>`
+    );
 
     return NextResponse.json(
       { id: seller.id, message: "셀러 등록이 완료되었습니다. 관리자 승인을 기다려주세요." },

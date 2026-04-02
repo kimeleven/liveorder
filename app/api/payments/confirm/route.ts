@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getPayment } from "@/lib/portone";
+import { sendEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -123,6 +124,27 @@ export async function POST(req: NextRequest) {
         );
       }
       throw err;
+    }
+
+    // 셀러에게 신규 주문 알림
+    const codeWithSeller = await prisma.code.findUnique({
+      where: { id: codeId },
+      include: { product: { include: { seller: true } } },
+    });
+    if (codeWithSeller?.product?.seller) {
+      const seller = codeWithSeller.product.seller;
+      await sendEmail(
+        seller.email,
+        '[LiveOrder] 새 주문이 접수되었습니다',
+        `<p>${seller.name} 님, 새 주문이 접수되었습니다.</p>
+        <ul>
+          <li>상품: ${codeWithSeller.product.name}</li>
+          <li>주문자: ${buyerName}</li>
+          <li>수량: ${quantity}개</li>
+          <li>금액: ${Number(amount).toLocaleString()}원</li>
+        </ul>
+        <p>셀러 대시보드에서 주문을 확인해 주세요.</p>`
+      );
     }
 
     return NextResponse.json(order, { status: 201 });
