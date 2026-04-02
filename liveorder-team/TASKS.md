@@ -82,9 +82,9 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 ---
 
-### Task 15: 배포 전 빠른 픽스 (선택, Task 12와 병행 가능)
+### ~~Task 15: 배포 전 빠른 픽스~~ ✅ 완료 (2026-04-03)
 
-**B-19: 서버측 전화번호 형식 검증 (LOW, ~30분)**
+**~~B-19: 서버측 전화번호 형식 검증~~ ✅**
 - `app/api/sellers/register/route.ts` — `phone` 필드 검증 추가
 - `app/api/payments/confirm/route.ts` — `buyerPhone` 필드 검증 추가
   ```typescript
@@ -93,7 +93,7 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
   ```
 - **커밋:** `fix: 서버측 전화번호 형식 검증 추가 (B-19)`
 
-**B-20: 정산 배치 UX — alert() 제거 (LOW, ~20분)**
+**~~B-20: 정산 배치 UX — alert() 제거~~ ✅**
 - `app/admin/settlements/page.tsx:41-52` — `alert()` → inline 상태 메시지로 교체
   ```typescript
   // 기존 alert() 2곳 제거
@@ -117,7 +117,7 @@ QA_REPORT.md "검증 필요 항목" 6개를 로컬 또는 스테이징에서 직
 
 ## 🟡 Phase 2 — 배포 완료 후 (우선순위 순)
 
-### Task 16: 관리자 주문 목록 + 환불 UI (HIGH)
+### ~~Task 16: 관리자 주문 목록 + 환불 UI~~ ✅ 완료 (2026-04-03)
 
 > REFUNDED 상태는 스키마에 이미 존재. 스키마 변경 불필요.
 
@@ -196,7 +196,7 @@ return Response.json({ orders, total });
 
 ---
 
-### Task 17: 셀러 대시보드 최근 주문 데이터 표시 (LOW, ~1시간)
+### ~~Task 17: 셀러 대시보드 최근 주문 데이터 표시~~ ✅ 완료 (2026-04-03)
 
 **문제:** `app/seller/dashboard/page.tsx:98` — "아직 주문이 없습니다" placeholder 하드코딩 (B-22)
 
@@ -228,7 +228,7 @@ recentOrders: await prisma.order.findMany({
 
 ---
 
-### Task 18: JWT 세션 갱신 UX 개선 (MEDIUM, ~1시간)
+### ~~Task 18: JWT 세션 갱신 UX 개선~~ ✅ 완료 (2026-04-03)
 
 **문제:** 관리자가 셀러 승인 후 셀러 JWT 세션에 반영 안 됨. 재로그인 전까지 PENDING 배너 표시.
 
@@ -338,6 +338,9 @@ return Response.json(settlement);
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | B-19 서버 전화번호 검증, B-20 정산 배치 alert() 제거 + 인라인 메시지 | 6bcb637 |
+| 2026-04-03 | Task 16: 관리자 주문 목록 + 환불 UI (P2-1) | 048ac72 |
+| 2026-04-03 | Task 17+18: 셀러 대시보드 최근 주문 실데이터, 승인 세션 갱신 UX (B-22, B-18) | 49a984b |
 | 2026-04-02 | B-15 결제 우회 엔드포인트 삭제, B-16 관리자 배치 인증 수정, B-17 비활성 상품 코드 발급 차단 | ac653d0 |
 | 2026-04-02 | 미들웨어 HKDF salt 버그 수정 | 876bb02 |
 | 2026-04-02 | 관리자 계정 DB seed 수정 | cc08f64 |
