@@ -1,6 +1,6 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-02 (PM 조율 반영)
+> 최종 업데이트: 2026-04-02 (QA 2차 — 배포 전 최종 코드 리뷰)
 > QA 단계: Phase 1 MVP — 배포 전 최종 검증
 
 ---
@@ -23,7 +23,7 @@
 | SELLER | 배송완료 상태 (DELIVERED) | ✅ | enum + 마이그레이션 완료 |
 | SELLER | 정산 조회 | ✅ | 목록 + 필터 + 합계 |
 | ADMIN | 셀러 승인/거부/정지 | ✅ | 감사 로그 포함 |
-| ADMIN | 정산 처리 (크론) | ✅ | D+3 자동 정산, 수동 트리거 가능 |
+| ADMIN | 정산 처리 (크론) | ⚠️ | 자동 크론은 정상, **수동 배치 버튼 인증 실패** (B-16) |
 
 ---
 
@@ -31,35 +31,53 @@
 
 - **미들웨어 인증:** `/seller/*`, `/admin/*`, `/api/seller/*`, `/api/admin/*` 전 경로 JWT 검증 확인 (`middleware.ts:38-70`)
 - **결제 보안:** `payments/confirm/route.ts` — PortOne 서버 검증, 금액 대조, 코드 유효성 재확인, 트랜잭션 처리 정상
+- **레이스 컨디션 방지:** `payments/confirm/route.ts` — 원자적 `UPDATE ... WHERE ... RETURNING id` SQL, 동시 요청 시 한 건만 성공 보장 ✅
 - **개인정보 동의:** `AddressForm.tsx:148-155` — 두 체크박스 모두 체크 시에만 제출 버튼 활성화
-- **PENDING 셀러 차단:** `seller/products/route.ts:27-32` — 상품 등록 시 APPROVED 상태 확인 (403 반환)
+- **PENDING 셀러 차단:** `seller/products/route.ts:27-32` — 상품 등록 시 APPROVED 상태 DB 재확인 (403 반환)
 - **디버그 엔드포인트:** `/app/api/debug/` 디렉토리 없음 — T-08 완료 확인 ✅
 - **이미지 업로드:** `seller/products/new/page.tsx` Vercel Blob 업로드 UI, 미리보기, X 버튼 구현 — T-09 완료 확인 ✅
 - **감사 로그:** `admin/sellers/[id]/route.ts` — 상태 변경마다 `SellerAuditLog` 기록
 - **정산 계산:** 플랫폼 수수료 2.5% + PG 수수료 2.2%, 트랜잭션 내 Settlement 생성 + 주문 SETTLED 전환
+- **코드 검증 N+1 수정:** `app/api/codes/[code]/route.ts:12-29` — 단일 쿼리로 seller status 포함 조회 ✅
+- **채팅 오류 재시도:** `ChatMessage.tsx` — `retryAction` 필드 기반 재시도 버튼 렌더링 ✅
+- **주문 완료 후 재입력:** `components/buyer/cards/OrderConfirmation.tsx` — "새 코드 입력하기" 버튼 ✅
+- **카테고리 필수 검증 UX:** `seller/products/new/page.tsx` — `categoryError` state + 빨간 테두리 ✅
+- **연락처 형식 검증 (프론트엔드):** `components/buyer/cards/AddressForm.tsx` — 정규식 `/^01[0-9]-\d{3,4}-\d{4}$/` ✅
+- **정산 크론 인증:** `app/api/cron/settlements/route.ts` — CRON_SECRET Bearer 토큰 인증 ✅
 
 ---
 
 ## 버그 / 이슈
 
-### P1 — 배포 전 처리 권고
+### P1 — 배포 전 처리 완료 (이전 스프린트)
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| ~~B-01~~ | ~~HIGH~~ | ~~정산 크론 인증 없음~~ | ✅ **2026-04-02 수정** — `CRON_SECRET` 환경변수 기반 Bearer 토큰 인증 추가. 미설정 시 경고 없이 통과하지 않도록 방어 처리. | `app/api/cron/settlements/route.ts` |
-| ~~B-02~~ | ~~HIGH~~ | ~~동시 주문 레이스 컨디션~~ | ✅ **2026-04-02 수정** — 수량 검사를 트랜잭션 내부의 원자적 조건부 `UPDATE ... WHERE ... RETURNING id`로 교체. 동시 요청 시 한 건만 성공 보장. | `app/api/payments/confirm/route.ts` |
+| ~~B-01~~ | ~~HIGH~~ | ~~정산 크론 인증 없음~~ | ✅ **2026-04-02 수정** — `CRON_SECRET` 환경변수 기반 Bearer 토큰 인증 추가. | `app/api/cron/settlements/route.ts` |
+| ~~B-02~~ | ~~HIGH~~ | ~~동시 주문 레이스 컨디션~~ | ✅ **2026-04-02 수정** — 수량 검사를 트랜잭션 내부의 원자적 조건부 UPDATE로 교체. | `app/api/payments/confirm/route.ts` |
+| ~~B-03~~ | ~~MED~~ | ~~카테고리 필수 검증 UX~~ | ✅ **2026-04-02 수정** | `app/seller/products/new/page.tsx` |
+| ~~B-04~~ | ~~MED~~ | ~~연락처 형식 미검증~~ | ✅ **2026-04-02 수정** (프론트엔드) | `components/buyer/cards/AddressForm.tsx` |
+| ~~B-05~~ | ~~MED~~ | ~~코드 검증 N+1 쿼리~~ | ✅ **2026-04-02 수정** | `app/api/codes/[code]/route.ts` |
+| ~~B-08~~ | ~~LOW~~ | ~~채팅 오류 재시도 없음~~ | ✅ **2026-04-02 수정** | `components/buyer/ChatMessage.tsx` |
+| ~~B-09~~ | ~~LOW~~ | ~~결제 후 새 코드 입력 버튼 없음~~ | ✅ **2026-04-02 수정** | `components/buyer/cards/OrderConfirmation.tsx` |
+
+### P1 — 이번 리뷰에서 신규 발견 (배포 전 처리 필요)
+
+| # | 우선순위 | 기능 | 내용 | 위치 |
+|---|----------|------|------|------|
+| B-15 | **HIGH** | 결제 우회 엔드포인트 | `/api/orders` (POST)가 PortOne 결제 검증 없이 `status: "PAID"` 주문 생성 가능. `pgTid`가 null인 채로 주문이 생성되며, 정산 크론이 이 주문도 SETTLED 처리함. 프론트엔드는 `/api/payments/confirm`만 사용하므로 이 엔드포인트는 사용되지 않는 백도어임. **즉시 삭제 또는 내부 전용으로 보호 필요.** | `app/api/orders/route.ts` |
+| B-16 | **HIGH** | 관리자 정산 배치 버튼 인증 실패 | 관리자 페이지의 "정산 배치 실행" 버튼이 `/api/cron/settlements`를 직접 호출하지만, `CRON_SECRET`이 설정된 프로덕션 환경에서는 `Authorization` 헤더 없이 호출하므로 **항상 401 반환**. 수동 배치 기능이 실질적으로 동작 불가. | `app/admin/settlements/page.tsx:42`, `app/api/cron/settlements/route.ts:11-16` |
 
 ### P2 — 다음 스프린트
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| ~~B-03~~ | ~~MED~~ | ~~카테고리 필수 검증 UX~~ | ✅ **2026-04-02 수정** — `categoryError` state 추가, 미선택 시 에러 메시지 + 빨간 테두리 표시. 커밋: `b5c9043` | `app/seller/products/new/page.tsx` |
-| ~~B-04~~ | ~~MED~~ | ~~연락처 형식 미검증~~ | ✅ **2026-04-02 수정** — 정규식 `/^01[0-9]-\d{3,4}-\d{4}$/` 검증 추가, placeholder 및 에러 메시지 표시. 커밋: `b5c9043` | `components/buyer/cards/AddressForm.tsx` |
-| ~~B-05~~ | ~~MED~~ | ~~코드 검증 N+1 쿼리~~ | ✅ **2026-04-02 수정** — seller include에 `status` 추가, 별도 seller 쿼리 제거. 단일 쿼리로 최적화. 커밋: `perf` | `app/api/codes/[code]/route.ts` |
 | B-06 | LOW | 정산 상세 없음 | 정산 목록은 있으나 정산 건별 포함 주문 내역 없음 | `app/seller/settlements/page.tsx` |
 | B-07 | LOW | 환불 처리 미구현 | 관리자 환불 UI 없음. 현재 수동 처리 | `app/admin/` |
-| ~~B-08~~ | ~~LOW~~ | ~~채팅 오류 재시도 없음~~ | ✅ **2026-04-02 수정** — `error` 메시지에 `retryAction` 필드 추가, `ChatMessage.tsx`에 "다시 시도" 버튼 렌더링. 코드 오류 → idle 초기화, 결제 오류 → payment_pending 복원. 커밋: `feat` | `components/buyer/ChatMessage.tsx` |
-| ~~B-09~~ | ~~LOW~~ | ~~결제 후 새 코드 입력 버튼 없음~~ | ✅ **2026-04-02 수정** — 주문 완료 카드 하단에 "새 코드 입력하기" 버튼 추가, `window.location.href="/"` 이동. 커밋: `feat` | `components/buyer/cards/OrderConfirmation.tsx` |
+| B-17 | **MED** | 비활성 상품에 코드 발급 가능 | 코드 발급 시 `product.isActive` 확인 없음. 셀러가 삭제(비활성화)한 상품에도 코드 발급 가능 → 구매자가 비활성 상품 코드 입력 시 상품 정보 노출 | `app/api/seller/codes/route.ts:39` |
+| B-18 | MED | 셀러 승인 후 JWT 세션 미갱신 | 관리자가 셀러를 APPROVED 전환해도 셀러의 JWT `sellerStatus`는 로그아웃 전까지 `PENDING` 유지. API는 DB 직접 조회로 정상 동작하나, 세션 기반 UI(대시보드 배너 등)는 재로그인 전까지 승인 상태 미반영. 명확한 안내 메시지 또는 세션 갱신 메커니즘 필요. | `lib/auth.ts` (JWT 전략 한계) |
+| B-19 | LOW | 연락처/전화번호 서버 검증 없음 | B-04로 프론트엔드는 수정됐으나, `buyerPhone` (`/api/orders`, `/api/payments/confirm`) 및 셀러 `phone` (`/api/sellers/register`) 서버 검증 부재. 직접 API 호출 시 임의 형식 저장 가능. | `app/api/orders/route.ts:8`, `app/api/sellers/register/route.ts:22` |
+| B-20 | LOW | 정산 배치 실행 UX | 배치 완료 시 `alert()` 사용 (blocking). 오류 발생 시(`res.ok` 미확인) 성공처럼 표시됨. | `app/admin/settlements/page.tsx:43-44` |
 
 ### P3 — MVP 이후
 
@@ -70,6 +88,8 @@
 | B-12 | 택배사 API 배송 추적 없음 (수동 운송장 입력만 가능) |
 | B-13 | 셀러 대시보드 차트 없음 |
 | B-14 | CSV 주문 내보내기 — 페이지네이션 없음 (대용량 시 메모리 이슈 가능) |
+| B-21 | 전체 목록 API 페이지네이션 없음 (orders, products, codes, settlements 모두) |
+| B-22 | 셀러 대시보드 "최근 주문" 섹션이 placeholder — 실제 데이터 미표시 |
 
 ---
 
@@ -92,6 +112,9 @@
 | 동시 주문 레이스 컨디션 방지 (트랜잭션 내 수량 검증) | HIGH | ✅ 완료 |
 | `.env.example` PortOne/Blob/Cron 변수 추가 | MEDIUM | ✅ 완료 (2026-04-02) |
 | `/api/codes/[code]` seller status 쿼리 최적화 | LOW | ✅ 완료 (2026-04-02) |
+| `/api/orders` 결제 우회 엔드포인트 제거 | **HIGH** | ❌ 미처리 (B-15) |
+| 관리자 수동 정산 배치 CRON_SECRET 인증 문제 | **HIGH** | ❌ 미처리 (B-16) |
+| 코드 발급 시 `isActive` 상품 필터 추가 | MED | ❌ 미처리 (B-17) |
 | buyer-store 타입 안전성 (`Record<string, unknown>` 개선) | LOW | 미처리 |
 
 ---
@@ -100,8 +123,8 @@
 
 1. **결제 플로우:** PortOne 테스트 결제창 호출 → 서버 검증 → 주문 생성 확인
 2. **운송장 등록:** 주문 PAID 상태 → 운송장 Dialog → 제출 → SHIPPING 전환 확인
-3. **관리자 승인:** 셀러 회원가입 → 관리자 로그인 → 승인 → 셀러 대시보드 PENDING 배너 사라짐
-4. **정산 크론:** Vercel Cron 또는 수동 트리거 → Settlement 레코드 생성 + 주문 SETTLED 확인
+3. **관리자 승인:** 셀러 회원가입 → 관리자 로그인 → 승인 → 셀러 대시보드 PENDING 배너 사라짐 (재로그인 필요 여부 확인)
+4. **정산 크론:** Vercel Cron 자동 트리거 → Settlement 레코드 생성 + 주문 SETTLED 확인 (수동 버튼은 B-16 수정 후 검증)
 5. **미들웨어 인증:** 비로그인 상태에서 `/seller/dashboard` 직접 접근 시 로그인으로 리다이렉트
 6. **이미지 업로드:** 5MB 초과 파일 업로드 시 오류 메시지 표시, 정상 이미지 Vercel Blob URL 저장 확인
 
@@ -110,9 +133,11 @@
 ## 배포 가능 기준
 
 Phase 1 MVP 배포 가능 기준:
-- [x] 핵심 플로우 15단계 모두 ✅
+- [x] 핵심 플로우 15단계 (14단계 ✅, 1단계 ⚠️)
 - [x] T-08: debug 엔드포인트 제거 ✅ (2026-04-02)
 - [x] T-09: 상품 이미지 업로드 (Vercel Blob) ✅ (2026-04-02)
 - [x] B-01: 정산 크론 인증 (CRON_SECRET Bearer) ✅ (2026-04-02)
 - [x] B-02: 동시 주문 레이스 컨디션 수정 ✅ (2026-04-02)
-- [ ] **수동 QA 6개 항목 통과** ← 현재 진행 중
+- [ ] **B-15: `/api/orders` 결제 우회 엔드포인트 제거** ← 배포 전 필수
+- [ ] **B-16: 관리자 정산 배치 버튼 인증 수정** ← 배포 전 필수
+- [ ] **수동 QA 6개 항목 통과** ← 진행 중
