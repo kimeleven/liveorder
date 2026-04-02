@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getTrackingUrl } from "@/lib/carrier-urls";
 
 interface OrderResult {
   id: string;
@@ -110,6 +111,21 @@ export default function LookupPage() {
                     <p className="font-medium text-blue-800">배송 정보</p>
                     <p>택배사: {order.carrier}</p>
                     <p>운송장: {order.trackingNo}</p>
+                    {order.carrier && (
+                      (() => {
+                        const url = getTrackingUrl(order.carrier, order.trackingNo!);
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block mt-2 text-sm text-blue-600 underline hover:text-blue-800"
+                          >
+                            배송 추적 →
+                          </a>
+                        ) : null;
+                      })()
+                    )}
                   </div>
                 )}
               </div>

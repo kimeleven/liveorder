@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Package, QrCode, ShoppingCart, Wallet } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface RecentOrder {
   id: string;
@@ -32,6 +33,7 @@ interface DashboardStats {
   pendingSettlement: number;
   sellerStatus?: string;
   recentOrders?: RecentOrder[];
+  dailySales?: { date: string; total: number }[];
 }
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
@@ -151,6 +153,37 @@ export default function SellerDashboardPage() {
             );
           })}
         </div>
+
+        {stats.dailySales && stats.dailySales.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">최근 7일 매출</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={stats.dailySales}>
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis
+                    tickFormatter={(v: number) =>
+                      v >= 10000 ? `${(v / 10000).toFixed(0)}만` : `${v}`
+                    }
+                    tick={{ fontSize: 11 }}
+                  />
+                  <Tooltip
+                    formatter={(v: number) => [`₩${v.toLocaleString()}`, '매출']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

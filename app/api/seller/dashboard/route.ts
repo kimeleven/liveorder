@@ -46,6 +46,26 @@ export async function GET() {
       }),
     ]);
 
+  const dailySalesRaw: { date: string; total: bigint }[] = await prisma.$queryRaw`
+    SELECT
+      TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD') as date,
+      COALESCE(SUM(o.amount), 0)::bigint as total
+    FROM generate_series(
+      NOW() - INTERVAL '6 days', NOW(), INTERVAL '1 day'
+    ) gs(day)
+    LEFT JOIN orders o
+      ON DATE(o.created_at AT TIME ZONE 'Asia/Seoul') = DATE(gs.day AT TIME ZONE 'Asia/Seoul')
+      AND o.status != 'REFUNDED'
+      AND o.code_id IN (
+        SELECT c.id FROM codes c
+        JOIN products p ON c.product_id = p.id
+        WHERE p.seller_id = ${sellerId}::uuid
+      )
+    GROUP BY DATE(gs.day), TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD')
+    ORDER BY DATE(gs.day) ASC
+  `;
+  const dailySales = dailySalesRaw.map((r) => ({ date: r.date, total: Number(r.total) }));
+
   return NextResponse.json({
     totalProducts,
     activeCodes,
@@ -53,5 +73,6 @@ export async function GET() {
     pendingSettlement,
     sellerStatus: seller?.status,
     recentOrders,
+    dailySales,
   });
 }

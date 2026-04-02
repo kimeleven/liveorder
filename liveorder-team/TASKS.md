@@ -1,15 +1,13 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Planner — 코드 검증 후 Task 24 미구현 확인, Task 24 재지시)
+> 최종 업데이트: 2026-04-03 (Dev1 — Task 24/25 완료)
 
 ---
 
-## 🔴 Dev1 현재 할당 — **Task 24: P3-3 셀러 대시보드 차트**
+## 🟢 Dev1 현재 할당 — **Task 26: P3-5 셀러 이메일 인증**
 
-> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅
-> **지금 할 일:** Task 24 — 셀러 대시보드 7일 매출 차트 구현
->
-> ⚠️ **검증 결과:** recharts 미설치, API에 dailySales 없음, 프론트에 차트 없음 — 아직 미구현 상태
+> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅
+> **지금 할 일:** Task 26 — 셀러 이메일 인증 (DB 변경 필요)
 
 ---
 
@@ -18,7 +16,7 @@
 ### Task 24: P3-3 셀러 대시보드 차트
 
 **우선순위:** LOW
-**상태:** 🔴 미구현 (recharts 미설치 확인)
+**상태:** ✅ 완료 (2026-04-03)
 
 #### Step 1: 패키지 설치
 
@@ -124,7 +122,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 ### Task 25: P3-4 배송 추적
 
 **우선순위:** LOW — Task 24 완료 후
-**상태:** ⚠️ 부분 구현 (운송장번호 표시만 있음, 링크 없음)
+**상태:** ✅ 완료 (2026-04-03)
 
 #### Step 1: `lib/carrier-urls.ts` 신규 생성
 
@@ -226,6 +224,8 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | (이번 커밋) |
+| 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | (이번 커밋) |
 | 2026-04-03 | B-27: chat/page.tsx JSON.parse try/catch 추가 — sessionStorage 손상 시 크래시 방지 | 2e58865 |
 | 2026-04-03 | Task 23: P3-2 이메일 알림 — Resend 연동, `lib/email.ts`, 회원가입/승인/주문/정산 4개 알림 | c16cd41 |
 | 2026-04-03 | Task 22: P3-1 API 페이지네이션 — `lib/pagination.ts`, `components/ui/Pagination.tsx`, API 4개, 프론트 4개 | 83fdb78 |
