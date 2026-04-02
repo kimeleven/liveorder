@@ -67,17 +67,23 @@ export default function SettlementDetailDrawer({
 }: SettlementDetailDrawerProps) {
   const [detail, setDetail] = useState<SettlementDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settlementId) {
       setDetail(null);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     fetch(`/api/seller/settlements/${settlementId}`)
       .then((r) => r.json())
       .then((data) => setDetail(data))
-      .catch(() => {})
+      .catch((err) => {
+        console.error('[SettlementDetailDrawer] fetch failed:', err);
+        setError('상세 정보를 불러오지 못했습니다. 다시 시도해주세요.');
+      })
       .finally(() => setLoading(false));
   }, [settlementId]);
 
@@ -94,7 +100,11 @@ export default function SettlementDetailDrawer({
           </div>
         )}
 
-        {!loading && detail && (
+        {!loading && error && (
+          <p className="text-sm text-red-500 p-4">{error}</p>
+        )}
+
+        {!loading && !error && detail && (
           <div className="mt-6 space-y-6">
             {/* 정산 요약 */}
             <div className="grid grid-cols-2 gap-3 text-sm">

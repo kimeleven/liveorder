@@ -15,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import Pagination from "@/components/ui/Pagination";
 
 interface Product {
   id: string;
@@ -29,21 +30,26 @@ interface Product {
 export default function ProductsPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  function fetchProducts() {
-    fetch("/api/seller/products")
+  function fetchProducts(currentPage = page) {
+    fetch(`/api/seller/products?page=${currentPage}`)
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setProducts(data);
+      .then((res) => {
+        if (res.data) {
+          setProducts(res.data);
+          setTotalPages(res.pagination.totalPages);
+        }
       })
       .catch(() => {});
   }
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    fetchProducts(page);
+  }, [page]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -54,7 +60,7 @@ export default function ProductsPage() {
       });
       if (res.ok) {
         setDeleteTarget(null);
-        fetchProducts();
+        fetchProducts(page);
       }
     } finally {
       setDeleting(false);
@@ -134,6 +140,8 @@ export default function ProductsPage() {
             ))}
           </div>
         )}
+
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </div>
 
       <Dialog

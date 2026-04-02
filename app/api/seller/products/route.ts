@@ -2,19 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateCodeKey } from "@/lib/code-generator";
+import { parsePagination, buildPaginationResponse } from "@/lib/pagination";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const products = await prisma.product.findMany({
-    where: { sellerId: session.user.id, isActive: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const { searchParams } = new URL(req.url);
+  const { page, limit, skip } = parsePagination(searchParams);
+  const where = { sellerId: session.user.id, isActive: true };
 
-  return NextResponse.json(products);
+  const [products, total] = await prisma.$transaction([
+    prisma.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.product.count({ where }),
+  ]);
+
+  return NextResponse.json(buildPaginationResponse(products, total, page, limit));
 }
 
 export async function POST(req: NextRequest) {

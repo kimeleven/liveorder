@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Copy } from "lucide-react";
+import Pagination from "@/components/ui/Pagination";
 
 interface CodeItem {
   id: string;
@@ -28,15 +29,20 @@ interface CodeItem {
 
 export default function CodesPage() {
   const [codes, setCodes] = useState<CodeItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    fetch("/api/seller/codes")
+    fetch(`/api/seller/codes?page=${page}`)
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setCodes(data);
+      .then((res) => {
+        if (res.data) {
+          setCodes(res.data);
+          setTotalPages(res.pagination.totalPages);
+        }
       })
       .catch(() => {});
-  }, []);
+  }, [page]);
 
   function getStatus(code: CodeItem) {
     if (!code.isActive) return { label: "중지", variant: "secondary" as const };
@@ -133,6 +139,8 @@ export default function CodesPage() {
             </Table>
           </Card>
         )}
+
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </div>
     </SellerShell>
   );

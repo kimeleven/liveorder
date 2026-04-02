@@ -4,12 +4,12 @@
 
 ---
 
-## 🔴 Dev1 현재 할당 — **Task 14: Vercel 배포 (수동)**
+## 🟡 Dev1 현재 할당 — **Task 23: P3-2 이메일 알림 (다음)**
 
-> **Phase 1+2 코드 완료:** 모든 기능 구현 및 QA 검증 완료 (2026-04-03)
-> **Task 14 완료 후:** P3-0 클린업 → P3-1 페이지네이션 순서로 진행
+> **Task 21, 22 완료 (2026-04-03):** P3-0 클린업 + P3-1 페이지네이션 구현 완료
+> **다음:** P3-2 이메일 알림 (Task 23)
 
-### Task 14: Vercel 환경변수 확인 + 배포 ← **지금 여기**
+### Task 14: Vercel 환경변수 확인 + 배포 ← **수동 작업 (미완료)**
 
 **작업 내용 (수동 작업):**
 
@@ -243,6 +243,8 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 22: P3-1 API 페이지네이션 — lib/pagination.ts, 4개 API, Pagination.tsx, 4개 목록 페이지 | TBD |
+| 2026-04-03 | Task 21: P3-0 기술 부채 클린업 — SettlementDrawer 에러 처리, 관리자 주문 로딩, RefundDialog 상태, buyer-store 타입 | TBD |
 | 2026-04-03 | Task 12: QA 6개 항목 코드 레벨 검증 완료 — 결제/운송장/승인/크론/미들웨어/이미지 업로드 | 1a4164d |
 | 2026-04-03 | B-23: QR 코드 구현 — qrcode 패키지, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 | 882fe02 |
 | 2026-04-03 | B-24: PLAN.md에 `PORTONE_API_SECRET` 환경변수 추가 | 882fe02 |

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useBuyerStore } from "@/stores/buyer-store";
+import { useBuyerStore, FlowProduct, FlowSeller } from "@/stores/buyer-store";
 import ChatContainer from "@/components/buyer/ChatContainer";
 import ChatInputBar from "@/components/buyer/ChatInputBar";
 import ActiveOrdersStrip from "@/components/buyer/ActiveOrdersStrip";
@@ -33,7 +33,7 @@ export default function ChatPage() {
 
   function handleCodeData(
     codeKey: string,
-    data: { code: Record<string, unknown>; product: Record<string, unknown>; seller: Record<string, unknown> }
+    data: { code: Record<string, unknown>; product: FlowProduct; seller: FlowSeller }
   ) {
     // 기존 진행 중인 주문이 있으면 구분선
     if (messages.some((m) => m.type === "order-confirmation")) {
@@ -63,7 +63,7 @@ export default function ChatPage() {
       direction: "incoming",
       type: "quantity-selector",
       payload: {
-        price: (data.product as Record<string, unknown>).price,
+        price: data.product.price,
         remainingQty: (data.code as Record<string, unknown>).remainingQty,
       },
     });
@@ -73,7 +73,7 @@ export default function ChatPage() {
       step: "product_shown",
       codeKey,
       codeId: (data.code as Record<string, unknown>).id as string,
-      productId: (data.product as Record<string, unknown>).id as string,
+      productId: data.product.id,
       product: data.product,
       seller: data.seller,
     });

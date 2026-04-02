@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, Truck } from "lucide-react";
+import Pagination from "@/components/ui/Pagination";
 
 const carriers = [
   { value: "CJ대한통운", label: "CJ대한통운" },
@@ -62,6 +63,9 @@ const statusMap: Record<string, { label: string; variant: "default" | "secondary
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [trackingDialog, setTrackingDialog] = useState<{ open: boolean; orderId: string }>({
     open: false,
     orderId: "",
@@ -71,18 +75,22 @@ export default function OrdersPage() {
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
 
-  function fetchOrders() {
-    fetch("/api/seller/orders")
+  function fetchOrders(currentPage = page) {
+    fetch(`/api/seller/orders?page=${currentPage}`)
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setOrders(data);
+      .then((res) => {
+        if (res.data) {
+          setOrders(res.data);
+          setTotalPages(res.pagination.totalPages);
+          setTotal(res.pagination.total);
+        }
       })
       .catch(() => {});
   }
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    fetchOrders(page);
+  }, [page]);
 
   function openTrackingDialog(orderId: string) {
     setTrackingDialog({ open: true, orderId });
@@ -115,7 +123,7 @@ export default function OrdersPage() {
         return;
       }
       setTrackingDialog({ open: false, orderId: "" });
-      fetchOrders();
+      fetchOrders(page);
     } catch {
       setTrackingError("서버 오류가 발생했습니다.");
     } finally {
@@ -141,7 +149,7 @@ export default function OrdersPage() {
           <div>
             <h1 className="text-2xl font-bold">주문 관리</h1>
             <p className="text-muted-foreground">
-              주문 {orders.length}건
+              주문 {total}건
             </p>
           </div>
           {orders.length > 0 && (
@@ -216,6 +224,8 @@ export default function OrdersPage() {
             </TableBody>
           </Table>
         </Card>
+
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
         <Dialog open={trackingDialog.open} onOpenChange={(open) => setTrackingDialog({ open, orderId: open ? trackingDialog.orderId : "" })}>
           <DialogContent>

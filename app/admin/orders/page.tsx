@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import RefundDialog from "@/components/admin/RefundDialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import Pagination from "@/components/ui/Pagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ export default function AdminOrdersPage() {
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
   const [refundTarget, setRefundTarget] = useState<{
     id: string;
     amount: number;
@@ -66,13 +69,18 @@ export default function AdminOrdersPage() {
   } | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    const params = new URLSearchParams({ page: String(page) });
-    if (statusFilter !== "ALL") params.set("status", statusFilter);
-    const res = await fetch(`/api/admin/orders?${params}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    setOrders(data.orders ?? []);
-    setTotal(data.total ?? 0);
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      const res = await fetch(`/api/admin/orders?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setOrders(data.orders ?? []);
+      setTotal(data.total ?? 0);
+    } finally {
+      setIsLoading(false);
+    }
   }, [statusFilter, page]);
 
   useEffect(() => {
@@ -107,6 +115,13 @@ export default function AdminOrdersPage() {
           </Select>
         </div>
 
+        {isLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : (
         <Card>
           <Table>
             <TableHeader>
@@ -173,29 +188,14 @@ export default function AdminOrdersPage() {
             </TableBody>
           </Table>
         </Card>
+        )}
 
-        {total > 50 && (
-          <div className="flex justify-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              이전
-            </Button>
-            <span className="flex items-center text-sm px-3">
-              {page} / {Math.ceil(total / 50)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= Math.ceil(total / 50)}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              다음
-            </Button>
-          </div>
+        {!isLoading && (
+          <Pagination
+            page={page}
+            totalPages={Math.ceil(total / 50)}
+            onPageChange={setPage}
+          />
         )}
       </div>
 
