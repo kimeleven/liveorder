@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (Planner — Phase 3 코드 검증, Task 24 미구현 확인)
-> 현재 단계: **Phase 3 — Task 24 (P3-3 셀러 대시보드 차트) 구현 대기 중**
-> P3-0/P3-1/P3-2 완료. recharts 미설치, dailySales API 미구현 확인됨. Task 14 (Vercel 배포) 병행 진행 중.
+> 최종 업데이트: 2026-04-03 (PM — Task 24/25 완료 반영, Task 26 착수)
+> 현재 단계: **Phase 3 — Task 26 (P3-5 셀러 이메일 인증) 진행 중**
+> P3-0/P3-1/P3-2/P3-3/P3-4 완료. Task 26 (DB 변경 필요), Task 27 (GDPR 삭제권) 대기. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -198,7 +198,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
 
 ---
 
-### P3-3: 셀러 대시보드 차트 (B-13) — ⚠️ 미구현
+### P3-3: 셀러 대시보드 차트 (B-13) — ✅ 완료 (Task 24, fbadce1)
 
 **현황:** recharts 미설치. API에 dailySales 없음. 프론트엔드에 차트 없음.
 
@@ -251,7 +251,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 
 ---
 
-### P3-4: 배송 추적 (B-12) — ⚠️ 링크 미구현
+### P3-4: 배송 추적 (B-12) — ✅ 완료 (Task 25, fbadce1)
 
 **현황:** `app/(buyer)/lookup/page.tsx`에 carrier + trackingNo 표시 코드 있음 (line 108-112). 하지만 추적 링크 없음. `lib/carrier-urls.ts` 미존재.
 
@@ -329,10 +329,10 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 | buyer-store 타입 안전성 | LOW | ✅ P3-0 완료 (Task 21) |
 | API 전체 페이지네이션 없음 (B-21) | MED | ✅ P3-1 완료 (Task 22) |
 | 이메일 알림 없음 (B-11) | MED | ✅ P3-2 완료 (Task 23) |
-| 셀러 대시보드 차트 없음 (B-13) | LOW | P3-3 |
-| 배송 추적 API 없음 (B-12) | LOW | P3-4 |
-| 셀러 이메일 인증 없음 | LOW | P3-5 |
-| 구매자 데이터 삭제권 없음 (GDPR) | MED | P3-6 |
+| 셀러 대시보드 차트 없음 (B-13) | LOW | ✅ P3-3 완료 (Task 24, fbadce1) |
+| 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
+| 셀러 이메일 인증 없음 | LOW | 🔄 P3-5 진행 중 (Task 26) |
+| 구매자 데이터 삭제권 없음 (GDPR) | MED | P3-6 (Task 27 예정) |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 

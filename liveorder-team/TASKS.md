@@ -1,6 +1,6 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Dev1 — Task 24/25 완료)
+> 최종 업데이트: 2026-04-03 (PM — Task 24/25 완료 반영, Task 26 배정 확인)
 
 ---
 
@@ -224,8 +224,8 @@ emailVerifyToken   String?  @map("email_verify_token") @db.VarChar(100)
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | (이번 커밋) |
-| 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | (이번 커밋) |
+| 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | fbadce1 |
+| 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | fbadce1 |
 | 2026-04-03 | B-27: chat/page.tsx JSON.parse try/catch 추가 — sessionStorage 손상 시 크래시 방지 | 2e58865 |
 | 2026-04-03 | Task 23: P3-2 이메일 알림 — Resend 연동, `lib/email.ts`, 회원가입/승인/주문/정산 4개 알림 | c16cd41 |
 | 2026-04-03 | Task 22: P3-1 API 페이지네이션 — `lib/pagination.ts`, `components/ui/Pagination.tsx`, API 4개, 프론트 4개 | 83fdb78 |
