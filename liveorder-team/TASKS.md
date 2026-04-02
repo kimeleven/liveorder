@@ -1,35 +1,41 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-02
+> 최종 업데이트: 2026-04-02 (Planner)
 
 ---
 
-## Dev1 현재 작업 — P2: debug 정리 + 이미지 업로드
+## Dev1 현재 작업 — 배포 전 마지막 2건
 
-### Task 8: debug 엔드포인트 제거 (보안)
-**우선순위:** P1-HIGH (배포 전 필수)
-**파일:**
-- `app/api/debug/route.ts` — 파일 전체 삭제
+### Task 8: debug 엔드포인트 제거 (보안) ← 먼저 처리
+**우선순위:** P1-CRITICAL (배포 전 필수)
 
-**배경:** DB 연결 테스트용 public 엔드포인트. 프로덕션에서 DB 스키마 정보 노출 위험. 배포 전 반드시 제거.
+**배경:** `app/api/debug/route.ts`는 DB 연결 테스트용 public 엔드포인트. 프로덕션에서 DB 내부 정보 노출 위험.
 
-**구현:**
-1. `app/api/debug/route.ts` 삭제
-2. 해당 경로를 참조하는 파일 없는지 확인 후 커밋
+**구현 (1분 작업):**
+1. `app/api/debug/route.ts` 파일 삭제
+2. `grep -r "/api/debug" app/` — 참조 없는지 확인
+3. 커밋: `fix: remove debug endpoint for production security`
 
 ---
 
 ### Task 9: 상품 이미지 업로드 (Vercel Blob)
 **우선순위:** P2
-**파일:**
-- `app/api/seller/products/upload/route.ts` — 신규 (Vercel Blob 업로드)
-- `app/seller/products/new/page.tsx` — 이미지 파일 선택 UI
-- `app/seller/products/[id]/edit/page.tsx` — 수정 시 이미지 교체
-- `components/buyer/cards/ProductCard.tsx` — imageUrl 있으면 표시
 
-**구현 상세:**
-1. `npm install @vercel/blob`
-2. 업로드 API (`app/api/seller/products/upload/route.ts`):
+**사전 준비:**
+```bash
+npm install @vercel/blob
+```
+`.env.local`에 추가:
+```
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
+```
+(Vercel 대시보드 → Storage → Blob → 연결 → 토큰 복사)
+
+**구현 순서:**
+
+#### Step 1: 업로드 API 생성
+파일: `app/api/seller/products/upload/route.ts` (신규)
+
 ```typescript
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
@@ -37,17 +43,132 @@ import { auth } from "@/lib/auth";
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return new Response("Unauthorized", { status: 401 });
+
   const form = await req.formData();
   const file = form.get("file") as File;
   if (!file) return new Response("파일 없음", { status: 400 });
-  const blob = await put(`products/${session.user.id}/${Date.now()}-${file.name}`, file, { access: "public" });
+
+  if (!file.type.startsWith("image/")) {
+    return new Response("이미지 파일만 업로드 가능합니다.", { status: 400 });
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return new Response("파일 크기는 5MB 이하여야 합니다.", { status: 400 });
+  }
+
+  const blob = await put(
+    `products/${session.user.id}/${Date.now()}-${file.name}`,
+    file,
+    { access: "public" }
+  );
+
   return Response.json({ url: blob.url });
 }
 ```
-3. 상품 등록/수정 폼에 `<input type="file" accept="image/*">` 추가, 선택 시 업로드 → `imageUrl` 저장
-4. ProductCard: `imageUrl` 있으면 `<Image>` 표시, 없으면 회색 placeholder
 
-**환경변수 필요:** `BLOB_READ_WRITE_TOKEN` (Vercel Blob Storage 연동 후 발급)
+#### Step 2: 상품 등록 폼 수정
+파일: `app/seller/products/new/page.tsx`
+
+추가할 state (기존 `const [category, setCategory] = useState("")` 아래):
+```typescript
+const [imageUrl, setImageUrl] = useState<string>("");
+const [imageUploading, setImageUploading] = useState(false);
+```
+
+이미지 업로드 핸들러 (handleSubmit 위에 추가):
+```typescript
+async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setImageUploading(true);
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/seller/products/upload", { method: "POST", body: form });
+  if (res.ok) {
+    const { url } = await res.json();
+    setImageUrl(url);
+  } else {
+    setError("이미지 업로드에 실패했습니다.");
+  }
+  setImageUploading(false);
+}
+```
+
+폼 내부 카테고리 Select 아래에 삽입:
+```tsx
+<div className="space-y-2">
+  <Label>상품 이미지 (선택)</Label>
+  <Input
+    type="file"
+    accept="image/*"
+    onChange={handleImageUpload}
+    disabled={imageUploading}
+  />
+  {imageUploading && (
+    <p className="text-sm text-muted-foreground">업로드 중...</p>
+  )}
+  {imageUrl && (
+    <img
+      src={imageUrl}
+      alt="상품 미리보기"
+      className="w-32 h-32 object-cover rounded border"
+    />
+  )}
+</div>
+```
+
+handleSubmit의 body에 `imageUrl` 추가:
+```typescript
+body: JSON.stringify({
+  name: formData.get("name"),
+  description: formData.get("description"),
+  price: formData.get("price"),
+  stock: formData.get("stock"),
+  category,
+  imageUrl: imageUrl || undefined,
+}),
+```
+
+#### Step 3: 상품 수정 폼 수정
+파일: `app/seller/products/[id]/edit/page.tsx`
+
+- Step 2와 동일한 state와 핸들러 추가
+- `useEffect`에서 product 로드 후 `setImageUrl(data.imageUrl ?? "")` 추가
+- PUT body에 `imageUrl: imageUrl || undefined` 추가
+
+#### Step 4: ProductCard 이미지 표시
+파일: `components/buyer/cards/ProductCard.tsx`
+
+`import Image from "next/image"` 추가 후, `<h3>` 앞에 삽입:
+```tsx
+{product?.imageUrl ? (
+  <div className="relative w-full h-48 rounded-lg overflow-hidden bg-gray-100 mb-3">
+    <Image
+      src={product.imageUrl as string}
+      alt={product.name as string}
+      fill
+      className="object-cover"
+    />
+  </div>
+) : (
+  <div className="w-full h-48 rounded-lg bg-gray-100 flex items-center justify-center mb-3">
+    <span className="text-gray-400 text-sm">이미지 없음</span>
+  </div>
+)}
+```
+
+**next.config.js에 Vercel Blob 도메인 허용 추가 필요:**
+```javascript
+images: {
+  remotePatterns: [
+    {
+      protocol: "https",
+      hostname: "*.public.blob.vercel-storage.com",
+    },
+  ],
+},
+```
+
+**커밋:** `feat: add product image upload with Vercel Blob`
 
 ---
 
@@ -63,11 +184,11 @@ POST `/api/codes` → `/api/seller/codes` 이동. 프론트엔드 URL 수정.
 상품 등록/코드 발급 API에 APPROVED 검증. 대시보드 PENDING 배너.
 
 ### Task 4: 개인정보 제3자 제공 동의 ✅
-`AddressForm.tsx` — 수집·이용 + 제3자 제공 동의 체크박스 (미체크 시 제출 불가).
+`AddressForm.tsx` — 수집·이용 + 제3자 제공 동의 체크박스 (미체크 시 제출 불가)
 
 ---
 
-## 완료된 P1 작업 ✅ (미커밋 — Task 8과 함께 커밋 예정)
+## 완료된 P1 작업 ✅ (커밋: cad9243, 2026-04-02)
 
 ### Task 5: OrderStatus DELIVERED 추가 ✅
 - `prisma/schema.prisma` + 마이그레이션 (`20260402000001_add_delivered_status`)
@@ -83,7 +204,7 @@ POST `/api/codes` → `/api/seller/codes` 이동. 프론트엔드 URL 수정.
 
 ---
 
-## 완료된 인프라 작업
+## 완료된 인프라 작업 ✅
 
 - [x] Next.js 16 + TypeScript + Tailwind 프로젝트 초기화
 - [x] Prisma 스키마 설계 (Admin, Seller, Product, Code, Order, Settlement, AuditLog)
