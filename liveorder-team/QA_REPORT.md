@@ -1,239 +1,175 @@
-# LIVEORDER QA 리포트
+# QA Report - 2026-04-03
 
-> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 코드 미반영 확인, Task 29 B-32 계획 추가)
-> QA 단계: Phase 3 마무리 — P3-0~P3-6 완료, B-30/B-31 수정 완료, Task 28 (B-28/B-29) 미구현 확인, Task 29 (B-32) 계획
-
----
-
-## 핵심 플로우 상태
-
-| 단계 | 플로우 | 상태 | 비고 |
-|------|--------|------|------|
-| SELLER | 회원가입 → 이메일 인증 메일 발송 | ✅ | emailVerifyToken 생성 + Resend 발송 |
-| SELLER | 이메일 인증 링크 클릭 → 인증 완료 | ✅ | verify route.ts 정상 |
-| SELLER | 미인증 셀러 로그인 차단 | ✅ | B-31 수정 완료 (fc0236f) — lib/auth.ts emailVerified 체크 추가 |
-| SELLER | 상품 등록 → 코드 자동 발급 (UX-1) | ✅ | autoCode 반환 + 성공 화면 표시 |
-| SELLER | 코드 발급 페이지 QR 코드 (UX-2) | ✅ | `qrcode` 설치, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 |
-| SELLER | 코드 발급 드롭다운 상품명 표시 (UX-3) | ✅ | shadcn SelectItem children 자동 표시 |
-| SELLER | 코드 API 보안 | ✅ | `/api/seller/codes` 정상 |
-| SELLER | 상품 수정/삭제 | ✅ | Soft delete 정상 |
-| SELLER | 상품 이미지 업로드 | ✅ | Vercel Blob 연동, 5MB/image/* 제한 |
-| SELLER | 주문 목록 페이지네이션 | ✅ | P3-1 완료 — `{ data, pagination }` 형식 |
-| SELLER | 상품 목록 페이지네이션 | ✅ | P3-1 완료 |
-| SELLER | 코드 목록 페이지네이션 | ✅ | P3-1 완료 |
-| SELLER | 대시보드 7일 매출 차트 | ✅ | P3-3 완료 — recharts LineChart, BigInt→Number 변환 |
-| SELLER | 이메일 인증 재발송 버튼 | ✅ | 대시보드 미인증 배너 + 재발송 버튼 |
-| BUYER | 코드 입력 → 상품 확인 | ✅ | 랜딩 + 채팅 플로우 |
-| BUYER | 결제 (PortOne) | ✅ | 서버 검증 완료, 금액 대조 |
-| BUYER | 배송지 입력 + 개인정보 동의 | ✅ | 체크박스 미체크 시 제출 불가 |
-| BUYER | 주문 조회 (비회원) | ✅ | 전화번호 + 주문번호 |
-| BUYER | 배송 추적 링크 (CJ/롯데/한진/로젠) | ✅ | P3-4 완료 |
-| BUYER | 배송 추적 링크 (우체국) | ✅ | B-30 수정 완료 (fc0236f) — '우체국' → '우체국택배' 키 통일 |
-| BUYER | 개인정보 삭제 요청 | ✅ | P3-6 구현 완료 (3b39223) — data-deletion API + request 페이지 |
-| SELLER | 주문 확인 → 배송지 CSV | ✅ | UTF-8 BOM, CSV 다운로드 |
-| SELLER | 운송장 등록 | ✅ | Dialog UI, PAID/SHIPPING 상태 |
-| SELLER | 배송완료 상태 (DELIVERED) | ✅ | enum + 마이그레이션 완료 |
-| SELLER | 정산 조회 + 상세 드릴다운 | ✅ | SettlementDetailDrawer — 에러 처리 포함 |
-| ADMIN | 셀러 승인/거부/정지 | ✅ | 감사 로그 포함 |
-| ADMIN | 정산 처리 (크론 + 수동) | ✅ | CRON_SECRET 인증, B-16 수정 완료 |
-| ADMIN | 주문 목록 + 환불 UI | ✅ | RefundDialog + API 정상 (단, 배포 환경변수 주의) |
-| ADMIN | 주문 목록 로딩 상태 | ✅ | P3-0 완료 — Skeleton 컴포넌트 적용 |
+> QA Engineer: Claude Sonnet 4.6
+> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 49910b0 기준)
+> 검토 방법: 소스 코드 직접 열람 + 기획서/PLAN/TASKS 대조
 
 ---
 
 ## 정상 동작 확인
 
-### P3-5 셀러 이메일 인증 (Task 26) — 부분 완료 ✅⚠️
-
-- **회원가입 시 토큰 생성 + 발송:** `app/api/sellers/register/route.ts:49-80` — `randomBytes(32).toString("hex")` 토큰 생성, 셀러에게 인증 메일 + 관리자에게 가입 알림 동시 발송 ✅
-- **이메일 인증 라우트:** `app/api/seller/auth/verify/route.ts` — 토큰 조회 → emailVerified=true, token=null 업데이트 → 결과 페이지로 리다이렉트 ✅
-- **인증 재발송:** `app/api/seller/auth/verify/resend/route.ts` — 이메일로 셀러 조회, 새 토큰 생성 후 재발송. 미존재 이메일에도 200 반환(보안상 올바름) ✅
-- **인증 결과 페이지:** `app/seller/auth/verify/page.tsx` — success/already/invalid/error 4가지 상태 표시, Suspense + useSearchParams 래핑 ✅
-- **대시보드 배너:** `app/seller/dashboard/page.tsx:144-163` — `emailVerified === false`인 경우 파란색 배너 + 재발송 버튼 표시 ✅
-- **email.ts ADMIN_EMAIL:** `lib/email.ts:21` — `.env.example`에 `ADMIN_EMAIL` 포함, 환경변수 미설정 시 `admin@liveorder.app` fallback ✅
-- **이슈:** B-31 참고 — 로그인 차단 미구현
-
-### P3-4 배송 추적 (Task 25) — 부분 완료 ✅⚠️
-
-- **carrier-urls.ts:** `lib/carrier-urls.ts` — 6개 택배사 URL 매핑 + `getTrackingUrl()` 함수 ✅
-- **lookup 페이지 추적 링크:** `app/(buyer)/lookup/page.tsx:114-128` — 운송장 있는 경우 새 탭 추적 링크 ✅
-- **이슈:** B-30 참고 — 우체국택배 키 불일치
-
-### P3-3 셀러 대시보드 차트 (Task 24) — 완료 ✅
-
-- **dailySales API:** `app/api/seller/dashboard/route.ts:49-67` — `generate_series`로 7일 시리즈 생성, LEFT JOIN으로 주문 집계, BigInt → Number 변환 ✅
-- **LineChart 컴포넌트:** `app/seller/dashboard/page.tsx:205-234` — recharts `ResponsiveContainer`, 만 원 단위 Y축 formatter, 데이터 없을 시 차트 숨김 ✅
-- **emailVerified fallback:** `app/api/seller/dashboard/route.ts:75` — `seller?.emailVerified ?? true` — seller가 null이면 true로 fallback (401 처리 이후이므로 실질적으로 도달 불가, 안전함) ✅
-
-### P3-0 기술 부채 클린업 (Task 21) — 전체 수정 확인 ✅
-
-- **SettlementDetailDrawer 에러 처리:** `components/seller/SettlementDetailDrawer.tsx:83-87` ✅
-- **admin/orders 로딩 상태:** `app/admin/orders/page.tsx:63,71-72` ✅
-- **RefundDialog 상태 초기화:** `components/admin/RefundDialog.tsx:82-88` ✅
-- **buyer-store 타입 안전성:** `stores/buyer-store.ts:34-56` ✅
-
-### P3-1 API 페이지네이션 (Task 22) — 셀러 API 3개 완료 ✅
-
-- **lib/pagination.ts:** `parsePagination()` + `buildPaginationResponse()` ✅
-- **seller/orders, seller/products, seller/codes API:** 페이지네이션 적용 ✅
-- **Pagination 컴포넌트:** `components/ui/Pagination.tsx` — Prev/숫자/Next 버튼 ✅
+- [BUYER 코드 입력]: `app/(buyer)/page.tsx` — 코드 포맷 자동 처리(AAA-0000-XXXX), API 호출 후 sessionStorage 전달 정상
+- [BUYER QR 스캔]: `app/(buyer)/order/[code]/page.tsx` — QR 링크 진입 시 자동 코드 검증 후 `/chat` 리다이렉트 정상
+- [BUYER 채팅 플로우]: `chat/page.tsx` + `buyer-store.ts` — 플로우 스텝 관리(idle→product_shown→quantity_selected→address_entry→payment_pending→complete) 정상. sessionStorage JSON.parse try/catch 적용됨(B-27)
+- [BUYER 배송지 입력]: `AddressForm.tsx` — 개인정보 수집 동의 + 제3자 제공 동의 체크박스 양식 모두 required 처리 후 버튼 활성화, 전화번호 형식 프론트 검증 정상
+- [BUYER 결제]: `PaymentSummary.tsx` — PortOne SDK 동적 로드, 결제창 호출, 서버 검증 API 호출 정상. 통신판매중개업자 고지 문구 포함됨(법적 의무 충족)
+- [BUYER 주문 조회]: `lookup/page.tsx` + `app/api/orders/[id]/route.ts` — 전화번호+주문번호 조회 정상. 운송장 있을 때 배송 추적 링크 표시 정상(P3-4)
+- [SELLER 회원가입]: `app/api/sellers/register/route.ts` — 이메일/사업자번호 중복 체크, 전화번호 형식 검증, 이메일 인증 토큰 생성 + 인증 메일 발송, 관리자 알림 메일 발송 정상
+- [SELLER 로그인 차단]: `lib/auth.ts:29-31` — `emailVerified === false`이면 throw Error로 로그인 차단(B-31) 정상
+- [SELLER 이메일 인증]: `app/api/seller/auth/verify/route.ts` — 토큰 조회, 인증 완료 처리, 결과 페이지 리다이렉트 정상
+- [SELLER 이메일 재발송]: `app/api/seller/auth/verify/resend/route.ts` — 이메일 존재 여부 노출 없이 처리(보안 고려됨) 정상
+- [SELLER 상품 등록]: `app/api/seller/products/route.ts` — APPROVED 셀러만 가능, 상품 등록 후 코드 자동 발급(UX-1) 정상. 자동 발급 실패 시 상품 등록 유지
+- [SELLER 상품 목록]: `GET /api/seller/products` — `isActive: true` 필터 적용(B-26), 페이지네이션 표준 적용(P3-1) 정상
+- [SELLER 코드 발급]: `app/api/seller/codes/route.ts` — APPROVED 체크, 비활성 상품 발급 차단, 중복 방지 재시도(max 10회) 정상
+- [SELLER 코드 토글]: `app/api/seller/codes/[id]/toggle/route.ts` — 셀러 소유 확인 후 isActive 토글 정상
+- [SELLER 주문 목록]: `app/api/seller/orders/route.ts` — 페이지네이션(parsePagination + buildPaginationResponse) 정상
+- [SELLER 운송장 등록]: `app/api/seller/orders/[id]/tracking/route.ts` — 셀러 소유 확인, SHIPPING 상태 전환, 운송장/택배사 저장 정상
+- [SELLER CSV 다운로드]: `app/api/seller/orders/export/route.ts` — UTF-8 BOM 포함, 전체 주문 내보내기(페이지네이션 없이 전량) 정상
+- [SELLER 정산 목록]: `app/api/seller/settlements/route.ts` — 셀러별 정산 목록 조회 정상
+- [SELLER 정산 상세]: `SettlementDetailDrawer.tsx` — fetch 실패 시 에러 메시지 표시(P3-0 완료) 정상
+- [SELLER 대시보드]: `app/seller/dashboard/page.tsx` — 통계 카드(상품/코드/주문/정산대기), 7일 매출 recharts 라인차트(P3-3), 최근 주문 5건, 미인증 배너/재발송 버튼, 승인 대기 배너/승인 확인 버튼 정상
+- [SELLER 대시보드 dailySales]: `app/api/seller/dashboard/route.ts` — BigInt → number 변환 처리됨(JSON 직렬화 오류 방지) 정상
+- [ADMIN 로그인]: `lib/auth.ts` admin-login credentials provider — 관리자 전용 인증 정상
+- [ADMIN 셀러 승인/거부/정지]: `app/api/admin/sellers/[id]/route.ts` — PATCH, 감사 로그 기록, 승인/정지 시 이메일 알림(P3-2) 정상
+- [ADMIN 주문 목록]: `app/admin/orders/page.tsx` + `app/api/admin/orders/route.ts` — 상태 필터, Skeleton 로딩(P3-0) 정상
+- [ADMIN 환불]: `RefundDialog.tsx` + `app/api/admin/orders/[id]/refund/route.ts` — 부분/전액 환불, PortOne API 연동, 감사 로그 기록, 성공 후 상태 초기화(P3-0 완료) 정상
+- [ADMIN 정산 배치]: `app/api/cron/settlements/route.ts` + `app/api/admin/settlements/route.ts` — CRON_SECRET Bearer 인증, D+3 정산, sellerId FK 연결 정상
+- [미들웨어]: `middleware.ts` — HKDF JWE 복호화로 role 추출, /seller, /admin, /api/seller, /api/admin 경로 보호 정상
+- [코드 검증 API]: `app/api/codes/[code]/route.ts` — 5가지 검증(존재/isActive/만료/수량/셀러상태) 정상. 셀러 status 필드 응답 제외 정상
+- [이메일 발송]: `lib/email.ts` — RESEND_API_KEY 없으면 조용히 무시, 실패해도 비즈니스 로직 영향 없음 정상
+- [배송 추적 URL]: `lib/carrier-urls.ts` — 우체국택배 키 수정(B-30) 포함 6개 택배사 매핑 정상
+- [개인정보 삭제 API]: `app/api/buyer/data-deletion/route.ts` — 이름+전화번호 매칭, 개인식별 정보 마스킹, 거래 기록 보존 정상(P3-6)
+- [개인정보처리방침]: `app/(buyer)/terms/privacy/page.tsx` 및 `app/(buyer)/privacy/page.tsx` — 수집 항목, 보유기간, 삭제 요청 링크(privacy 페이지만) 포함
+- [buyer-store 타입]: `stores/buyer-store.ts` — BuyerState 인터페이스 명시적 정의, FlowProduct/FlowSeller/FlowAddress 별도 export(P3-0 완료) 정상
+- [페이지네이션 공통]: `lib/pagination.ts` — parsePagination + buildPaginationResponse 표준화(P3-1) 정상. seller/orders, seller/products, seller/codes 적용 완료
 
 ---
 
-## 버그 / 이슈
+## 버그/이슈
 
-### 신규 발견 — 즉시 처리 필요
+### PLAN.md 명시 미구현
 
-| # | 우선순위 | 기능 | 내용 | 위치 |
-|---|----------|------|------|------|
-| B-32 | LOW | 이메일 인증 — 토큰 만료 | 인증 토큰에 만료 시간 없음. 이메일 본문에 "24시간 이내 사용" 안내하지만 `verify/route.ts`에서 만료 검증 로직 없음 → 토큰이 무기한 유효. 재발송 시 토큰 교체는 됨 | `app/api/seller/auth/verify/route.ts` |
+- [priority: MED] [B-28 admin/orders API 페이지네이션 불일치]: `app/api/admin/orders/route.ts:35` — `take: 50` 하드코딩. 응답 형식 `{ orders, total }`이 셀러 API 표준 `{ data, pagination }` 불일치. 프론트엔드(`app/admin/orders/page.tsx:196`)가 `Math.ceil(total / 50)` 하드코딩으로 Pagination 컴포넌트 totalPages 계산. PLAN.md Task 28 미구현 명시 → `app/api/admin/orders/route.ts:35`
 
-**B-32 수정 방향 (Task 29 — TASKS.md 상세 스펙 참고):**
-- schema.prisma: `emailVerifyTokenExpiresAt DateTime?` 추가 → `migrate dev`
-- register/route.ts + resend/route.ts: 토큰 생성 시 `expiresAt = now + 24h` 저장
-- verify/route.ts: 만료 시간 검증 후 expired → redirect `?result=expired`
-- verify/page.tsx: `expired` 케이스 UI 추가
+- [priority: MED] [B-29 seller/orders 에러 무시]: `app/seller/orders/page.tsx:88` — `.catch(() => {})` 잔존. fetch 실패 시 사용자 피드백 없이 빈 목록만 표시됨. PLAN.md Task 28 미구현 명시 → `app/seller/orders/page.tsx:88`
 
-### 이번 스프린트 수정 완료 (B-30, B-31)
+- [priority: LOW] [B-32 이메일 인증 토큰 만료 미검증]: `app/api/seller/auth/verify/route.ts` — 토큰 만료 시간 검증 없음. 이메일 본문(resend/route.ts:43)에 "24시간 이내 사용" 안내하지만 실제 코드는 무기한 유효. `prisma/schema.prisma`에 `emailVerifyTokenExpiresAt` 필드 없음. Task 29 계획 수립 완료, 미구현 → `app/api/seller/auth/verify/route.ts`
 
-| # | 우선순위 | 기능 | 내용 | 커밋 |
-|---|----------|------|------|------|
-| ~~B-30~~ | ~~MED~~ | ~~배송 추적 — 우체국~~ | ✅ **2026-04-03 완료** — '우체국' → '우체국택배' 키 통일 | fc0236f |
-| ~~B-31~~ | ~~MED~~ | ~~이메일 인증 — 로그인 차단~~ | ✅ **2026-04-03 완료** — lib/auth.ts emailVerified 체크 추가 | fc0236f |
+### 신규 발견 버그
 
-### 기술 부채 (낮은 우선순위)
+- [priority: HIGH] [pgTid unique 제약 없음 — 중복 주문 생성 가능]: `app/api/payments/confirm/route.ts` — 동일 `portonePaymentId`로 중복 호출 시 방지 로직 없음. `prisma/schema.prisma` Order 모델에 `pgTid` @unique 제약 없음. 트랜잭션 내 코드 수량 원자적 UPDATE는 있으나 pgTid 중복 체크 부재. 동일 PG TID로 주문 2건 생성 가능 → `app/api/payments/confirm/route.ts` + `prisma/schema.prisma` (Order.pgTid)
 
-| # | 우선순위 | 기능 | 내용 | 위치 |
-|---|----------|------|------|------|
-| B-28 | LOW | admin/orders API | `parsePagination()` 미사용 — `take: 50` 하드코딩, 응답 형식이 `{ orders, total }` (셀러 API의 `{ data, pagination }` 표준과 불일치). 동작 자체는 정상. | `app/api/admin/orders/route.ts:35-41` |
-| B-29 | LOW | seller/orders 에러 처리 | `fetchOrders()` fetch 실패 시 `.catch(() => {})` 로 에러 무시. API 장애 시 빈 목록만 표시, 사용자 피드백 없음 | `app/seller/orders/page.tsx:88` |
+- [priority: HIGH] [부분 환불 후 주문 상태 오처리]: `app/api/admin/orders/[id]/refund/route.ts:83` — 부분 환불(amount < order.amount) 시에도 주문 status를 항상 `REFUNDED`로 변경. 부분 환불된 주문은 아직 유효한 상태임에도 전액 환불과 동일하게 처리됨. 부분 환불 후 추가 환불 불가, 정산 로직과 충돌 가능 → `app/api/admin/orders/[id]/refund/route.ts:83`
 
-### 이전 수정 완료 (이번 스프린트)
+- [priority: MED] [개인정보 삭제 API 인증 없음 — 악용 가능]: `app/api/buyer/data-deletion/route.ts:5-29` — 인증 없이 이름+전화번호만으로 타인 주문 개인정보 삭제 가능. rate limiting, captcha, 추가 인증 수단 전무. 타인의 이름+전화번호를 아는 경우 배송 정보 전체 삭제 가능 → `app/api/buyer/data-deletion/route.ts`
 
-| # | 우선순위 | 기능 | 내용 | 위치 |
-|---|----------|------|------|------|
-| ~~B-27~~ | ~~MED~~ | ~~바이어 채팅 플로우~~ | ✅ **2026-04-03 완료** — try/catch 추가 (2e58865) | ~~`app/(buyer)/chat/page.tsx:29`~~ |
-| ~~B-23~~ | ~~HIGH~~ | ~~UX-2 QR 코드 미구현~~ | ✅ **2026-04-03 완료** | `app/seller/codes/new/page.tsx` |
-| ~~B-24~~ | ~~HIGH~~ | ~~환불 API 환경변수 배포 누락 위험~~ | ✅ **2026-04-03 완료** | `liveorder-team/PLAN.md:2.3절` |
-| ~~B-25~~ | ~~MED~~ | ~~정산 테이블 `colSpan` 불일치~~ | ✅ **2026-04-03 완료** | `app/seller/settlements/page.tsx:166` |
-| ~~B-26~~ | ~~MED~~ | ~~코드 발급 드롭다운에 soft-deleted 상품 표시~~ | ✅ **2026-04-03 완료** | `app/api/seller/products/route.ts` |
+- [priority: MED] [정산 배치 — SHIPPING 상태 주문 영구 누락]: `app/api/cron/settlements/route.ts:24-27` — 정산 대상을 `status: "PAID"` 단독으로 필터링. 운송장 등록 시 SHIPPING으로 전환된 주문은 정산 대상에서 영구 제외됨. 기획서 5.2절 "배송 완료 확인 후 정산 개시" 요건 미충족 → `app/api/cron/settlements/route.ts:24`
 
-### P2 — 이전 스프린트 수정 완료
+- [priority: MED] [terms/privacy 페이지에 삭제 요청 링크 없음]: `app/(buyer)/terms/privacy/page.tsx` — footer에서 `/terms/privacy`로 링크하지만 이 페이지에는 P3-6 삭제 요청 링크가 없음. 삭제 요청 링크는 `/privacy/page.tsx`에만 있음. 구매자 landing footer → terms/privacy 경로에서 삭제 요청 기능 접근 불가 → `app/(buyer)/page.tsx:111`, `app/(buyer)/terms/privacy/page.tsx`
 
-| # | 우선순위 | 기능 | 내용 | 위치 |
-|---|----------|------|------|------|
-| ~~B-06~~ | ~~LOW~~ | ~~정산 상세 없음~~ | ✅ **완료** | `components/seller/SettlementDetailDrawer.tsx` |
-| ~~B-07~~ | ~~LOW~~ | ~~환불 처리 미구현~~ | ✅ **완료** | `app/admin/orders/`, `components/admin/RefundDialog.tsx` |
-| ~~B-16~~ | ~~HIGH~~ | ~~관리자 정산 배치 버튼 인증 실패~~ | ✅ **완료** | `app/api/admin/settlements/route.ts` |
-| ~~B-17~~ | ~~MED~~ | ~~비활성 상품에 코드 발급 가능~~ | ✅ **완료** | `app/api/seller/codes/route.ts` |
-| ~~B-18~~ | ~~MED~~ | ~~셀러 승인 후 JWT 세션 미갱신~~ | ✅ **완료** | `app/seller/dashboard/page.tsx` |
-| ~~B-19~~ | ~~LOW~~ | ~~연락처 서버 검증 없음~~ | ✅ **완료** | `app/api/sellers/register/route.ts` |
-| ~~B-20~~ | ~~LOW~~ | ~~정산 배치 alert() UX~~ | ✅ **완료** | `app/admin/settlements/page.tsx` |
+- [priority: MED] [seller/orders 상태 필터 없음]: `app/seller/orders/page.tsx` + `app/api/seller/orders/route.ts` — 주문 목록에 상태 필터 UI 없음. API도 status 필터 파라미터 미지원. 주문 수 증가 시 특정 상태(배송중 등) 확인 불편 → `app/api/seller/orders/route.ts`
 
-### P1 — 이전 스프린트 수정 완료
+- [priority: LOW] [seller/orders — isLoading 상태 없음]: `app/seller/orders/page.tsx` — 데이터 fetch 중 로딩 표시 없음. admin/orders에는 Skeleton 로딩이 있으나(P3-0) seller/orders는 미적용, fetch 중 빈 목록 표시 → `app/seller/orders/page.tsx`
 
-| # | 우선순위 | 기능 | 내용 | 위치 |
-|---|----------|------|------|------|
-| ~~B-01~~ | ~~HIGH~~ | ~~정산 크론 인증 없음~~ | ✅ **완료** | `app/api/cron/settlements/route.ts` |
-| ~~B-02~~ | ~~HIGH~~ | ~~동시 주문 레이스 컨디션~~ | ✅ **완료** | `app/api/payments/confirm/route.ts` |
-| ~~B-15~~ | ~~HIGH~~ | ~~결제 우회 엔드포인트~~ | ✅ **완료** — `app/api/orders/route.ts` 삭제 | 삭제됨 |
+- [priority: LOW] [seller/dashboard fetch 에러 무시]: `app/seller/dashboard/page.tsx:64` — `.catch(() => {})` 잔존. 대시보드 데이터 fetch 실패 시 사용자 피드백 없이 0 카드만 표시 → `app/seller/dashboard/page.tsx:64`
 
-### P3 — MVP 이후
+- [priority: LOW] [QuantitySelector maxQty 99 하드코딩]: `components/buyer/cards/QuantitySelector.tsx:17` — `remainingQty`가 null(무제한 코드)이면 `maxQty`를 99로 제한. 무제한 코드여도 최대 99개만 선택 가능 → `components/buyer/cards/QuantitySelector.tsx:17`
 
-| # | 내용 | 상태 |
-|---|------|------|
-| B-10 | Redis 캐싱 미구현 | 트래픽 확인 후 검토 |
-| B-11 | 이메일 알림 없음 | ✅ **완료** (Task 23, c16cd41) |
-| B-12 | 택배사 API 배송 추적 없음 | ✅ **완료** (Task 25, fbadce1) — 우체국 키 버그(B-30) 수정 필요 |
-| B-13 | 셀러 대시보드 차트 없음 | ✅ **완료** (Task 24, fbadce1) |
-| B-14 | CSV 대용량 처리 (페이지네이션 없음) | 낮은 우선순위 |
+- [priority: LOW] [ADMIN_EMAIL 환경변수 폴백 도메인 미확인]: `lib/email.ts:21` — `ADMIN_EMAIL` 미설정 시 `admin@liveorder.app`으로 폴백. 해당 도메인 수신 설정 없으면 관리자 신규 가입 알림 전체 유실 → `lib/email.ts:21`
+
+- [priority: LOW] [CSV export 무제한 전량 조회]: `app/api/seller/orders/export/route.ts:11` — `take` 제한 없이 전체 조회. 주문 수만 건 이상 시 메모리/응답 타임아웃 가능(B-14 인식됨) → `app/api/seller/orders/export/route.ts:11`
+
+- [priority: LOW] [NEXT_PUBLIC 환경변수 PLAN.md 누락]: `components/buyer/cards/PaymentSummary.tsx:18-19` — `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` 사용. PLAN.md 2.1절 환경변수 8개 목록에 두 변수가 누락됨. Vercel 배포 시 미설정 가능성 → `components/buyer/cards/PaymentSummary.tsx:18-19`
 
 ---
 
 ## 미구현 기능
 
-| 기능 | 기획 여부 | 상태 |
-|------|-----------|------|
-| UX-2 QR 코드 생성 (코드 발급 후 즉시 표시) | 기획서 명시 | ✅ 완료 (2026-04-03, B-23) |
-| 환불 UI (관리자) | 기획서 명시 | ✅ 완료 (2026-04-03, P2-1) |
-| 정산 상세 드릴다운 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 19) |
-| API 페이지네이션 (셀러 목록) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 22) |
-| 이메일 알림 (Resend) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 23) |
-| 셀러 대시보드 7일 매출 차트 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 24) |
-| 배송 추적 링크 (택배사별 URL) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 25) — B-30 수정 필요 |
-| 셀러 이메일 인증 (인증 메일 + 결과 페이지) | 기획서 명시 | ✅ 완료 (Task 26) — B-31 로그인 차단 미구현 |
-| 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | ✅ **완료** (Task 27, 3b39223) |
+- [이메일 인증 토큰 만료 (B-32)]: PLAN.md Task 29 계획 수립 완료, 코드 미구현. `verify/route.ts` 만료 시간 검증 없음
+- [admin/orders 페이지네이션 표준화 (B-28)]: PLAN.md Task 28 진행 중, 코드 미반영. `take: 50` 하드코딩 + `{ orders, total }` 비표준 응답
+- [seller/orders fetch 에러 처리 (B-29)]: PLAN.md Task 28 진행 중, 코드 미반영. `.catch(()=>{})` 잔존
+- [사업자등록증 이미지 업로드]: 기획서 3.1.1절 — 회원가입 필수 요건. 현재 회원가입 API에 이미지 업로드 없음. Vercel Blob 인프라는 구축됨
+- [1원 인증 (정산 계좌 본인인증)]: 기획서 3.1.1절 — 정산 계좌 등록 시 1원 인증 미구현. 계좌 정보 수집만 함
+- [통신판매업신고번호 공공 API 검증]: 기획서 3.1.1절 — 형식 수집만, 실제 유효성 API 검증 없음
+- [셀러 이용약관 전자서명 동의]: 기획서 3.1.1절 — 셀러 약관 동의 체크박스 미구현
+- [주문 완료 청약확인 발송]: 기획서 3.2.1절 — 주문 완료 시 청약확인 발송 법적 의무. 현재 미구현 (법적 위험)
+- [청약철회 신청 버튼]: 기획서 3.2.2절 — 결제 후 7일 이내 청약철회 신청 UI 미구현
+- [CS 티켓 관리]: 기획서 3.1.3절 — CS 접수 현황 및 처리 내역 미구현
+- [이상 거래 모니터링]: 기획서 3.3절 — 동일 IP 다수 주문, 단시간 고액거래 모니터링 미구현
+- [불법 상품 AI 키워드 필터]: 기획서 3.3절 Phase 2 — AI 필터 미구현
+- [Redis 캐싱]: 기획서 기술 스택 — 코드 유효성 Redis 캐싱 없음 (PLAN.md B-10 인식됨)
+- [구매자 선택적 회원가입]: 기획서 Phase 2 — 구매자 주문 이력을 위한 선택적 회원가입 미구현
+- [운송장 일괄 CSV 업로드]: 기획서 3.1.3절 — 운송장 개별 등록만 가능. 일괄 CSV 업로드 미구현
+- [주별/월별 매출 차트]: 기획서 3.1.3절 — 셀러 대시보드 일별 7일만 구현. 주별/월별 뷰 없음
+- [번들 코드 (여러 상품 묶음)]: 기획서 Phase 3 — 여러 상품 묶음 코드 미구현
 
 ---
 
-## 기술 부채
+## 권고사항
 
-| 항목 | 우선순위 | 상태 |
-|------|----------|------|
-| `chat/page.tsx` JSON.parse 예외처리 누락 (B-27) | MED | ✅ 수정 완료 (2e58865) |
-| 우체국택배 배송 추적 키 불일치 (B-30) | MED | ✅ 수정 완료 (fc0236f) |
-| 이메일 인증 로그인 차단 미구현 (B-31) | MED | ✅ 수정 완료 (fc0236f) |
-| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | ❌ 미처리 (Task 28 이후) |
-| `admin/orders` API — `parsePagination()` 미사용, 응답 형식 불일치 (B-28) | LOW | 미처리 (동작은 정상) |
-| `seller/orders` fetch 에러 무시 (B-29) | LOW | 미처리 |
-| `SettlementDetailDrawer` fetch 에러 사용자 피드백 없음 | LOW | ✅ **Task 21에서 수정** |
-| `admin/orders/page.tsx` 로딩 상태 없음 | LOW | ✅ **Task 21에서 수정** |
-| `RefundDialog` 성공 후 상태 초기화 우회 | LOW | ✅ **Task 21에서 수정** |
-| buyer-store 타입 안전성 (`Record<string, unknown>`) | LOW | ✅ **Task 21에서 수정** |
-| API 전체 페이지네이션 없음 (B-21) | MED | ✅ **Task 22에서 셀러 3개 API 완료** |
+### 즉시 수정 (HIGH 이슈 대응)
 
----
+1. **pgTid unique 제약 추가**: `prisma/schema.prisma` Order 모델에 `pgTid String? @unique @map("pg_tid")`를 추가하고 마이그레이션. `payments/confirm` API에 pgTid 중복 체크 추가로 이중 주문 방지
+2. **부분 환불 상태 분리**: 환불 API에서 `amount`가 전달된 경우(부분 환불)와 전액 환불을 구분. 부분 환불 시 REFUNDED 처리 대신 환불 금액을 Order 모델에 기록하거나 별도 상태 추가 필요
 
-## 검증 필요 항목 (수동 QA)
+### 단기 수정 권장
 
-| # | 항목 | 상태 |
-|---|------|------|
-| QA-1 | 결제 플로우: PortOne 테스트 결제창 → 서버 검증 → 주문 DB 생성 | ✅ **코드 검증** — `payments/confirm/route.ts`: getPayment() 서버 검증, amount 대조, 원자적 트랜잭션 |
-| QA-2 | 운송장 등록: PAID 주문 → Dialog → 제출 → SHIPPING 전환 | ✅ **코드 검증** — Dialog UI + tracking route.ts SHIPPING 전환 |
-| QA-3 | 관리자 승인: 셀러 "승인 확인" 버튼 → 자동 로그아웃 → 재로그인 → PENDING 배너 사라짐 | ✅ **코드 검증** — `seller/dashboard/page.tsx` signOut + login?message=approved |
-| QA-4 | 정산 크론: `POST /api/cron/settlements` (Bearer $CRON_SECRET) → Settlement 생성 + SETTLED 전환 | ✅ **코드 검증** — Bearer 인증, 셀러별 그룹핑, Settlement 생성 |
-| QA-5 | 미들웨어: 비로그인 `/seller/dashboard` 접근 → `/seller/auth/login` 리다이렉트 | ✅ **코드 검증** — middleware.ts role 없으면 리다이렉트 |
-| QA-6 | 이미지 업로드: 5MB 초과 → 오류 메시지, 정상 이미지 → Vercel Blob URL 저장 | ✅ **코드 검증** — 5MB 초과 시 400 에러, Vercel Blob put() → URL |
-| QA-7 | 페이지네이션: 셀러 주문 목록 20건 초과 → Prev/Next 버튼 활성화 | ✅ **코드 검증** — seller/orders, seller/products, seller/codes 모두 적용 |
-| QA-8 | SettlementDetailDrawer 에러 처리: API 실패 → 에러 메시지 표시 | ✅ **코드 검증** — catch → setError → 에러 메시지 렌더링 |
-| QA-9 | 이메일 인증: 회원가입 → 인증 메일 수신 → 링크 클릭 → success 화면 | ⚠️ 코드 검증 완료, **실제 RESEND_API_KEY 필요** (배포 환경에서 수동 확인 필요) |
-| QA-10 | 이메일 인증 재발송: 대시보드 배너 → "인증 메일 재발송" 클릭 → 새 토큰 발송 | ⚠️ 코드 검증 완료, 실제 이메일 수신 확인 필요 |
-| QA-11 | 배송 추적: CJ대한통운 운송장 등록 → 주문 조회 → 배송 추적 → 클릭 | ✅ **코드 검증** — getTrackingUrl() URL 생성 확인 (우체국 제외) |
+3. **Task 28 즉각 구현**: B-28(admin/orders take:50 + 비표준 응답), B-29(seller/orders .catch(()=>{})) — PLAN.md에 미구현으로 명시됨. 즉각 구현 필요
+4. **정산 배치 DELIVERED 포함**: `cron/settlements/route.ts:24`의 `status: "PAID"` → `status: { in: ["PAID", "DELIVERED"] }`로 변경. 운송장 등록 후 SHIPPING 전환된 주문이 영구 정산 누락되는 버그 수정
+5. **개인정보 삭제 API 보안 강화**: rate limiting 또는 이메일 확인 추가 권장. 현재 완전 공개 API로 악용 가능
+6. **terms/privacy 삭제 요청 링크 추가**: `app/(buyer)/terms/privacy/page.tsx`에 `/privacy/request` 링크 추가 또는 두 페이지 통합
+7. **PLAN.md 환경변수 목록 업데이트**: `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_CHANNEL_KEY`, `ADMIN_EMAIL`을 배포 체크리스트에 추가
+
+### 장기 개선 권장
+
+8. **Task 29 구현 (B-32)**: 이메일 인증 토큰 만료 검증 추가. DB 스키마 변경 포함
+9. **청약확인 발송 구현**: 전자상거래법상 의무. 주문 완료 시 구매자 이메일/SMS 발송 필요
+10. **사업자등록증 이미지 업로드**: Vercel Blob 인프라 활용하여 회원가입 폼에 추가
+11. **seller/orders 로딩 상태 + 에러 처리**: Skeleton 로딩 및 에러 배너 추가(admin/orders 수준 맞춤)
+12. **seller/dashboard fetch 에러 처리**: `.catch(()=>{})` → 에러 배너 또는 재시도 버튼으로 교체
+13. **seller/orders 상태 필터 추가**: API + UI 모두 status 필터 파라미터 추가
+14. **QuantitySelector 무제한 수량 UX 개선**: remainingQty=null 시 99 하드코딩 대신 직접 입력 또는 "무제한" 표시
+15. **CSV export 스트리밍**: 대용량 주문 처리를 위한 스트리밍 응답 전환
+16. **ADMIN_EMAIL 환경변수 명시화**: `.env.example` 및 PLAN.md 배포 체크리스트에 추가
 
 ---
 
-## 배포 가능 기준
+## 배포 전 환경변수 체크리스트
 
-Phase 1 MVP 배포 가능 기준:
-- [x] 핵심 플로우 전체 구현 완료
-- [x] T-08: debug 엔드포인트 제거 ✅
-- [x] T-09: 상품 이미지 업로드 (Vercel Blob) ✅
-- [x] B-01: 정산 크론 인증 ✅
-- [x] B-02: 동시 주문 레이스 컨디션 수정 ✅
-- [x] B-15: `/api/orders` 결제 우회 엔드포인트 제거 ✅
-- [x] B-16: 관리자 정산 배치 버튼 인증 수정 ✅
-- [x] B-23: UX-2 QR 코드 구현 완료 ✅
-- [x] B-24: `PORTONE_API_SECRET` PLAN.md 체크리스트 추가 완료 ✅
-- [x] B-25: 정산 테이블 colSpan=8 수정 완료 ✅
-- [x] B-26: `/api/seller/products` isActive 필터 추가 완료 ✅
-- [x] 수동 QA 6개 항목 코드 검증 완료 (Task 12) ✅
-- [x] P3-0 기술 부채 4개 항목 수정 완료 (Task 21) ✅
-- [x] P3-1 API 페이지네이션 구현 완료 (Task 22) ✅
-- [x] **B-27: chat/page.tsx JSON.parse try/catch 추가** ✅
+```
+필수:
+[ ] DATABASE_URL
+[ ] NEXTAUTH_SECRET (32자 이상)
+[ ] NEXTAUTH_URL (프로덕션 URL)
+[ ] PORTONE_API_KEY
+[ ] PORTONE_STORE_ID
+[ ] PORTONE_API_SECRET (환불 필수)
+[ ] BLOB_READ_WRITE_TOKEN
+[ ] CRON_SECRET
+[ ] RESEND_API_KEY (이메일 알림)
+
+프론트엔드 (NEXT_PUBLIC):
+[ ] NEXT_PUBLIC_PORTONE_STORE_ID  ← PLAN.md 누락됨
+[ ] NEXT_PUBLIC_PORTONE_CHANNEL_KEY  ← PLAN.md 누락됨
+
+선택:
+[ ] ADMIN_EMAIL (미설정 시 admin@liveorder.app 폴백)
+[ ] PLATFORM_FEE_RATE (미설정 시 0.025)
+[ ] SETTLEMENT_DELAY_DAYS (미설정 시 3)
+```
 
 ---
 
-## 환경변수 최종 체크리스트 (배포 전)
+## 요약 지표
 
-| 변수명 | 용도 | 상태 |
-|--------|------|------|
-| `DATABASE_URL` | Neon PostgreSQL | PLAN.md 기재 |
-| `NEXTAUTH_SECRET` | JWT 서명 | PLAN.md 기재 |
-| `PORTONE_API_KEY` | PortOne V2 API 키 | `.env.example` 기재 |
-| `PORTONE_STORE_ID` | PortOne 상점 ID | `.env.example` 기재 |
-| `PORTONE_API_SECRET` | PortOne 환불 API 인증 | ✅ PLAN.md 추가 완료 (B-24) |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob | PLAN.md 기재 |
-| `CRON_SECRET` | 정산 크론 Bearer 토큰 | PLAN.md 기재 |
-| `NEXTAUTH_URL` | 프로덕션 URL | PLAN.md 기재 |
-| `RESEND_API_KEY` | 이메일 알림 | ✅ `.env.example` 추가 완료 (Task 23) |
-| `ADMIN_EMAIL` | 셀러 가입 알림 수신 이메일 | ✅ `.env.example` 기재, 미설정 시 `admin@liveorder.app` fallback |
+| 구분 | 건수 |
+|------|------|
+| 정상 동작 확인 | 34건 |
+| 버그/이슈 — HIGH | 2건 |
+| 버그/이슈 — MED | 5건 |
+| 버그/이슈 — LOW | 7건 |
+| PLAN.md 명시 미구현 | 3건 |
+| 미구현 기능 (기획서 기준) | 17건 |
+| 권고사항 | 16건 |
+
+**전반적 평가:** MVP 핵심 플로우(코드 입력→결제→주문 생성→셀러 확인→배송→정산)는 동작 가능한 수준으로 구현됨. HIGH 이슈(pgTid 중복 주문 방지, 부분 환불 상태 오처리)와 정산 배치 DELIVERED 누락을 우선 수정하고, PLAN.md Task 28/29를 완료한 뒤 배포 권장.
