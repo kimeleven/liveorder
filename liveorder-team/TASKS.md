@@ -1,14 +1,15 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM — Task 27 스펙 검증, Task 28 추가)
+> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 미구현 확인, Task 29 B-32 추가)
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 28: B-28/B-29 기술 부채 최종 클린업**
+## 🟢 Dev1 현재 할당 — **Task 28: B-28/B-29 기술 부채 클린업** (코드 미반영 확인 — 즉시 구현 필요)
 
 > **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅ · Task 27 (P3-6 GDPR) ✅ · B-30 ✅ · B-31 ✅
 > **지금 할 일:** Task 28 — admin/orders 페이지네이션 표준화 (B-28) + seller/orders 에러 처리 (B-29)
-> **다음 예정:** 없음 (Phase 3 완료)
+> **⚠️ 주의:** Planner 코드 검증 결과 Task 28 아직 미구현 (`take: 50` 하드코딩, `.catch(()=>{})` 잔존)
+> **다음 예정:** Task 29 — B-32 이메일 인증 토큰 만료 검증
 
 ---
 
@@ -335,6 +336,86 @@ JSX에 에러 표시 추가 (로딩 Skeleton 아래):
 ```
 
 **커밋:** `fix: admin/orders 페이지네이션 표준화 + seller/orders 에러 처리 (B-28, B-29)`
+
+---
+
+### Task 29: B-32 이메일 인증 토큰 만료 검증
+
+**우선순위:** LOW — Task 28 완료 후
+**상태:** 📋 계획 수립 완료
+
+**배경:** `verify/route.ts`가 토큰 만료를 검증하지 않아 무기한 유효. 이메일 본문에는 "24시간"이라고 안내하지만 실제 코드는 체크하지 않음.
+
+#### Step 1: DB 스키마 변경 — `prisma/schema.prisma`
+
+Seller 모델에 필드 추가 (line 40 근처, `emailVerifyToken` 다음 줄):
+```prisma
+emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
+```
+
+#### Step 2: 마이그레이션 실행
+
+```bash
+npx prisma migrate dev --name add_email_verify_token_expiry
+```
+
+#### Step 3: `app/api/sellers/register/route.ts` 수정
+
+토큰 저장 코드에 만료 시간 추가:
+```typescript
+// 기존 emailVerifyToken 저장 코드 찾아서:
+data: {
+  emailVerifyToken: token,
+  emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // ← 추가
+},
+```
+
+#### Step 4: `app/api/seller/auth/verify/resend/route.ts` 수정
+
+재발송 시 만료 시간도 갱신:
+```typescript
+data: {
+  emailVerifyToken: newToken,
+  emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // ← 추가
+},
+```
+
+#### Step 5: `app/api/seller/auth/verify/route.ts` 수정
+
+토큰 조회 직후 만료 검증 추가:
+```typescript
+// seller 조회 후, emailVerified 체크 전에 삽입:
+if (seller.emailVerifyTokenExpiresAt && seller.emailVerifyTokenExpiresAt < new Date()) {
+  return redirect(`${baseUrl}?result=expired`);
+}
+
+// 인증 성공 처리 시 token + expiresAt 모두 null로:
+data: {
+  emailVerified: true,
+  emailVerifyToken: null,
+  emailVerifyTokenExpiresAt: null,
+},
+```
+
+#### Step 6: `app/seller/auth/verify/page.tsx` 수정
+
+`result` 케이스 분기에 `expired` 추가:
+```tsx
+// 기존 'invalid' 케이스 다음에:
+{result === 'expired' && (
+  <div className="text-center">
+    <p className="text-yellow-600 font-medium">인증 링크가 만료되었습니다.</p>
+    <p className="text-sm text-muted-foreground mt-2">
+      24시간이 경과했습니다. 셀러 대시보드에서 인증 메일을 재발송해 주세요.
+    </p>
+    <a href="/seller/auth/login" className="mt-4 inline-block text-blue-600 underline text-sm">
+      로그인 페이지로 →
+    </a>
+  </div>
+)}
+```
+
+**커밋:** `fix: 이메일 인증 토큰 만료 검증 추가 (B-32)`
 
 ---
 

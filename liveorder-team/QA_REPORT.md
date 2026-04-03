@@ -1,7 +1,7 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-03 (PM — B-30/B-31 수정 완료, P3-6 구현 완료 반영)
-> QA 단계: Phase 3 진행 중 — P3-0/P3-1/P3-2/P3-3/P3-4/P3-5/P3-6 완료, B-30/B-31 수정 완료, Task 28 (B-28/B-29) 진행 중
+> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 코드 미반영 확인, Task 29 B-32 계획 추가)
+> QA 단계: Phase 3 마무리 — P3-0~P3-6 완료, B-30/B-31 수정 완료, Task 28 (B-28/B-29) 미구현 확인, Task 29 (B-32) 계획
 
 ---
 
@@ -88,11 +88,11 @@
 |---|----------|------|------|------|
 | B-32 | LOW | 이메일 인증 — 토큰 만료 | 인증 토큰에 만료 시간 없음. 이메일 본문에 "24시간 이내 사용" 안내하지만 `verify/route.ts`에서 만료 검증 로직 없음 → 토큰이 무기한 유효. 재발송 시 토큰 교체는 됨 | `app/api/seller/auth/verify/route.ts` |
 
-**B-32 수정 방향 (Task 28 이후 처리):**
-```prisma
-// schema.prisma — emailVerifyTokenExpiresAt 필드 추가 (선택적)
-emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
-```
+**B-32 수정 방향 (Task 29 — TASKS.md 상세 스펙 참고):**
+- schema.prisma: `emailVerifyTokenExpiresAt DateTime?` 추가 → `migrate dev`
+- register/route.ts + resend/route.ts: 토큰 생성 시 `expiresAt = now + 24h` 저장
+- verify/route.ts: 만료 시간 검증 후 expired → redirect `?result=expired`
+- verify/page.tsx: `expired` 케이스 UI 추가
 
 ### 이번 스프린트 수정 완료 (B-30, B-31)
 

@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Task 27 완료, Task 28 착수)
-> 현재 단계: **Phase 3 — Task 28 (B-28/B-29 기술 부채 최종 클린업) 진행 중**
-> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5/P3-6 완료. B-30/B-31 수정 완료. Task 28 (admin/orders 페이지네이션 표준화 + seller/orders 에러 처리) 진행 중. Task 14 (Vercel 배포) 병행 진행 중.
+> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 미완료 확인, Task 29 B-32 계획 추가)
+> 현재 단계: **Phase 3 마무리 — Task 28 (B-28/B-29) 진행 중 → Task 29 (B-32) 예정**
+> P3-0~P3-6 완료. B-30/B-31 수정 완료. Task 28 코드 미반영 확인(admin/orders: take:50 하드코딩, seller/orders: .catch(()=>{}) 잔존). Task 29 (B-32 인증 토큰 만료) 계획 수립. Task 14 (Vercel 배포) 병행.
 
 ---
 
@@ -375,7 +375,11 @@ export async function POST(req: NextRequest) {
 
 ---
 
-### P3-7: 기술 부채 최종 클린업 (계획 — Task 28)
+### P3-7: 기술 부채 최종 클린업 (Task 28 — 진행 중)
+
+**코드 검증 결과 (2026-04-03):**
+- `app/api/admin/orders/route.ts:35` — `take: 50` 하드코딩 확인 → 미수정
+- `app/seller/orders/page.tsx:88` — `.catch(() => {})` 확인 → 미수정
 
 **대상 버그 2개:**
 
@@ -410,6 +414,82 @@ export async function POST(req: NextRequest) {
 
 ---
 
+### P3-8: 이메일 인증 토큰 만료 (Task 29 — B-32)
+
+**현황:** `app/api/seller/auth/verify/route.ts`에 토큰 만료 검증 로직 없음. 이메일 본문에는 "24시간 이내 사용" 안내하지만 실제로는 무기한 유효.
+
+**DB 변경 (마이그레이션 필요):**
+```prisma
+// prisma/schema.prisma — Seller 모델에 추가
+emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
+```
+
+**마이그레이션:** `npx prisma migrate dev --name add_email_verify_token_expiry`
+
+**파일 수정 3곳:**
+
+#### 1. `app/api/sellers/register/route.ts` 수정 — 토큰 생성 시 만료 시간 함께 저장
+```typescript
+// emailVerifyToken 생성 코드 근처에 추가:
+const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24시간 후
+await prisma.seller.update({
+  where: { id: newSeller.id },
+  data: {
+    emailVerifyToken: token,
+    emailVerifyTokenExpiresAt: expiresAt,
+  },
+});
+```
+
+#### 2. `app/api/seller/auth/verify/resend/route.ts` 수정 — 재발송 시도 만료 시간 갱신
+```typescript
+// 토큰 업데이트 시:
+data: {
+  emailVerifyToken: newToken,
+  emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+},
+```
+
+#### 3. `app/api/seller/auth/verify/route.ts` 수정 — 만료 검증 추가
+```typescript
+// token 조회 후 만료 검증:
+const seller = await prisma.seller.findFirst({
+  where: { emailVerifyToken: token },
+});
+if (!seller) return redirect(`${baseUrl}?result=invalid`);
+
+// 만료 확인
+if (seller.emailVerifyTokenExpiresAt && seller.emailVerifyTokenExpiresAt < new Date()) {
+  return redirect(`${baseUrl}?result=expired`);
+}
+
+// 정상 처리: emailVerified=true, token/expiresAt 초기화
+await prisma.seller.update({
+  where: { id: seller.id },
+  data: {
+    emailVerified: true,
+    emailVerifyToken: null,
+    emailVerifyTokenExpiresAt: null,
+  },
+});
+return redirect(`${baseUrl}?result=success`);
+```
+
+#### 4. `app/seller/auth/verify/page.tsx` 수정 — expired 케이스 추가
+```tsx
+// result === 'expired' 케이스:
+{result === 'expired' && (
+  <div className="text-yellow-600">
+    <p>인증 링크가 만료되었습니다. (24시간 초과)</p>
+    <p className="text-sm mt-2">셀러 대시보드에서 인증 메일을 재발송해 주세요.</p>
+  </div>
+)}
+```
+
+**커밋:** `fix: 이메일 인증 토큰 만료 검증 추가 (B-32)`
+
+---
+
 ## 4. 기술 부채 잔여 목록
 
 | 항목 | 우선순위 | 계획 |
@@ -424,8 +504,9 @@ export async function POST(req: NextRequest) {
 | 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
 | 셀러 이메일 인증 없음 | LOW | ✅ P3-5 완료 (Task 26, 17fc5ce) |
 | 구매자 데이터 삭제권 없음 (GDPR) | MED | ✅ P3-6 완료 (Task 27, 3b39223) |
-| admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | 📋 Task 28 계획 수립 |
-| seller/orders fetch 에러 무시 (B-29) | LOW | 📋 Task 28 계획 수립 |
+| admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | 🔄 Task 28 진행 중 (미구현 확인) |
+| seller/orders fetch 에러 무시 (B-29) | LOW | 🔄 Task 28 진행 중 (미구현 확인) |
+| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | 📋 Task 29 계획 수립 완료 |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 
