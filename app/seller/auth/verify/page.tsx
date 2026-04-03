@@ -40,6 +40,13 @@ function EmailVerifyContent() {
       color: "text-red-700",
       bg: "bg-red-50 border-red-200",
     },
+    expired: {
+      title: "인증 링크 만료",
+      icon: "⏰",
+      message: "인증 링크가 만료되었습니다. 24시간이 경과했습니다. 셀러 대시보드에서 인증 메일을 재발송해 주세요.",
+      color: "text-yellow-700",
+      bg: "bg-yellow-50 border-yellow-200",
+    },
     error: {
       title: "오류 발생",
       icon: "⚠️",

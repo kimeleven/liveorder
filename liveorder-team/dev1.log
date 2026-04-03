@@ -3,3 +3,4 @@
 [done] Task 8: debug endpoint removed. Task 9: product image upload with Vercel Blob (upload API + new/edit forms + ProductCard + next.config)
 [done] B-01 크론 인증(CRON_SECRET Bearer) + B-02 레이스컨디션(원자적 조건부 UPDATE) 수정
 [done] Task 19 + UX-1 완료 — 2026-04-03
+[done] Task 28 (B-28/B-29) + HIGH QA bugs fixed (pgTid unique, partial refund, settlement DELIVERED)

@@ -13,12 +13,18 @@ export async function GET(req: NextRequest) {
   try {
     const seller = await prisma.seller.findFirst({
       where: { emailVerifyToken: token },
-      select: { id: true, emailVerified: true },
+      select: { id: true, emailVerified: true, emailVerifyTokenExpiresAt: true },
     });
 
     if (!seller) {
       return NextResponse.redirect(
         new URL("/seller/auth/verify?status=invalid", req.url)
+      );
+    }
+
+    if (seller.emailVerifyTokenExpiresAt && seller.emailVerifyTokenExpiresAt < new Date()) {
+      return NextResponse.redirect(
+        new URL("/seller/auth/verify?status=expired", req.url)
       );
     }
 
@@ -33,6 +39,7 @@ export async function GET(req: NextRequest) {
       data: {
         emailVerified: true,
         emailVerifyToken: null,
+        emailVerifyTokenExpiresAt: null,
       },
     });
 

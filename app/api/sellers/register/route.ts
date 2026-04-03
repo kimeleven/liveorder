@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
         status: "PENDING",
         emailVerified: false,
         emailVerifyToken,
+        emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
 

@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
     const token = randomBytes(32).toString("hex");
     await prisma.seller.update({
       where: { id: seller.id },
-      data: { emailVerifyToken: token },
+      data: {
+        emailVerifyToken: token,
+        emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
     });
 
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
