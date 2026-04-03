@@ -270,7 +270,7 @@ export async function POST(req: NextRequest) {
 ### Task 28: B-28/B-29 기술 부채 최종 클린업
 
 **우선순위:** LOW — Task 27 완료 후
-**상태:** 📋 계획됨
+**상태:** 🔄 진행 중
 
 #### Step 1: `app/api/admin/orders/route.ts` 수정 (B-28)
 
@@ -342,7 +342,8 @@ JSX에 에러 표시 추가 (로딩 Skeleton 아래):
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 27: P3-6 구매자 GDPR 삭제권 — data-deletion API, request 페이지, privacy 페이지 / B-30 우체국택배 키 수정 / B-31 이메일 미인증 로그인 차단 | 3b39223 |
+| 2026-04-03 | B-30/B-31: 우체국택배 배송 추적 키 수정 + 이메일 미인증 셀러 로그인 차단 (lib/auth.ts emailVerified 체크) | fc0236f |
+| 2026-04-03 | Task 27: P3-6 구매자 GDPR 삭제권 — data-deletion API, request 페이지, privacy 페이지 | 3b39223 |
 | 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | 17fc5ce |
 | 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | fbadce1 |
 | 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | fbadce1 |

@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM — Task 27 P3-6 스펙 검증, Task 28 계획 추가)
-> 현재 단계: **Phase 3 — Task 27 (P3-6 구매자 데이터 삭제권) 진행 중**
-> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5 완료. Task 27 (GDPR 삭제권) 진행 중. Task 28 (기술 부채 B-28/B-29) 계획 수립. Task 14 (Vercel 배포) 병행 진행 중.
+> 최종 업데이트: 2026-04-03 (PM — Task 27 완료, Task 28 착수)
+> 현재 단계: **Phase 3 — Task 28 (B-28/B-29 기술 부채 최종 클린업) 진행 중**
+> P3-0/P3-1/P3-2/P3-3/P3-4/P3-5/P3-6 완료. B-30/B-31 수정 완료. Task 28 (admin/orders 페이지네이션 표준화 + seller/orders 에러 처리) 진행 중. Task 14 (Vercel 배포) 병행 진행 중.
 
 ---
 
@@ -298,7 +298,7 @@ emailVerifyToken String? @map("email_verify_token") @db.VarChar(100)
 
 ---
 
-### P3-6: 구매자 데이터 삭제권 (개인정보법) — 🔄 진행 중 (Task 27)
+### P3-6: 구매자 데이터 삭제권 (개인정보법) — ✅ 완료 (Task 27, 3b39223)
 
 **최소 구현 (비회원 구매자):**
 
@@ -423,7 +423,7 @@ export async function POST(req: NextRequest) {
 | 셀러 대시보드 차트 없음 (B-13) | LOW | ✅ P3-3 완료 (Task 24, fbadce1) |
 | 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
 | 셀러 이메일 인증 없음 | LOW | ✅ P3-5 완료 (Task 26, 17fc5ce) |
-| 구매자 데이터 삭제권 없음 (GDPR) | MED | 🔄 P3-6 진행 중 (Task 27) |
+| 구매자 데이터 삭제권 없음 (GDPR) | MED | ✅ P3-6 완료 (Task 27, 3b39223) |
 | admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | 📋 Task 28 계획 수립 |
 | seller/orders fetch 에러 무시 (B-29) | LOW | 📋 Task 28 계획 수립 |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |

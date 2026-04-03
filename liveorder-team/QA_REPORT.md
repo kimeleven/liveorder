@@ -1,7 +1,7 @@
 # LIVEORDER QA 리포트
 
-> 최종 업데이트: 2026-04-03 (QA — Task 26/27 검증, B-30/B-31/B-32 신규 발견)
-> QA 단계: Phase 3 진행 중 — P3-0/P3-1/P3-2/P3-3/P3-4/P3-5 완료, P3-6 (구매자 데이터 삭제권) 미구현 (Task 27), B-28/B-29 클린업 (Task 28 예정)
+> 최종 업데이트: 2026-04-03 (PM — B-30/B-31 수정 완료, P3-6 구현 완료 반영)
+> QA 단계: Phase 3 진행 중 — P3-0/P3-1/P3-2/P3-3/P3-4/P3-5/P3-6 완료, B-30/B-31 수정 완료, Task 28 (B-28/B-29) 진행 중
 
 ---
 
@@ -11,7 +11,7 @@
 |------|--------|------|------|
 | SELLER | 회원가입 → 이메일 인증 메일 발송 | ✅ | emailVerifyToken 생성 + Resend 발송 |
 | SELLER | 이메일 인증 링크 클릭 → 인증 완료 | ✅ | verify route.ts 정상 |
-| SELLER | 미인증 셀러 로그인 차단 | ❌ | **B-31** — 로그인 차단 없음, 배너만 표시 |
+| SELLER | 미인증 셀러 로그인 차단 | ✅ | B-31 수정 완료 (fc0236f) — lib/auth.ts emailVerified 체크 추가 |
 | SELLER | 상품 등록 → 코드 자동 발급 (UX-1) | ✅ | autoCode 반환 + 성공 화면 표시 |
 | SELLER | 코드 발급 페이지 QR 코드 (UX-2) | ✅ | `qrcode` 설치, 발급 성공 화면 QR 표시 + `/order/[code]` 라우트 |
 | SELLER | 코드 발급 드롭다운 상품명 표시 (UX-3) | ✅ | shadcn SelectItem children 자동 표시 |
@@ -28,8 +28,8 @@
 | BUYER | 배송지 입력 + 개인정보 동의 | ✅ | 체크박스 미체크 시 제출 불가 |
 | BUYER | 주문 조회 (비회원) | ✅ | 전화번호 + 주문번호 |
 | BUYER | 배송 추적 링크 (CJ/롯데/한진/로젠) | ✅ | P3-4 완료 |
-| BUYER | 배송 추적 링크 (우체국) | ❌ | **B-30** — 택배사 이름 불일치 |
-| BUYER | 개인정보 삭제 요청 | ❌ | **P3-6 미구현** (Task 27 진행 중) |
+| BUYER | 배송 추적 링크 (우체국) | ✅ | B-30 수정 완료 (fc0236f) — '우체국' → '우체국택배' 키 통일 |
+| BUYER | 개인정보 삭제 요청 | ✅ | P3-6 구현 완료 (3b39223) — data-deletion API + request 페이지 |
 | SELLER | 주문 확인 → 배송지 CSV | ✅ | UTF-8 BOM, CSV 다운로드 |
 | SELLER | 운송장 등록 | ✅ | Dialog UI, PAID/SHIPPING 상태 |
 | SELLER | 배송완료 상태 (DELIVERED) | ✅ | enum + 마이그레이션 완료 |
@@ -86,30 +86,20 @@
 
 | # | 우선순위 | 기능 | 내용 | 위치 |
 |---|----------|------|------|------|
-| B-30 | MED | 배송 추적 — 우체국 | 운송장 등록 택배사 목록에 **"우체국택배"** 저장, carrier-urls.ts에는 **"우체국"** 키로 매핑 → `getTrackingUrl("우체국택배", ...)` null 반환 → 배송 추적 링크 표시 안됨 | `app/seller/orders/page.tsx:40` vs `lib/carrier-urls.ts:6` |
-| B-31 | MED | 이메일 인증 — 로그인 차단 | `lib/auth.ts`에서 `emailVerified` 미체크 → 미인증 셀러도 정상 로그인 가능, 상품 등록/코드 발급 등 모든 기능 접근 가능. PLAN.md P3-5 스펙("미인증 셀러 로그인 차단")과 불일치. 현재는 대시보드 배너만 표시됨 | `lib/auth.ts` (emailVerified 체크 없음) |
 | B-32 | LOW | 이메일 인증 — 토큰 만료 | 인증 토큰에 만료 시간 없음. 이메일 본문에 "24시간 이내 사용" 안내하지만 `verify/route.ts`에서 만료 검증 로직 없음 → 토큰이 무기한 유효. 재발송 시 토큰 교체는 됨 | `app/api/seller/auth/verify/route.ts` |
 
-**B-30 수정 방향:**
-```typescript
-// lib/carrier-urls.ts — "우체국" → "우체국택배"로 키 통일 (또는 seller/orders 목록 값 변경)
-'우체국택배': 'https://service.epost.go.kr/trace.RetrieveDomRfRcptnInfo.comm?sid1=',
-```
-
-**B-31 수정 방향 (최소 구현):**
-```typescript
-// lib/auth.ts — authorize() 내부, seller 조회 후 추가
-if (!seller.emailVerified) {
-  throw new Error("이메일 인증이 필요합니다.");
-}
-// 또는 credentials에 emailVerified를 return하여 클라이언트에서 처리
-```
-
-**B-32 수정 방향:**
+**B-32 수정 방향 (Task 28 이후 처리):**
 ```prisma
 // schema.prisma — emailVerifyTokenExpiresAt 필드 추가 (선택적)
 emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
 ```
+
+### 이번 스프린트 수정 완료 (B-30, B-31)
+
+| # | 우선순위 | 기능 | 내용 | 커밋 |
+|---|----------|------|------|------|
+| ~~B-30~~ | ~~MED~~ | ~~배송 추적 — 우체국~~ | ✅ **2026-04-03 완료** — '우체국' → '우체국택배' 키 통일 | fc0236f |
+| ~~B-31~~ | ~~MED~~ | ~~이메일 인증 — 로그인 차단~~ | ✅ **2026-04-03 완료** — lib/auth.ts emailVerified 체크 추가 | fc0236f |
 
 ### 기술 부채 (낮은 우선순위)
 
@@ -172,7 +162,7 @@ emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Ti
 | 셀러 대시보드 7일 매출 차트 | 기획서 명시 | ✅ 완료 (2026-04-03, Task 24) |
 | 배송 추적 링크 (택배사별 URL) | 기획서 명시 | ✅ 완료 (2026-04-03, Task 25) — B-30 수정 필요 |
 | 셀러 이메일 인증 (인증 메일 + 결과 페이지) | 기획서 명시 | ✅ 완료 (Task 26) — B-31 로그인 차단 미구현 |
-| 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | ❌ **미구현** (Task 27 진행 중, 코드 없음) |
+| 구매자 데이터 삭제권 (GDPR) | 개인정보법 요구 | ✅ **완료** (Task 27, 3b39223) |
 
 ---
 
@@ -181,9 +171,9 @@ emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Ti
 | 항목 | 우선순위 | 상태 |
 |------|----------|------|
 | `chat/page.tsx` JSON.parse 예외처리 누락 (B-27) | MED | ✅ 수정 완료 (2e58865) |
-| 우체국택배 배송 추적 키 불일치 (B-30) | MED | ❌ 미처리 |
-| 이메일 인증 로그인 차단 미구현 (B-31) | MED | ❌ 미처리 |
-| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | ❌ 미처리 |
+| 우체국택배 배송 추적 키 불일치 (B-30) | MED | ✅ 수정 완료 (fc0236f) |
+| 이메일 인증 로그인 차단 미구현 (B-31) | MED | ✅ 수정 완료 (fc0236f) |
+| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | ❌ 미처리 (Task 28 이후) |
 | `admin/orders` API — `parsePagination()` 미사용, 응답 형식 불일치 (B-28) | LOW | 미처리 (동작은 정상) |
 | `seller/orders` fetch 에러 무시 (B-29) | LOW | 미처리 |
 | `SettlementDetailDrawer` fetch 에러 사용자 피드백 없음 | LOW | ✅ **Task 21에서 수정** |
