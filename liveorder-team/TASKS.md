@@ -4,11 +4,11 @@
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 30: UX 품질 개선 + 환경변수 문서 업데이트**
+## ✅ Dev1 현재 할당 — **Task 30: UX 품질 개선 + 환경변수 문서 업데이트 (완료)**
 
 > **완료:** Task 21~29 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
 > **완료 (Task 29/B-33):** B-32 이메일 인증 토큰 만료 검증 + B-33 terms/privacy 삭제 요청 링크 추가 (2026-04-03)
-> **다음 예정:** Task 30 — LOW/MED 버그 번들 (seller/orders isLoading, seller/dashboard 에러, PLAN.md env vars)
+> **완료 (Task 30):** seller/orders Skeleton 로딩 + seller/dashboard 에러 배너 + PLAN.md env vars (2026-04-03)
 
 ---
 
@@ -341,7 +341,7 @@ JSX에 에러 표시 추가 (로딩 Skeleton 아래):
 ### Task 30: LOW 버그 번들 — seller UX 개선 + PLAN.md 환경변수 업데이트
 
 **우선순위:** LOW — Task 29 완료 후
-**상태:** 🟢 Dev1 진행 중
+**상태:** ✅ 완료 (2026-04-03)
 
 #### Step 1: `app/seller/orders/page.tsx` — isLoading Skeleton 추가
 
