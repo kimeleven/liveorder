@@ -26,6 +26,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         );
         if (!isValid) return null;
 
+        if (!seller.emailVerified) {
+          throw new Error("이메일 인증이 필요합니다. 가입 시 발송된 인증 메일을 확인해 주세요.");
+        }
+
         return {
           id: seller.id,
           email: seller.email,
