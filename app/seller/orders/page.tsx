@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Download, Truck } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const carriers = [
   { value: "CJ대한통운", label: "CJ대한통운" },
@@ -74,7 +75,7 @@ export default function OrdersPage() {
   const [trackingNo, setTrackingNo] = useState("");
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function fetchOrders(currentPage = page) {
@@ -167,13 +168,17 @@ export default function OrdersPage() {
           )}
         </div>
 
-        {isLoading && (
-          <div className="text-center py-8 text-muted-foreground text-sm">불러오는 중...</div>
-        )}
         {error && (
           <div className="text-center py-8 text-red-500 text-sm">{error}</div>
         )}
 
+        {isLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : (
         <Card>
           <Table>
             <TableHeader>
@@ -239,6 +244,7 @@ export default function OrdersPage() {
             </TableBody>
           </Table>
         </Card>
+        )}
 
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 

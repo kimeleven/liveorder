@@ -56,12 +56,16 @@ export default function SellerDashboardPage() {
   const [checkLoading, setCheckLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/seller/dashboard")
       .then((r) => r.json())
       .then(setStats)
-      .catch(() => {});
+      .catch((err) => {
+        console.error('[seller/dashboard] fetch failed:', err);
+        setDashboardError('대시보드 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
+      });
   }, []);
 
   async function checkApprovalStatus() {
@@ -140,6 +144,10 @@ export default function SellerDashboardPage() {
           <h1 className="text-2xl font-bold">대시보드</h1>
           <p className="text-muted-foreground">판매 현황을 한눈에 확인하세요</p>
         </div>
+
+        {dashboardError && (
+          <div className="text-center py-4 text-red-500 text-sm">{dashboardError}</div>
+        )}
 
         {stats.emailVerified === false && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-800">
