@@ -1,23 +1,21 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 31 완료 반영, Task 32 착수, Task 33 HIGH 우선순위 확인)
+> 최종 업데이트: 2026-04-03 (Dev1 — Task 32, 33 완료)
 
 ---
 
-## ✅ Dev1 현재 할당 — **Task 32 → Task 33 순서로 진행**
+## ✅ Dev1 현재 할당 — **Task 32, 33 완료**
 
-> **완료:** Task 21~31 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅
+> **완료:** Task 21~33 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅
 
-### 지금 할 것: Task 32 (LOW 버그 번들)
-- `components/buyer/cards/QuantitySelector.tsx` — maxQty 99 → 999 + "(무제한)" 표시
-- `app/api/seller/orders/export/route.ts` — `take: 10000` 상한 추가
-- 커밋: `fix: QuantitySelector 무제한 코드 UX + CSV export 10000건 상한 (Task 32)`
+### ✅ Task 32 완료 (2026-04-03, commit 87052f1)
+- `QuantitySelector.tsx` — remainingQty null → maxQty 999, "(무제한)" 레이블 표시
+- `export/route.ts` — take: 10000 상한 추가
 
-### 다음: Task 33 (청약확인 — 법적 의무, HIGH)
-- 전자상거래법 제13조 의무. 배포 전 반드시 완료.
-- `app/(buyer)/chat/page.tsx` — complete 단계에 청약확인 박스
-- `app/api/orders/[id]/withdraw/route.ts` — 청약철회 신청 API
-- `app/(buyer)/lookup/page.tsx` — 청약철회 버튼 (PAID + 7일 이내)
+### ✅ Task 33 완료 (2026-04-03, commit 012ec5a)
+- `OrderConfirmation.tsx` — 청약철회 권리 안내 박스 추가 (전자상거래법 제13조)
+- `app/api/orders/[id]/withdraw/route.ts` — 청약철회 신청 API 신규 생성 (buyerPhone 인증, PAID+7일 검증, 관리자 이메일 알림)
+- `lookup/page.tsx` — 청약철회 버튼 추가 (PAID + 7일 이내 조건부)
 
 ---
 
