@@ -14,6 +14,7 @@ export async function GET() {
       code: { select: { codeKey: true, product: { select: { name: true } } } },
     },
     orderBy: { createdAt: "desc" },
+    take: 10000,
   });
 
   const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장\n";
