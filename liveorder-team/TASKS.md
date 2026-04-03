@@ -4,11 +4,11 @@
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 27: P3-6 구매자 데이터 삭제권 (GDPR)**
+## 🟢 Dev1 현재 할당 — **Task 28: B-28/B-29 기술 부채 최종 클린업**
 
-> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅
-> **지금 할 일:** Task 27 — 구매자 개인정보 삭제권 구현 (PLAN.md P3-6 섹션 참고)
-> **다음 예정:** Task 28 — B-28/B-29 기술 부채 최종 클린업
+> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅ · Task 27 (P3-6 GDPR) ✅ · B-30 ✅ · B-31 ✅
+> **지금 할 일:** Task 28 — admin/orders 페이지네이션 표준화 (B-28) + seller/orders 에러 처리 (B-29)
+> **다음 예정:** 없음 (Phase 3 완료)
 
 ---
 
@@ -212,8 +212,17 @@ import { getTrackingUrl } from '@/lib/carrier-urls';
 
 ### Task 27: P3-6 구매자 데이터 삭제권 (GDPR)
 
-**우선순위:** MED — Task 26 완료 후 ← **현재 진행**
-**상태:** 🔄 진행 중
+**우선순위:** MED — Task 26 완료 후
+**상태:** ✅ 완료 (2026-04-03)
+
+구현 내용:
+- `app/api/buyer/data-deletion/route.ts`: POST — 이름+전화번호로 주문 개인정보 마스킹 (정산 데이터 보존)
+- `app/(buyer)/privacy/request/page.tsx`: 삭제 요청 폼 — 처리 결과 표시 (N건 삭제 or 없음)
+- `app/(buyer)/privacy/page.tsx`: 개인정보처리방침 페이지 — 삭제 요청 링크 포함
+
+추가 수정 (QA 버그):
+- B-30: `lib/carrier-urls.ts` 우체국택배 키 수정 ('우체국' → '우체국택배')
+- B-31: `lib/auth.ts` 미인증 셀러 로그인 차단 (emailVerified 체크 추가)
 
 #### Step 1: API 구현 — `app/api/buyer/data-deletion/route.ts` 신규 생성
 
@@ -333,6 +342,7 @@ JSX에 에러 표시 추가 (로딩 Skeleton 아래):
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 27: P3-6 구매자 GDPR 삭제권 — data-deletion API, request 페이지, privacy 페이지 / B-30 우체국택배 키 수정 / B-31 이메일 미인증 로그인 차단 | 3b39223 |
 | 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | 17fc5ce |
 | 2026-04-03 | Task 25: P3-4 배송 추적 링크 — `lib/carrier-urls.ts` + lookup 페이지 배송 추적 → 링크 | fbadce1 |
 | 2026-04-03 | Task 24: P3-3 셀러 대시보드 7일 매출 차트 — recharts 설치, dailySales API, LineChart 컴포넌트 | fbadce1 |
