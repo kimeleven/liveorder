@@ -74,18 +74,26 @@ export default function OrdersPage() {
   const [trackingNo, setTrackingNo] = useState("");
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function fetchOrders(currentPage = page) {
-    fetch(`/api/seller/orders?page=${currentPage}`)
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.data) {
-          setOrders(res.data);
-          setTotalPages(res.pagination.totalPages);
-          setTotal(res.pagination.total);
-        }
-      })
-      .catch(() => {});
+  async function fetchOrders(currentPage = page) {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/seller/orders?page=${currentPage}`);
+      const res = await r.json();
+      if (res.data) {
+        setOrders(res.data);
+        setTotalPages(res.pagination.totalPages);
+        setTotal(res.pagination.total);
+      }
+    } catch (err) {
+      console.error('[seller/orders] fetch failed:', err);
+      setError('주문 목록을 불러오지 못했습니다. 새로고침해 주세요.');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -158,6 +166,13 @@ export default function OrdersPage() {
             </Button>
           )}
         </div>
+
+        {isLoading && (
+          <div className="text-center py-8 text-muted-foreground text-sm">불러오는 중...</div>
+        )}
+        {error && (
+          <div className="text-center py-8 text-red-500 text-sm">{error}</div>
+        )}
 
         <Card>
           <Table>

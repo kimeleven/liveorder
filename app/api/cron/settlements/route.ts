@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     // D+3이 지난 결제완료 주문 중 아직 정산되지 않은 것들
     const eligibleOrders = await prisma.order.findMany({
       where: {
-        status: "PAID",
+        status: { in: ["PAID", "SHIPPING", "DELIVERED"] },
         createdAt: { lte: cutoffDate },
       },
       include: {

@@ -4,11 +4,10 @@
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 28: B-28/B-29 기술 부채 클린업** (코드 미반영 확인 — 즉시 구현 필요)
+## 🟢 Dev1 현재 할당 — **Task 29: B-32 이메일 인증 토큰 만료 검증**
 
-> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅ · Task 27 (P3-6 GDPR) ✅ · B-30 ✅ · B-31 ✅
-> **지금 할 일:** Task 28 — admin/orders 페이지네이션 표준화 (B-28) + seller/orders 에러 처리 (B-29)
-> **⚠️ 주의:** Planner 코드 검증 결과 Task 28 아직 미구현 (`take: 50` 하드코딩, `.catch(()=>{})` 잔존)
+> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅ · Task 27 (P3-6 GDPR) ✅ · B-30 ✅ · B-31 ✅ · Task 28 (B-28/B-29) ✅
+> **완료 (Task 28):** B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique 제약 + 부분환불 상태 수정 + 정산 DELIVERED 포함 (2026-04-03)
 > **다음 예정:** Task 29 — B-32 이메일 인증 토큰 만료 검증
 
 ---
@@ -271,7 +270,7 @@ export async function POST(req: NextRequest) {
 ### Task 28: B-28/B-29 기술 부채 최종 클린업
 
 **우선순위:** LOW — Task 27 완료 후
-**상태:** 🔄 진행 중
+**상태:** ✅ 완료 (2026-04-03)
 
 #### Step 1: `app/api/admin/orders/route.ts` 수정 (B-28)
 
@@ -423,6 +422,7 @@ data: {
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 28: B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique + 부분환불 상태 + 정산 DELIVERED 포함 | - |
 | 2026-04-03 | B-30/B-31: 우체국택배 배송 추적 키 수정 + 이메일 미인증 셀러 로그인 차단 (lib/auth.ts emailVerified 체크) | fc0236f |
 | 2026-04-03 | Task 27: P3-6 구매자 GDPR 삭제권 — data-deletion API, request 페이지, privacy 페이지 | 3b39223 |
 | 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | 17fc5ce |

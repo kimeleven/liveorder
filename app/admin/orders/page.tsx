@@ -58,6 +58,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,8 +77,9 @@ export default function AdminOrdersPage() {
       const res = await fetch(`/api/admin/orders?${params}`);
       if (!res.ok) return;
       const data = await res.json();
-      setOrders(data.orders ?? []);
-      setTotal(data.total ?? 0);
+      setOrders(data.data ?? []);
+      setTotal(data.pagination?.total ?? 0);
+      setTotalPages(data.pagination?.totalPages ?? 1);
     } finally {
       setIsLoading(false);
     }
@@ -193,7 +195,7 @@ export default function AdminOrdersPage() {
         {!isLoading && (
           <Pagination
             page={page}
-            totalPages={Math.ceil(total / 50)}
+            totalPages={totalPages}
             onPageChange={setPage}
           />
         )}

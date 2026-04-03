@@ -78,10 +78,11 @@ export async function POST(
 
   const sellerId = order.code.product.sellerId;
 
+  const isFullRefund = !amount || amount >= order.amount;
   await prisma.$transaction([
     prisma.order.update({
       where: { id },
-      data: { status: "REFUNDED" },
+      data: isFullRefund ? { status: "REFUNDED" } : {},
     }),
     prisma.sellerAuditLog.create({
       data: {

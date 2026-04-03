@@ -58,6 +58,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // PG TID 중복 체크 (이중 주문 방지)
+    const existingOrder = await prisma.order.findUnique({ where: { pgTid: portonePaymentId } });
+    if (existingOrder) {
+      return NextResponse.json({ error: "이미 처리된 결제입니다." }, { status: 409 });
+    }
+
     // 코드 기본 유효성 확인 (트랜잭션 전 빠른 사전 검사)
     const codeCheck = await prisma.code.findUnique({
       where: { id: codeId },

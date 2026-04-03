@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { OrderStatus } from "@prisma/client";
+import { parsePagination, buildPaginationResponse } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -11,12 +12,13 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || undefined;
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
 
   const validStatuses = ["PAID", "SHIPPING", "DELIVERED", "SETTLED", "REFUNDED"];
   const where = status && validStatuses.includes(status) ? { status: status as OrderStatus } : {};
 
-  const [orders, total] = await Promise.all([
+  const { page, limit, skip } = parsePagination(searchParams);
+
+  const [data, total] = await Promise.all([
     prisma.order.findMany({
       where,
       include: {
@@ -32,11 +34,11 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 50,
-      skip: (page - 1) * 50,
+      skip,
+      take: limit,
     }),
     prisma.order.count({ where }),
   ]);
 
-  return NextResponse.json({ orders, total });
+  return NextResponse.json(buildPaginationResponse(data, total, page, limit));
 }
