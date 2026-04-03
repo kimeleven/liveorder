@@ -1,9 +1,9 @@
 # QA Report - 2026-04-03
 
 > QA Engineer: Claude Sonnet 4.6
-> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 d939b28 기준)
+> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 012ec5a 기준)
 > 검토 방법: 소스 코드 직접 열람 + 기획서/PLAN/TASKS 대조
-> 업데이트: 2026-04-03 (Task 31 완료 확인, Task 32/33 미구현 코드 직접 검증)
+> 업데이트: 2026-04-03 (Task 32 완료 확인 — QuantitySelector UX + CSV 상한, Task 33 완료 확인 — 청약확인 UI + 청약철회 API)
 
 ---
 
@@ -25,7 +25,7 @@
 - [SELLER 코드 토글]: `app/api/seller/codes/[id]/toggle/route.ts` — 셀러 소유 확인 후 isActive 토글 정상
 - [SELLER 주문 목록]: `app/seller/orders/page.tsx` + `app/api/seller/orders/route.ts` — 페이지네이션, **상태 필터(Task 31 완료)**, Skeleton 로딩(Task 30 완료), 에러 배너(Task 30 완료) 정상
 - [SELLER 운송장 등록]: `app/api/seller/orders/[id]/tracking/route.ts` — 셀러 소유 확인, SHIPPING 상태 전환, 운송장/택배사 저장 정상
-- [SELLER CSV 다운로드]: `app/api/seller/orders/export/route.ts` — UTF-8 BOM 포함, 전체 주문 내보내기 정상 (상한 제한 미적용 → Task 32 대상)
+- [SELLER CSV 다운로드]: `app/api/seller/orders/export/route.ts` — UTF-8 BOM 포함, take:10000 상한 적용(Task 32 완료) 정상
 - [SELLER 정산 목록]: `app/api/seller/settlements/route.ts` — 셀러별 정산 목록 조회 정상
 - [SELLER 정산 상세]: `SettlementDetailDrawer.tsx` — fetch 실패 시 에러 메시지 표시 정상
 - [SELLER 대시보드]: `app/seller/dashboard/page.tsx` — 통계 카드, 7일 매출 recharts 라인차트(P3-3), 최근 주문 5건, 미인증 배너/재발송 버튼, 승인 대기 배너 정상. 에러 처리(Task 30 완료) 정상
@@ -50,10 +50,6 @@
 
 ### 미해결 (잔존)
 
-- [priority: LOW] [QuantitySelector maxQty 99 하드코딩]: `components/buyer/cards/QuantitySelector.tsx:17` — `remainingQty`가 null(무제한 코드)이면 `maxQty`를 99로 제한. 무제한 코드임에도 최대 99개만 선택 가능. → Task 32 대상. **코드 직접 확인: `const maxQty = (data.remainingQty as number | null) ?? 99;`**
-
-- [priority: LOW] [CSV export 무제한 전량 조회]: `app/api/seller/orders/export/route.ts:11` — `take` 제한 없이 전체 조회. 주문 수만 건 이상 시 메모리/응답 타임아웃 가능. → Task 32 대상. **코드 직접 확인: `prisma.order.findMany({...})` — take 없음**
-
 - [priority: LOW] [ADMIN_EMAIL 환경변수 폴백 도메인]: `lib/email.ts:21` — `ADMIN_EMAIL` 미설정 시 `admin@liveorder.app`으로 폴백. 해당 도메인 수신 설정 없으면 관리자 신규 가입 알림 전체 유실 가능
 
 ### 해결 완료 이력
@@ -69,6 +65,8 @@
 - ~~[MED] 이메일 인증 토큰 만료 미검증~~ ✅ commit 1ee50ab (Task 29)
 - ~~[LOW] seller/orders isLoading 상태 없음~~ ✅ commit 9ffc548 (Task 30)
 - ~~[LOW] seller/dashboard fetch 에러 무시~~ ✅ commit 9ffc548 (Task 30)
+- ~~[LOW] QuantitySelector maxQty 99 하드코딩~~ ✅ commit 87052f1 (Task 32) — 999로 완화 + "(무제한)" 레이블
+- ~~[LOW] CSV export 무제한 전량 조회~~ ✅ commit 87052f1 (Task 32) — take:10000 상한 추가
 
 ---
 
@@ -76,9 +74,9 @@
 
 ### 법적 의무 (배포 전 필수)
 
-- [**HIGH**] [청약확인 UI — 전자상거래법 제13조]: `app/(buyer)/chat/page.tsx` — complete 단계에 청약확인 박스 없음. **코드 직접 확인: chat/page.tsx에 order-confirmation 타입 메시지 없음**. → Task 33 대상
-- [**HIGH**] [청약철회 신청 API]: `app/api/orders/[id]/withdraw/route.ts` — 파일 자체 미존재. 결제 후 7일 이내 철회 신청 API 미구현. → Task 33 대상
-- [**HIGH**] [청약철회 버튼 — lookup 페이지]: `app/(buyer)/lookup/page.tsx` — 주문 조회 결과에 청약철회 버튼 없음. **코드 직접 확인: PAID 상태 + 7일 이내 조건부 버튼 없음**. → Task 33 대상
+~~- [**HIGH**] [청약확인 UI — 전자상거래법 제13조]~~ ✅ commit 012ec5a (Task 33) — `OrderConfirmation.tsx` 청약확인 박스 추가
+~~- [**HIGH**] [청약철회 신청 API]~~ ✅ commit 012ec5a (Task 33) — `app/api/orders/[id]/withdraw/route.ts` 신규 구현 (PAID+7일 검증, 관리자 이메일 알림)
+~~- [**HIGH**] [청약철회 버튼 — lookup 페이지]~~ ✅ commit 012ec5a (Task 33) — `lookup/page.tsx` PAID + 7일 이내 조건부 버튼 추가
 
 ### Phase 3 범위 외 (기획서 기준)
 
@@ -101,19 +99,19 @@
 
 ### 즉시 수정 (배포 전 블로커)
 
-1. **Task 33 우선 완료 (법적 의무)**: 전자상거래법 제13조 위반. 청약확인 UI + 청약철회 API 3개 항목 모두 구현 필요. 배포 전 반드시 완료.
+~~1. **Task 33 우선 완료 (법적 의무)**~~ ✅ commit 012ec5a (Task 33) — 배포 블로커 해제됨.
+
+**현재 배포 블로커 없음. Task 14 (Vercel 배포) 진행 가능.**
 
 ### 단기 수정 권장
 
-2. **Task 32 완료**: QuantitySelector 99 → 999 + "(무제한)" 레이블, CSV export take:10000 상한 추가. LOW 우선순위이나 UX 개선 필요.
-3. **ADMIN_EMAIL 환경변수 명시화**: Vercel 배포 체크리스트에 `ADMIN_EMAIL` 추가. 미설정 시 관리자 알림 유실 위험.
-4. **rate limiting 지속성 개선**: `app/api/buyer/data-deletion/route.ts`의 in-memory Map은 Vercel 서버리스 cold start 시 초기화됨. Vercel KV 도입 검토 권장 (현재는 단순 스크립트 악용 방지 수준으로 MVP 운영 가능).
-
+1. **ADMIN_EMAIL 환경변수 명시화**: Vercel 배포 체크리스트에 `ADMIN_EMAIL` 추가. 미설정 시 관리자 알림 유실 위험.
+2. **rate limiting 지속성 개선**: `app/api/buyer/data-deletion/route.ts`의 in-memory Map은 Vercel 서버리스 cold start 시 초기화됨. Vercel KV 도입 검토 권장 (현재는 단순 스크립트 악용 방지 수준으로 MVP 운영 가능).
 ### 장기 개선 권장
 
-5. **CSV export 스트리밍**: 대용량 주문 처리를 위한 스트리밍 응답 전환. 10,000건 상한이 단기 임시 대책.
-6. **사업자등록증 이미지 업로드**: Vercel Blob 인프라 활용하여 회원가입 폼에 추가. 셀러 신뢰도 검증에 필요.
-7. **이상 거래 모니터링**: 동일 IP 다수 주문 감지. 코드 검증 API에 IP 기반 rate limiting 추가 검토.
+3. **CSV export 스트리밍**: 대용량 주문 처리를 위한 스트리밍 응답 전환. 10,000건 상한이 단기 임시 대책.
+4. **사업자등록증 이미지 업로드**: Vercel Blob 인프라 활용하여 회원가입 폼에 추가. 셀러 신뢰도 검증에 필요. → Task 34 대상
+5. **이상 거래 모니터링**: 동일 IP 다수 주문 감지. 코드 검증 API에 IP 기반 rate limiting 추가 검토.
 
 ---
 
@@ -147,12 +145,12 @@
 
 | 구분 | 건수 | 변동 |
 |------|------|------|
-| 정상 동작 확인 | 34건 | +2 (Task 31 완료 항목 반영) |
+| 정상 동작 확인 | 36건 | +2 (Task 32/33 완료 항목 반영) |
 | 버그/이슈 — HIGH | 0건 | 유지 |
 | 버그/이슈 — MED (미해결) | 0건 | 유지 |
-| 버그/이슈 — LOW (미해결) | 3건 | 유지 (Task 32 대상 2건 + ADMIN_EMAIL 1건) |
-| 법적 의무 미구현 (HIGH) | 3건 | 신규 — Task 33 대상 |
+| 버그/이슈 — LOW (미해결) | 1건 | -2 (Task 32 완료, ADMIN_EMAIL 1건 잔존) |
+| 법적 의무 미구현 (HIGH) | 0건 | -3 (Task 33 완료) |
 | 미구현 기능 (기획서 기준, Phase 3 외) | 12건 | - |
-| 권고사항 | 7건 | 정리됨 (-9, 완료 항목 제거) |
+| 권고사항 | 5건 | 정리됨 |
 
-**전반적 평가 (2026-04-03 최신):** Task 31 완료 코드 직접 검증 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 전 단계 정상 동작. HIGH/MED 버그 전부 수정됨. **Task 33 청약확인/청약철회(전자상거래법 제13조)가 유일한 배포 블로커.** Task 32(LOW) 완료 후 Task 33 즉시 착수 필요.
+**전반적 평가 (2026-04-03 최신):** Task 32/33 완료 검증. 핵심 플로우(코드 입력→결제→주문→배송→정산) 전 단계 정상 동작. HIGH/MED 버그 + 법적 의무(전자상거래법) 전부 해결. **배포 블로커 없음 — Task 14 (Vercel 배포) 진행 가능.** Task 34 (사업자등록증 이미지 업로드) 착수 권장.

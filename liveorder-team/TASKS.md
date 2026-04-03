@@ -1,12 +1,70 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Dev1 — Task 32, 33 완료)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 32/33 완료 반영, Task 34 착수)
 
 ---
 
-## ✅ Dev1 현재 할당 — **Task 32, 33 완료**
+## 🔧 Dev1 현재 할당 — **Task 34 착수**
 
-> **완료:** Task 21~33 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅
+> **완료:** Task 21~33 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅ · 법적 의무(청약확인/청약철회) ✅
+> **배포 블로커 없음** — Task 14 (Vercel 수동 배포) 진행 가능
+
+---
+
+### 🔧 Task 34: 사업자등록증 이미지 업로드 (셀러 회원가입 필수)
+
+**우선순위:** MED (기획서 3.1.1절 회원가입 필수 요건)
+**상태:** 🔧 진행 중
+
+**배경:** 셀러 회원가입 시 사업자등록증 이미지를 첨부해야 관리자가 셀러를 신뢰할 수 있음. 현재는 사업자번호 텍스트만 수집. Vercel Blob 인프라는 상품 이미지에서 이미 구축됨.
+
+#### Step 1: DB 스키마 — `prisma/schema.prisma`
+
+```prisma
+model Seller {
+  // 기존 필드들 ...
+  bizRegImageUrl  String?  // 사업자등록증 이미지 URL (Vercel Blob)
+}
+```
+
+```bash
+npx prisma migrate dev --name add_biz_reg_image
+```
+
+#### Step 2: 이미지 업로드 API — `app/api/seller/upload-biz-reg/route.ts`
+
+상품 이미지 업로드(`app/api/seller/upload/route.ts`) 패턴 동일하게 적용:
+- Vercel Blob `put()` 사용
+- 파일 크기 5MB 제한
+- `image/*` MIME 타입만 허용
+- 인증: NextAuth 세션 확인 (PENDING/APPROVED 셀러 모두 허용 — 회원가입 직후 업로드 필요)
+
+#### Step 3: 회원가입 폼 — `app/(seller)/register/page.tsx`
+
+- 파일 업로드 input 추가 (`accept="image/*"`)
+- 업로드 미리보기 (이미지 썸네일)
+- 필수 항목으로 처리 — `bizRegImageUrl` 없으면 폼 제출 차단
+- 업로드 후 URL을 register API 요청에 포함
+
+#### Step 4: 셀러 등록 API 수정 — `app/api/sellers/register/route.ts`
+
+```typescript
+// body에 bizRegImageUrl 추가 수신
+const { ..., bizRegImageUrl } = await req.json();
+// Seller 생성 시 포함
+await prisma.seller.create({
+  data: { ..., bizRegImageUrl }
+});
+```
+
+#### Step 5: 관리자 셀러 목록 — `app/admin/sellers/page.tsx` (또는 해당 상세 페이지)
+
+- 셀러 상세에서 사업자등록증 이미지 미리보기 링크/이미지 추가
+- 관리자가 승인 전 이미지 확인 가능하도록
+
+**커밋:** `feat: 사업자등록증 이미지 업로드 — 회원가입 필수 첨부 (Task 34)`
+
+---
 
 ### ✅ Task 32 완료 (2026-04-03, commit 87052f1)
 - `QuantitySelector.tsx` — remainingQty null → maxQty 999, "(무제한)" 레이블 표시
@@ -132,7 +190,7 @@ if (statusFilter) params.set('status', statusFilter);
 ### Task 32: LOW 버그 번들 — QuantitySelector UX + CSV export 안전장치
 
 **우선순위:** LOW — Task 31 완료 후
-**상태:** 📋 대기
+**상태:** ✅ 완료 (2026-04-03, commit 87052f1)
 
 #### Step 1: `components/buyer/cards/QuantitySelector.tsx` — 무제한 수량 UX 개선
 
@@ -175,7 +233,7 @@ const orders = await prisma.order.findMany({
 ### Task 33: 청약확인 UI + 청약철회 신청 (전자상거래법 대응)
 
 **우선순위:** HIGH (법적 의무 — 전자상거래법 제13조)
-**상태:** 📋 대기 — Task 32 완료 후
+**상태:** ✅ 완료 (2026-04-03, commit 012ec5a)
 
 **배경:** 현재 구매자에게 주문 완료 후 청약확인이 전혀 없음. 비회원 구매자라 이메일 발송 불가이므로 화면 내 고지 방식으로 대응.
 

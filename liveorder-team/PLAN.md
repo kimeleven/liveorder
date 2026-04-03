@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 31 완료 반영, Task 32/33 착수 순서 확정)
-> 현재 단계: **Phase 3 마무리 — Task 32 (LOW 버그 번들) 진행 중, 이후 Task 33 (청약확인 법적 의무 HIGH)**
-> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH/MED QA 버그 모두 해결. Task 31 완료 (data-deletion rate limiting + seller/orders 상태 필터 — commit b57439d). Task 32 (QuantitySelector UX + CSV 10000건 상한) → Task 33 (청약확인 UI + 청약철회 API, 전자상거래법 의무). Task 14 (Vercel 배포) 병행.
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 32/33 완료 반영, Task 34 착수)
+> 현재 단계: **Phase 3 완료 — Task 34 (사업자등록증 이미지 업로드) 착수. Task 14 (Vercel 배포) 진행 가능**
+> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. Task 31~33 완료. 배포 블로커 없음. Task 32 완료 (QuantitySelector UX + CSV 10000건 상한 — commit 87052f1). Task 33 완료 (청약확인 UI + 청약철회 API, 전자상거래법 제13조 — commit 012ec5a). Task 34 (사업자등록증 이미지 업로드, 기획서 필수 요건) 착수.
 
 ---
 
