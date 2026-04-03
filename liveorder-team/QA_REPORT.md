@@ -1,9 +1,9 @@
 # QA Report - 2026-04-03
 
 > QA Engineer: Claude Sonnet 4.6
-> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 9b7adfe 기준)
+> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 ab7a56e 기준)
 > 검토 방법: 소스 코드 직접 열람 + 기획서/PLAN/TASKS 대조
-> 업데이트: 2026-04-03 (PM 조율 — Task 28/29/B-33 수정 사항 반영)
+> 업데이트: 2026-04-03 (PM 조율 — Task 30 완료 반영: seller/orders Skeleton, seller/dashboard 에러 처리)
 
 ---
 
@@ -70,9 +70,9 @@
 
 - [priority: MED] [seller/orders 상태 필터 없음]: `app/seller/orders/page.tsx` + `app/api/seller/orders/route.ts` — 주문 목록에 상태 필터 UI 없음. API도 status 필터 파라미터 미지원. 주문 수 증가 시 특정 상태(배송중 등) 확인 불편 → `app/api/seller/orders/route.ts`
 
-- [priority: LOW] [seller/orders — isLoading 상태 없음]: `app/seller/orders/page.tsx` — 데이터 fetch 중 로딩 표시 없음. admin/orders에는 Skeleton 로딩이 있으나(P3-0) seller/orders는 미적용, fetch 중 빈 목록 표시 → `app/seller/orders/page.tsx`
+- ~~[priority: LOW] [seller/orders — isLoading 상태 없음]~~ **✅ FIXED — commit 9ffc548 (Task 30)**
 
-- [priority: LOW] [seller/dashboard fetch 에러 무시]: `app/seller/dashboard/page.tsx:64` — `.catch(() => {})` 잔존. 대시보드 데이터 fetch 실패 시 사용자 피드백 없이 0 카드만 표시 → `app/seller/dashboard/page.tsx:64`
+- ~~[priority: LOW] [seller/dashboard fetch 에러 무시]~~ **✅ FIXED — commit 9ffc548 (Task 30)**
 
 - [priority: LOW] [QuantitySelector maxQty 99 하드코딩]: `components/buyer/cards/QuantitySelector.tsx:17` — `remainingQty`가 null(무제한 코드)이면 `maxQty`를 99로 제한. 무제한 코드여도 최대 99개만 선택 가능 → `components/buyer/cards/QuantitySelector.tsx:17`
 
@@ -80,7 +80,7 @@
 
 - [priority: LOW] [CSV export 무제한 전량 조회]: `app/api/seller/orders/export/route.ts:11` — `take` 제한 없이 전체 조회. 주문 수만 건 이상 시 메모리/응답 타임아웃 가능(B-14 인식됨) → `app/api/seller/orders/export/route.ts:11`
 
-- [priority: LOW] [NEXT_PUBLIC 환경변수 PLAN.md 누락]: `components/buyer/cards/PaymentSummary.tsx:18-19` — `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` 사용. PLAN.md 2.1절 환경변수 8개 목록에 두 변수가 누락됨. Vercel 배포 시 미설정 가능성 → `components/buyer/cards/PaymentSummary.tsx:18-19`
+- ~~[priority: LOW] [NEXT_PUBLIC 환경변수 PLAN.md 누락]~~ **✅ FIXED — commit 9ffc548 (Task 30, PLAN.md 2.1절에 `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_CHANNEL_KEY`, `ADMIN_EMAIL` 추가)**
 
 ---
 
@@ -168,9 +168,9 @@
 | 정상 동작 확인 | 34건 | - |
 | 버그/이슈 — HIGH | 0건 | -2 ✅ (모두 수정) |
 | 버그/이슈 — MED (미해결) | 2건 | -3 ✅ |
-| 버그/이슈 — LOW (미해결) | 6건 | -1 ✅ (B-32 수정) |
+| 버그/이슈 — LOW (미해결) | 3건 | -3 ✅ (Task 30 수정) |
 | PLAN.md 명시 미구현 | 0건 | -3 ✅ (모두 완료) |
 | 미구현 기능 (기획서 기준) | 17건 | - |
 | 권고사항 | 16건 | - |
 
-**전반적 평가 (2026-04-03 업데이트):** 모든 HIGH 버그 수정 완료. Task 28/29 완료. B-33 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 완전 동작. 잔여 MED 이슈(개인정보 삭제 API rate limiting, seller/orders 상태 필터)는 배포 후 단기 수정 권장. **배포 가능 상태.**
+**전반적 평가 (2026-04-03 업데이트):** 모든 HIGH 버그 수정 완료. Task 28/29/30 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 완전 동작. 잔여 MED 이슈(개인정보 삭제 API rate limiting, seller/orders 상태 필터) → Task 31 대상. LOW 3건(QuantitySelector 99 하드코딩, ADMIN_EMAIL 폴백 도메인, CSV export 무제한)은 배포 후 단기 수정 권장. **배포 가능 상태.**

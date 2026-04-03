@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 28~29 완료, B-33 완료, Task 30 착수)
-> 현재 단계: **Phase 3 마무리 — Task 30 (LOW 버그 번들) 진행 중**
-> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH QA 버그 모두 해결. Task 30: seller/orders isLoading + seller/dashboard 에러 처리 + PLAN.md env vars 업데이트. Task 14 (Vercel 배포) 병행.
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 30 완료, Task 31 착수)
+> 현재 단계: **Phase 3 마무리 — Task 31 (MED 버그 번들) 진행 중**
+> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH QA 버그 모두 해결. Task 30 완료 (seller/orders Skeleton + seller/dashboard 에러 + PLAN.md env vars). Task 31: data-deletion rate limiting + seller/orders 상태 필터. Task 14 (Vercel 배포) 병행.
 
 ---
 
@@ -512,8 +512,11 @@ return redirect(`${baseUrl}?result=success`);
 | seller/orders fetch 에러 무시 (B-29) | LOW | ✅ Task 28 완료 (1ddddfc) |
 | 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | ✅ Task 29 완료 (1ee50ab) |
 | terms/privacy 삭제 요청 링크 없음 (B-33) | MED | ✅ 완료 (9b7adfe) |
-| seller/orders isLoading Skeleton 없음 | LOW | 🟢 Task 30 진행 중 |
-| seller/dashboard fetch 에러 무시 | LOW | 🟢 Task 30 진행 중 |
+| seller/orders isLoading Skeleton 없음 | LOW | ✅ Task 30 완료 (9ffc548) |
+| seller/dashboard fetch 에러 무시 | LOW | ✅ Task 30 완료 (9ffc548) |
+| data-deletion API 인증 없음 (보안) | MED | 🟢 Task 31 진행 중 |
+| seller/orders 상태 필터 없음 | MED | 🟢 Task 31 진행 중 |
+| QuantitySelector maxQty 99 하드코딩 | LOW | 배포 후 개선 |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 

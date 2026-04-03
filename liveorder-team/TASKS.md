@@ -1,18 +1,125 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 29/B-33 완료 반영, Task 30 착수)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 30 완료 반영, Task 31 착수)
 
 ---
 
-## ✅ Dev1 현재 할당 — **Task 30: UX 품질 개선 + 환경변수 문서 업데이트 (완료)**
+## ✅ Dev1 현재 할당 — **Task 31: MED 버그 번들 — data-deletion 보안 + seller/orders 상태 필터**
 
-> **완료:** Task 21~29 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
-> **완료 (Task 29/B-33):** B-32 이메일 인증 토큰 만료 검증 + B-33 terms/privacy 삭제 요청 링크 추가 (2026-04-03)
+> **완료:** Task 21~30 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
 > **완료 (Task 30):** seller/orders Skeleton 로딩 + seller/dashboard 에러 배너 + PLAN.md env vars (2026-04-03)
 
 ---
 
 ## 📋 Phase 3 남은 작업 (순서대로)
+
+### Task 31: MED 버그 번들 — data-deletion 보안 강화 + seller/orders 상태 필터
+
+**우선순위:** MED
+**상태:** 🟢 진행 중 (2026-04-03 착수)
+
+#### Step 1: `app/api/buyer/data-deletion/route.ts` — Rate Limiting 추가
+
+현재 상태: 인증 없이 이름+전화번호만으로 타인 주문 개인정보 삭제 가능. 완전 공개 API.
+
+**최소 수정 (IP 기반 rate limiting):**
+
+```typescript
+// app/api/buyer/data-deletion/route.ts 상단에 추가
+import { headers } from 'next/headers';
+
+// IP 기반 간단한 rate limit (메모리, 서버리스에서는 Vercel KV 권장이지만 최소 구현으로 헤더 체크)
+// 실제 rate limiting: X-Forwarded-For IP per 1시간 5회 제한
+const RATE_LIMIT_MAP = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = RATE_LIMIT_MAP.get(ip);
+  if (!entry || entry.resetAt < now) {
+    RATE_LIMIT_MAP.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count++;
+  return true;
+}
+
+export async function POST(req: NextRequest) {
+  const headersList = await headers();
+  const ip = headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json({ error: '요청 한도를 초과했습니다. 1시간 후 다시 시도해 주세요.' }, { status: 429 });
+  }
+  // ... 기존 코드 유지
+}
+```
+
+**주의:** `RATE_LIMIT_MAP`은 서버리스 cold start 시 초기화됨. Vercel Edge 환경에서는 각 인스턴스별 메모리가 독립적. 완벽하진 않지만 단순 스크립트 악용은 방지.
+
+#### Step 2: `app/api/seller/orders/route.ts` — status 필터 파라미터 추가
+
+현재: `status` 필터 미지원. `page`/`limit`만 지원.
+
+```typescript
+// GET /api/seller/orders?page=1&limit=20&status=PAID
+export async function GET(req: NextRequest) {
+  // ... 기존 인증/sellerId 코드 유지 ...
+  const { page, limit, skip } = parsePagination(req);
+  const { searchParams } = new URL(req.url);
+  const statusParam = searchParams.get('status');
+
+  const validStatuses = ['PAID', 'SHIPPING', 'DELIVERED', 'REFUNDED'];
+  const statusFilter = statusParam && validStatuses.includes(statusParam)
+    ? { status: statusParam as OrderStatus }
+    : {};
+
+  const where = { code: { product: { sellerId } }, ...statusFilter };
+
+  const [data, total] = await prisma.$transaction([
+    prisma.order.findMany({
+      where,
+      include: { code: { include: { product: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.order.count({ where }),
+  ]);
+
+  return NextResponse.json(buildPaginationResponse(data, { page, limit, total }));
+}
+```
+
+#### Step 3: `app/seller/orders/page.tsx` — 상태 필터 드롭다운 추가
+
+```tsx
+// 기존 검색/필터 영역에 상태 필터 Select 추가
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const [statusFilter, setStatusFilter] = useState<string>('');
+
+// fetchOrders 파라미터에 status 추가:
+const params = new URLSearchParams({ page: String(page), limit: '20' });
+if (statusFilter) params.set('status', statusFilter);
+
+// UI:
+<Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}>
+  <SelectTrigger className="w-36">
+    <SelectValue placeholder="전체 상태" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="ALL">전체</SelectItem>
+    <SelectItem value="PAID">결제완료</SelectItem>
+    <SelectItem value="SHIPPING">배송중</SelectItem>
+    <SelectItem value="DELIVERED">배송완료</SelectItem>
+    <SelectItem value="REFUNDED">환불</SelectItem>
+  </SelectContent>
+</Select>
+```
+
+**커밋:** `fix: data-deletion rate limiting + seller/orders 상태 필터 (Task 31)`
+
+---
 
 ### Task 24: P3-3 셀러 대시보드 차트
 
@@ -485,6 +592,7 @@ data: {
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 30: seller/orders Skeleton 로딩 + seller/dashboard 에러 배너 + PLAN.md env vars (NEXT_PUBLIC 2개 + ADMIN_EMAIL) | 9ffc548 |
 | 2026-04-03 | B-33: terms/privacy 개인정보 삭제 요청 링크 추가 | 9b7adfe |
 | 2026-04-03 | Task 29: B-32 이메일 인증 토큰 만료 검증 (DB 스키마 + register/resend/verify + expired 페이지) | 1ee50ab |
 | 2026-04-03 | Task 28: B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique + 부분환불 상태 + 정산 DELIVERED 포함 | 1ddddfc |
