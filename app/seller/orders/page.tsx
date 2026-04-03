@@ -75,14 +75,17 @@ export default function OrdersPage() {
   const [trackingNo, setTrackingNo] = useState("");
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [statusFilter, setStatusFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function fetchOrders(currentPage = page) {
+  async function fetchOrders(currentPage = page, currentStatus = statusFilter) {
     setIsLoading(true);
     setError(null);
     try {
-      const r = await fetch(`/api/seller/orders?page=${currentPage}`);
+      const params = new URLSearchParams({ page: String(currentPage), limit: '20' });
+      if (currentStatus) params.set('status', currentStatus);
+      const r = await fetch(`/api/seller/orders?${params.toString()}`);
       const res = await r.json();
       if (res.data) {
         setOrders(res.data);
@@ -98,8 +101,9 @@ export default function OrdersPage() {
   }
 
   useEffect(() => {
-    fetchOrders(page);
-  }, [page]);
+    fetchOrders(page, statusFilter);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, statusFilter]);
 
   function openTrackingDialog(orderId: string) {
     setTrackingDialog({ open: true, orderId });
@@ -161,11 +165,31 @@ export default function OrdersPage() {
               주문 {total}건
             </p>
           </div>
-          {orders.length > 0 && (
-            <Button variant="outline" onClick={downloadExcel}>
-              <Download className="mr-2 h-4 w-4" /> 배송지 다운로드
-            </Button>
-          )}
+          <div className="flex items-center gap-3">
+            <Select
+              value={statusFilter || 'ALL'}
+              onValueChange={(v) => {
+                setStatusFilter(v === 'ALL' ? '' : v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="전체 상태" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">전체</SelectItem>
+                <SelectItem value="PAID">결제완료</SelectItem>
+                <SelectItem value="SHIPPING">배송중</SelectItem>
+                <SelectItem value="DELIVERED">배송완료</SelectItem>
+                <SelectItem value="REFUNDED">환불</SelectItem>
+              </SelectContent>
+            </Select>
+            {orders.length > 0 && (
+              <Button variant="outline" onClick={downloadExcel}>
+                <Download className="mr-2 h-4 w-4" /> 배송지 다운로드
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (

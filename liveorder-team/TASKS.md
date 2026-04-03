@@ -1,16 +1,12 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Planner 검증 — Task 31 미구현 확인, Task 32/33 추가)
+> 최종 업데이트: 2026-04-03 (Dev1 — Task 31 완료)
 
 ---
 
-## ✅ Dev1 현재 할당 — **Task 31: MED 버그 번들 — data-deletion 보안 + seller/orders 상태 필터**
+## ✅ Dev1 현재 할당 — **Task 32: LOW 버그 번들 — QuantitySelector UX + CSV export 안전장치**
 
-> **완료:** Task 21~30 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
-> **⚠️ Planner 코드 검증 (2026-04-03):** Task 31 Step 1~3 전부 미구현 확인. 즉시 착수 필요.
-> - `app/api/buyer/data-deletion/route.ts` — rate limiting 코드 없음 (공개 API 상태)
-> - `app/api/seller/orders/route.ts` — status 필터 파라미터 없음
-> - `app/seller/orders/page.tsx` — 상태 필터 Select UI 없음
+> **완료:** Task 21~31 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
 
 ---
 
@@ -19,7 +15,7 @@
 ### Task 31: MED 버그 번들 — data-deletion 보안 강화 + seller/orders 상태 필터
 
 **우선순위:** MED
-**상태:** 🟢 진행 중 (2026-04-03 착수)
+**상태:** ✅ 완료 (2026-04-03 Dev1)
 
 #### Step 1: `app/api/buyer/data-deletion/route.ts` — Rate Limiting 추가
 
