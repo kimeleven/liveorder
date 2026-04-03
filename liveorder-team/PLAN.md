@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 32/33 완료 반영, Task 34 착수)
-> 현재 단계: **Phase 3 완료 — Task 34 (사업자등록증 이미지 업로드) 착수. Task 14 (Vercel 배포) 진행 가능**
-> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. Task 31~33 완료. 배포 블로커 없음. Task 32 완료 (QuantitySelector UX + CSV 10000건 상한 — commit 87052f1). Task 33 완료 (청약확인 UI + 청약철회 API, 전자상거래법 제13조 — commit 012ec5a). Task 34 (사업자등록증 이미지 업로드, 기획서 필수 요건) 착수.
+> 최종 업데이트: 2026-04-03 (Planner — Task 33 완료 검증, Task 34 상세 스펙 수립)
+> 현재 단계: **Task 34 진행 중 — 사업자등록증 이미지 업로드 (기획서 3.1.1절 필수 요건)**
+> P3-0~P3-8 완료. Task 21~33 완료. B-28~B-33 전체 수정 완료. 배포 블로커 없음 (QA 확인). Task 34 착수 — DB 마이그레이션 + 업로드 API + 회원가입 폼 + 관리자 뷰 4단계.
 
 ---
 
@@ -614,6 +614,262 @@ export async function sendOrderConfirmation(params: {
 
 ---
 
+---
+
+### Task 34: 사업자등록증 이미지 업로드 (셀러 회원가입 필수)
+
+**우선순위:** MED (기획서 3.1.1절 회원가입 필수 요건)
+**상태:** 🔧 진행 중
+
+**배경:** 셀러 회원가입 시 사업자등록증 이미지를 첨부해야 관리자가 셀러를 신뢰하고 승인할 수 있음. 현재는 사업자번호 텍스트(String)만 수집. Vercel Blob 인프라는 `app/api/seller/products/upload/route.ts`에 이미 구축됨.
+
+**영향 파일 목록:**
+1. `prisma/schema.prisma` — Seller 모델에 `bizRegImageUrl` 필드 추가
+2. `app/api/seller/biz-reg-upload/route.ts` — 신규 업로드 API
+3. `app/seller/auth/register/page.tsx` — 업로드 UI + 폼 통합
+4. `app/api/sellers/register/route.ts` — `bizRegImageUrl` 수신 및 저장
+5. `app/api/admin/sellers/route.ts` — `bizRegImageUrl` select에 추가
+6. `app/admin/sellers/page.tsx` — 사업자등록증 이미지 미리보기 링크 추가
+
+---
+
+#### Step 1: DB 스키마 — `prisma/schema.prisma`
+
+`model Seller` 블록의 `tradeRegNo` 필드 바로 아래에 추가:
+
+```prisma
+// 현재 라인 38 근처 (tradeRegNo 아래):
+bizRegImageUrl String? @map("biz_reg_image_url") // 사업자등록증 이미지 (Vercel Blob)
+```
+
+마이그레이션 실행:
+```bash
+npx prisma migrate dev --name add_biz_reg_image
+```
+
+---
+
+#### Step 2: 업로드 API — `app/api/seller/biz-reg-upload/route.ts` (신규)
+
+`products/upload/route.ts` 패턴 동일 적용. **차이점:** PENDING 셀러도 허용 (회원가입 직후 업로드 필요하므로 status 체크 없음).
+
+```typescript
+import { put } from "@vercel/blob";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // PENDING/APPROVED 모두 허용 (회원가입 직후 사용)
+
+  const form = await req.formData();
+  const file = form.get("file") as File | null;
+  if (!file) {
+    return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
+  }
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+  if (!allowedTypes.includes(file.type)) {
+    return NextResponse.json(
+      { error: "JPG, PNG, WebP, GIF, PDF 파일만 업로드 가능합니다." },
+      { status: 400 }
+    );
+  }
+
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    return NextResponse.json({ error: "파일 크기는 5MB 이하여야 합니다." }, { status: 400 });
+  }
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const filename = `biz-reg/${session.user.id}/${Date.now()}.${ext}`;
+
+  const blob = await put(filename, file, { access: "public" });
+  return NextResponse.json({ url: blob.url });
+}
+```
+
+**주의:** 회원가입 전에는 세션이 없으므로 업로드는 폼 제출 전에 미리 처리. 회원가입 폼에서는 먼저 이미지를 업로드하여 URL을 얻은 다음, 그 URL을 register API에 포함해 전송.
+
+---
+
+#### Step 3: 회원가입 폼 — `app/seller/auth/register/page.tsx`
+
+**추가할 state:**
+```typescript
+const [bizRegImageUrl, setBizRegImageUrl] = useState<string>("");
+const [bizRegUploading, setBizRegUploading] = useState(false);
+const [bizRegFileName, setBizRegFileName] = useState<string>("");
+```
+
+**업로드 핸들러 추가:**
+```typescript
+async function handleBizRegUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setBizRegUploading(true);
+  setBizRegFileName(file.name);
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/seller/biz-reg-upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      setError(err.error ?? "업로드 실패");
+      return;
+    }
+    const { url } = await res.json();
+    setBizRegImageUrl(url);
+  } catch {
+    setError("파일 업로드 중 오류가 발생했습니다.");
+  } finally {
+    setBizRegUploading(false);
+  }
+}
+```
+
+**폼 제출 시 검증 추가 (handleSubmit 내 setLoading 직후):**
+```typescript
+if (!bizRegImageUrl) {
+  setError("사업자등록증 이미지를 업로드해 주세요.");
+  setLoading(false);
+  return;
+}
+```
+
+**data 객체에 bizRegImageUrl 포함:**
+```typescript
+const data = {
+  // ... 기존 필드들
+  bizRegImageUrl,
+};
+```
+
+**폼 JSX — `bankAccount` 입력 아래에 추가 (비밀번호 입력 위):**
+```tsx
+<div className="space-y-2">
+  <Label htmlFor="bizRegImage">
+    사업자등록증 *
+    <span className="text-xs text-muted-foreground ml-1">(JPG/PNG/PDF, 5MB 이하)</span>
+  </Label>
+  <div className="flex items-center gap-2">
+    <Input
+      id="bizRegImage"
+      type="file"
+      accept="image/*,application/pdf"
+      onChange={handleBizRegUpload}
+      disabled={bizRegUploading}
+      className="text-sm"
+    />
+    {bizRegUploading && (
+      <span className="text-xs text-muted-foreground">업로드 중...</span>
+    )}
+  </div>
+  {bizRegImageUrl && (
+    <p className="text-xs text-green-600">
+      ✓ 업로드 완료: {bizRegFileName}
+    </p>
+  )}
+</div>
+```
+
+---
+
+#### Step 4: 셀러 등록 API 수정 — `app/api/sellers/register/route.ts`
+
+destructuring에 `bizRegImageUrl` 추가:
+```typescript
+const {
+  email, password, businessNo, name, repName, address, phone,
+  bankAccount, bankName, tradeRegNo,
+  bizRegImageUrl, // 추가
+} = body;
+```
+
+필수 검증에 `bizRegImageUrl` 추가:
+```typescript
+if (!email || !password || !businessNo || !name || !repName || !address || !phone || !bizRegImageUrl) {
+  return NextResponse.json(
+    { error: "필수 항목을 모두 입력해주세요. (사업자등록증 이미지 포함)" },
+    { status: 400 }
+  );
+}
+```
+
+`prisma.seller.create` data에 추가:
+```typescript
+await prisma.seller.create({
+  data: {
+    // ... 기존 필드들
+    bizRegImageUrl,
+  },
+});
+```
+
+---
+
+#### Step 5: 관리자 셀러 목록 API — `app/api/admin/sellers/route.ts`
+
+`select` 객체에 `bizRegImageUrl: true` 추가:
+```typescript
+select: {
+  id: true,
+  email: true,
+  name: true,
+  repName: true,
+  businessNo: true,
+  phone: true,
+  status: true,
+  createdAt: true,
+  bizRegImageUrl: true, // 추가
+},
+```
+
+---
+
+#### Step 6: 관리자 셀러 목록 UI — `app/admin/sellers/page.tsx`
+
+`SellerItem` 인터페이스에 추가:
+```typescript
+interface SellerItem {
+  // ... 기존
+  bizRegImageUrl?: string | null; // 추가
+}
+```
+
+테이블 헤더에 열 추가:
+```tsx
+<TableHead>사업자등록증</TableHead>
+```
+
+테이블 바디 각 행에 셀 추가 (상태 셀 앞):
+```tsx
+<TableCell>
+  {seller.bizRegImageUrl ? (
+    <a
+      href={seller.bizRegImageUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs text-blue-600 underline"
+    >
+      보기
+    </a>
+  ) : (
+    <span className="text-xs text-muted-foreground">미첨부</span>
+  )}
+</TableCell>
+```
+
+**커밋:** `feat: 사업자등록증 이미지 업로드 — 회원가입 필수 첨부 (Task 34)`
+
+---
+
 ## 4. 기술 부채 잔여 목록
 
 | 항목 | 우선순위 | 계획 |
@@ -634,12 +890,13 @@ export async function sendOrderConfirmation(params: {
 | terms/privacy 삭제 요청 링크 없음 (B-33) | MED | ✅ 완료 (9b7adfe) |
 | seller/orders isLoading Skeleton 없음 | LOW | ✅ Task 30 완료 (9ffc548) |
 | seller/dashboard fetch 에러 무시 | LOW | ✅ Task 30 완료 (9ffc548) |
-| data-deletion API 인증 없음 (보안) | MED | 🔴 Task 31 미구현 (즉시 필요) |
-| seller/orders 상태 필터 없음 | MED | 🔴 Task 31 미구현 (즉시 필요) |
-| QuantitySelector maxQty 99 하드코딩 | LOW | Task 32 예정 |
-| CSV 주문 내보내기 대용량 처리 (B-14) | LOW | Task 32 예정 |
-| 주문 완료 청약확인 발송 (법적 의무) | HIGH | Task 33 예정 |
-| 청약철회 신청 버튼 (7일 이내) | MED | Task 33 예정 |
+| data-deletion API 인증 없음 (보안) | MED | ✅ Task 31 완료 (b57439d) |
+| seller/orders 상태 필터 없음 | MED | ✅ Task 31 완료 (b57439d) |
+| QuantitySelector maxQty 99 하드코딩 | LOW | ✅ Task 32 완료 (87052f1) |
+| CSV 주문 내보내기 대용량 처리 (B-14) | LOW | ✅ Task 32 완료 (87052f1) |
+| 주문 완료 청약확인 UI (법적 의무) | HIGH | ✅ Task 33 완료 (012ec5a) |
+| 청약철회 신청 버튼+API (7일 이내) | HIGH | ✅ Task 33 완료 (012ec5a) |
+| 사업자등록증 이미지 업로드 | MED | 🔧 Task 34 진행 중 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 
 ---

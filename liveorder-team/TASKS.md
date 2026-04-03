@@ -1,10 +1,10 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 32/33 완료 반영, Task 34 착수)
+> 최종 업데이트: 2026-04-03 (Planner — Task 33 완료 검증, Task 34 상세 스펙 수립)
 
 ---
 
-## 🔧 Dev1 현재 할당 — **Task 34 착수**
+## 🔧 Dev1 현재 할당 — **Task 34 진행 중**
 
 > **완료:** Task 21~33 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅ · 법적 의무(청약확인/청약철회) ✅
 > **배포 블로커 없음** — Task 14 (Vercel 수동 배포) 진행 가능
@@ -16,51 +16,190 @@
 **우선순위:** MED (기획서 3.1.1절 회원가입 필수 요건)
 **상태:** 🔧 진행 중
 
-**배경:** 셀러 회원가입 시 사업자등록증 이미지를 첨부해야 관리자가 셀러를 신뢰할 수 있음. 현재는 사업자번호 텍스트만 수집. Vercel Blob 인프라는 상품 이미지에서 이미 구축됨.
+**배경:** 셀러 회원가입 시 사업자등록증 이미지를 첨부해야 관리자가 셀러를 신뢰하고 승인할 수 있음.
+현재 상태: 사업자번호 텍스트(String)만 수집. DB 필드 없음. 업로드 API 없음. 폼 없음. Vercel Blob은 `app/api/seller/products/upload/route.ts`에 구축됨.
 
-#### Step 1: DB 스키마 — `prisma/schema.prisma`
+**수정 파일 6개 (순서대로 진행):**
 
+#### Step 1: `prisma/schema.prisma` 수정
+
+`model Seller` 블록의 `tradeRegNo` 필드(line 38) 바로 아래에 추가:
 ```prisma
-model Seller {
-  // 기존 필드들 ...
-  bizRegImageUrl  String?  // 사업자등록증 이미지 URL (Vercel Blob)
-}
+bizRegImageUrl String? @map("biz_reg_image_url") // 사업자등록증 이미지 (Vercel Blob)
 ```
 
+마이그레이션 실행:
 ```bash
 npx prisma migrate dev --name add_biz_reg_image
 ```
 
-#### Step 2: 이미지 업로드 API — `app/api/seller/upload-biz-reg/route.ts`
+#### Step 2: `app/api/seller/biz-reg-upload/route.ts` 신규 생성
 
-상품 이미지 업로드(`app/api/seller/upload/route.ts`) 패턴 동일하게 적용:
-- Vercel Blob `put()` 사용
-- 파일 크기 5MB 제한
-- `image/*` MIME 타입만 허용
-- 인증: NextAuth 세션 확인 (PENDING/APPROVED 셀러 모두 허용 — 회원가입 직후 업로드 필요)
+`app/api/seller/products/upload/route.ts` 패턴 복사 후 아래 변경:
+- `filename` 경로: `biz-reg/${session.user.id}/${Date.now()}.${ext}`
+- `allowedTypes`: `image/jpeg, image/png, image/webp, image/gif, application/pdf` (PDF 추가)
+- 에러 메시지: `"JPG, PNG, WebP, GIF, PDF 파일만 업로드 가능합니다."`
+- status 체크 없음 — PENDING 셀러도 업로드 가능해야 함 (회원가입 직후 업로드)
 
-#### Step 3: 회원가입 폼 — `app/(seller)/register/page.tsx`
+#### Step 3: `app/seller/auth/register/page.tsx` 수정
 
-- 파일 업로드 input 추가 (`accept="image/*"`)
-- 업로드 미리보기 (이미지 썸네일)
-- 필수 항목으로 처리 — `bizRegImageUrl` 없으면 폼 제출 차단
-- 업로드 후 URL을 register API 요청에 포함
-
-#### Step 4: 셀러 등록 API 수정 — `app/api/sellers/register/route.ts`
-
+**추가 state (useState 선언부에):**
 ```typescript
-// body에 bizRegImageUrl 추가 수신
-const { ..., bizRegImageUrl } = await req.json();
-// Seller 생성 시 포함
+const [bizRegImageUrl, setBizRegImageUrl] = useState<string>("");
+const [bizRegUploading, setBizRegUploading] = useState(false);
+const [bizRegFileName, setBizRegFileName] = useState<string>("");
+```
+
+**업로드 핸들러 추가 (handleSubmit 위에):**
+```typescript
+async function handleBizRegUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  setBizRegUploading(true);
+  setBizRegFileName(file.name);
+  setError("");
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/seller/biz-reg-upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json();
+      setError(err.error ?? "업로드 실패");
+      return;
+    }
+    const { url } = await res.json();
+    setBizRegImageUrl(url);
+  } catch {
+    setError("파일 업로드 중 오류가 발생했습니다.");
+  } finally {
+    setBizRegUploading(false);
+  }
+}
+```
+
+**handleSubmit 내 `setLoading(true)` 직후에 추가:**
+```typescript
+if (!bizRegImageUrl) {
+  setError("사업자등록증 이미지를 업로드해 주세요.");
+  setLoading(false);
+  return;
+}
+```
+
+**data 객체에 `bizRegImageUrl` 추가:**
+```typescript
+const data = {
+  email: ..., password: ..., /* 기존 필드들 */,
+  bizRegImageUrl,  // 추가
+};
+```
+
+**JSX: bankAccount 입력 블록 아래, 비밀번호 입력 블록 위에 추가:**
+```tsx
+<div className="space-y-2">
+  <Label htmlFor="bizRegImage">
+    사업자등록증 *
+    <span className="ml-1 text-xs text-muted-foreground">(JPG/PNG/PDF, 5MB 이하)</span>
+  </Label>
+  <div className="flex items-center gap-2">
+    <Input
+      id="bizRegImage"
+      type="file"
+      accept="image/*,application/pdf"
+      onChange={handleBizRegUpload}
+      disabled={bizRegUploading}
+      className="text-sm"
+    />
+    {bizRegUploading && (
+      <span className="text-xs text-muted-foreground">업로드 중...</span>
+    )}
+  </div>
+  {bizRegImageUrl && (
+    <p className="text-xs text-green-600">✓ 업로드 완료: {bizRegFileName}</p>
+  )}
+</div>
+```
+
+#### Step 4: `app/api/sellers/register/route.ts` 수정
+
+destructuring에 `bizRegImageUrl` 추가:
+```typescript
+const {
+  email, password, businessNo, name, repName, address, phone,
+  bankAccount, bankName, tradeRegNo,
+  bizRegImageUrl,  // 추가
+} = body;
+```
+
+필수 검증 조건에 `!bizRegImageUrl` 추가:
+```typescript
+if (!email || !password || !businessNo || !name || !repName || !address || !phone || !bizRegImageUrl) {
+  return NextResponse.json(
+    { error: "필수 항목을 모두 입력해주세요. (사업자등록증 이미지 포함)" },
+    { status: 400 }
+  );
+}
+```
+
+`prisma.seller.create` data에 `bizRegImageUrl` 추가:
+```typescript
 await prisma.seller.create({
-  data: { ..., bizRegImageUrl }
+  data: {
+    email, password: hashedPassword, businessNo, name, repName, address, phone,
+    bankAccount, bankName, tradeRegNo,
+    bizRegImageUrl,  // 추가
+    status: "PENDING",
+    emailVerified: false,
+    emailVerifyToken,
+    emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  },
 });
 ```
 
-#### Step 5: 관리자 셀러 목록 — `app/admin/sellers/page.tsx` (또는 해당 상세 페이지)
+#### Step 5: `app/api/admin/sellers/route.ts` 수정
 
-- 셀러 상세에서 사업자등록증 이미지 미리보기 링크/이미지 추가
-- 관리자가 승인 전 이미지 확인 가능하도록
+`select` 객체에 `bizRegImageUrl: true` 추가:
+```typescript
+select: {
+  id: true, email: true, name: true, repName: true,
+  businessNo: true, phone: true, status: true, createdAt: true,
+  bizRegImageUrl: true,  // 추가
+},
+```
+
+#### Step 6: `app/admin/sellers/page.tsx` 수정
+
+`SellerItem` 인터페이스에 필드 추가:
+```typescript
+interface SellerItem {
+  id: string; email: string; name: string; repName: string;
+  businessNo: string; phone: string; status: string; createdAt: string;
+  bizRegImageUrl?: string | null;  // 추가
+}
+```
+
+`<TableHead>상태</TableHead>` 앞에 열 헤더 추가:
+```tsx
+<TableHead>사업자등록증</TableHead>
+```
+
+테이블 바디 각 행에서 상태 셀 앞에 셀 추가:
+```tsx
+<TableCell>
+  {seller.bizRegImageUrl ? (
+    <a
+      href={seller.bizRegImageUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs text-blue-600 underline"
+    >
+      보기
+    </a>
+  ) : (
+    <span className="text-xs text-muted-foreground">미첨부</span>
+  )}
+</TableCell>
+```
 
 **커밋:** `feat: 사업자등록증 이미지 업로드 — 회원가입 필수 첨부 (Task 34)`
 
