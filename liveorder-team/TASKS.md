@@ -1,13 +1,16 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 30 완료 반영, Task 31 착수)
+> 최종 업데이트: 2026-04-03 (Planner 검증 — Task 31 미구현 확인, Task 32/33 추가)
 
 ---
 
 ## ✅ Dev1 현재 할당 — **Task 31: MED 버그 번들 — data-deletion 보안 + seller/orders 상태 필터**
 
 > **완료:** Task 21~30 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
-> **완료 (Task 30):** seller/orders Skeleton 로딩 + seller/dashboard 에러 배너 + PLAN.md env vars (2026-04-03)
+> **⚠️ Planner 코드 검증 (2026-04-03):** Task 31 Step 1~3 전부 미구현 확인. 즉시 착수 필요.
+> - `app/api/buyer/data-deletion/route.ts` — rate limiting 코드 없음 (공개 API 상태)
+> - `app/api/seller/orders/route.ts` — status 필터 파라미터 없음
+> - `app/seller/orders/page.tsx` — 상태 필터 Select UI 없음
 
 ---
 
@@ -118,6 +121,138 @@ if (statusFilter) params.set('status', statusFilter);
 ```
 
 **커밋:** `fix: data-deletion rate limiting + seller/orders 상태 필터 (Task 31)`
+
+---
+
+### Task 32: LOW 버그 번들 — QuantitySelector UX + CSV export 안전장치
+
+**우선순위:** LOW — Task 31 완료 후
+**상태:** 📋 대기
+
+#### Step 1: `components/buyer/cards/QuantitySelector.tsx` — 무제한 수량 UX 개선
+
+**파일:** `components/buyer/cards/QuantitySelector.tsx`
+
+`remainingQty`가 `null`(무제한)이면 99 하드코딩 → 999로 완화 + "(무제한)" 표시 추가:
+
+```typescript
+// line 17 근처:
+// 현재: const maxQty = remainingQty ?? 99;
+const maxQty = remainingQty ?? 999;
+```
+
+```tsx
+// 수량 표시 근처:
+{remainingQty === null && (
+  <span className="text-xs text-muted-foreground ml-1">(무제한)</span>
+)}
+```
+
+#### Step 2: `app/api/seller/orders/export/route.ts` — take 상한 추가
+
+**파일:** `app/api/seller/orders/export/route.ts`
+
+`prisma.order.findMany` 호출에 `take: 10000` 추가 (현재 무제한):
+
+```typescript
+const orders = await prisma.order.findMany({
+  where,
+  include: { code: { include: { product: true } } },
+  orderBy: { createdAt: 'desc' },
+  take: 10000, // 대용량 보호 — 10000건 이상 시 스트리밍 전환 검토
+});
+```
+
+**커밋:** `fix: QuantitySelector 무제한 코드 UX + CSV export 10000건 상한 (Task 32)`
+
+---
+
+### Task 33: 청약확인 UI + 청약철회 신청 (전자상거래법 대응)
+
+**우선순위:** HIGH (법적 의무 — 전자상거래법 제13조)
+**상태:** 📋 대기 — Task 32 완료 후
+
+**배경:** 현재 구매자에게 주문 완료 후 청약확인이 전혀 없음. 비회원 구매자라 이메일 발송 불가이므로 화면 내 고지 방식으로 대응.
+
+#### Step 1: `app/(buyer)/chat/page.tsx` — 주문 완료 화면 청약확인 고지
+
+주문 완료(`complete` 단계) UI에서 orderId/productName/quantity/amount를 표시할 청약확인 박스 추가:
+
+```tsx
+// 완료 화면 내 기존 콘텐츠 아래에 삽입
+<div className="mt-4 p-4 bg-blue-50 rounded-lg text-sm text-blue-800 border border-blue-200">
+  <p className="font-semibold mb-2">📋 청약확인</p>
+  <ul className="space-y-1 text-xs">
+    <li>주문번호: {orderId}</li>
+    <li>상품명: {productName}</li>
+    <li>수량: {quantity}개</li>
+    <li>결제금액: ₩{amount.toLocaleString()}</li>
+    <li className="mt-2 text-blue-600">
+      청약철회: 결제 후 7일 이내 주문 조회 페이지에서 신청 가능합니다.
+    </li>
+  </ul>
+</div>
+```
+
+`orderId`, `productName`, `quantity`, `amount` 값은 buyer-store 또는 결제 완료 응답에서 가져올 것. 현재 `chat/page.tsx`의 `complete` 단계에서 어떤 데이터를 보유하고 있는지 먼저 확인.
+
+#### Step 2: `app/api/orders/[id]/withdraw/route.ts` — 청약철회 신청 API
+
+```typescript
+// POST /api/orders/[id]/withdraw
+// Body: { phone: string } — buyerPhone 매칭으로 인증
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const { phone } = await req.json();
+  const order = await prisma.order.findFirst({
+    where: { id: params.id, buyerPhone: phone },
+    include: { code: { include: { product: { include: { seller: true } } } } },
+  });
+  if (!order) return NextResponse.json({ error: '주문을 찾을 수 없습니다.' }, { status: 404 });
+  if (order.status !== 'PAID') {
+    return NextResponse.json({ error: '청약철회는 결제완료 상태에서만 신청 가능합니다.' }, { status: 400 });
+  }
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  if (new Date(order.createdAt) < sevenDaysAgo) {
+    return NextResponse.json({ error: '청약철회 신청 기간(7일)이 경과했습니다.' }, { status: 400 });
+  }
+  // 관리자에게 청약철회 요청 이메일 발송
+  await sendEmail(
+    process.env.ADMIN_EMAIL ?? 'admin@liveorder.app',
+    `[청약철회 요청] 주문 ${order.id.slice(0, 8)}`,
+    `<p>주문 ID: ${order.id}</p><p>구매자: ${order.buyerName}</p><p>상품: ${order.code.product.name}</p><p>금액: ₩${order.amount.toLocaleString()}</p>`
+  );
+  return NextResponse.json({ success: true });
+}
+```
+
+#### Step 3: `app/(buyer)/lookup/page.tsx` — 청약철회 신청 버튼 추가
+
+주문 상태 PAID + 결제일로부터 7일 이내인 경우 버튼 표시:
+
+```tsx
+// 주문 상세 영역에 추가:
+{order.status === 'PAID' &&
+  new Date(order.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+  <div className="mt-3">
+    {!withdrawRequested ? (
+      <button
+        onClick={handleWithdrawRequest}
+        className="text-sm text-red-600 underline hover:text-red-800"
+      >
+        청약철회 신청 →
+      </button>
+    ) : (
+      <p className="text-sm text-green-600">
+        청약철회 요청이 접수되었습니다. 영업일 3일 이내 처리됩니다.
+      </p>
+    )}
+  </div>
+)}
+```
+
+`handleWithdrawRequest` 함수: `POST /api/orders/${order.id}/withdraw` 호출, phone은 이미 확인된 `buyerPhone` 사용.
+
+**커밋:** `feat: 청약확인 UI + 청약철회 신청 API + lookup 버튼 (Task 33 — 전자상거래법)`
 
 ---
 
@@ -592,6 +727,9 @@ data: {
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
+| 2026-04-03 | Task 33: 청약확인 UI + 청약철회 신청 (Task 33) | 예정 |
+| 2026-04-03 | Task 32: QuantitySelector 무제한 UX + CSV 10000건 상한 | 예정 |
+| (대기) | Task 31: data-deletion rate limiting + seller/orders 상태 필터 | 미완료 |
 | 2026-04-03 | Task 30: seller/orders Skeleton 로딩 + seller/dashboard 에러 배너 + PLAN.md env vars (NEXT_PUBLIC 2개 + ADMIN_EMAIL) | 9ffc548 |
 | 2026-04-03 | B-33: terms/privacy 개인정보 삭제 요청 링크 추가 | 9b7adfe |
 | 2026-04-03 | Task 29: B-32 이메일 인증 토큰 만료 검증 (DB 스키마 + register/resend/verify + expired 페이지) | 1ee50ab |

@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (PM 조율 — Task 30 완료, Task 31 착수)
-> 현재 단계: **Phase 3 마무리 — Task 31 (MED 버그 번들) 진행 중**
-> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH QA 버그 모두 해결. Task 30 완료 (seller/orders Skeleton + seller/dashboard 에러 + PLAN.md env vars). Task 31: data-deletion rate limiting + seller/orders 상태 필터. Task 14 (Vercel 배포) 병행.
+> 최종 업데이트: 2026-04-03 (Planner 검증 — Task 31 미구현 확인, Task 32/33 계획 추가)
+> 현재 단계: **Phase 3 마무리 — Task 31 (MED 버그 번들) 미구현, 즉시 착수 필요**
+> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH QA 버그 모두 해결. Task 30 완료. Task 31: data-deletion rate limiting + seller/orders 상태 필터 — **코드 검증 결과 아직 미구현**. 이후 Task 32 (LOW 버그 번들), Task 33 (청약확인 법적 의무) 예정. Task 14 (Vercel 배포) 병행.
 
 ---
 
@@ -494,6 +494,126 @@ return redirect(`${baseUrl}?result=success`);
 
 ---
 
+---
+
+### Task 32: LOW 버그 번들 — QuantitySelector UX + CSV export 안전장치
+
+**우선순위:** LOW — Task 31 완료 후
+**대상 버그:** QA_REPORT.md LOW 2건
+
+#### Step 1: `components/buyer/cards/QuantitySelector.tsx` — 무제한 수량 UX 개선
+
+**현재 문제:** `remainingQty`가 `null`(무제한 코드)이면 `maxQty`를 99로 하드코딩. 무제한 코드여도 최대 99개만 선택 가능.
+
+**수정 방향:**
+```typescript
+// 현재 (line 17 근처):
+const maxQty = remainingQty ?? 99;
+
+// 수정 후:
+const maxQty = remainingQty ?? 999; // 무제한 코드는 999개까지 허용 (사실상 무제한 표현)
+
+// UI에 무제한 표시 추가:
+{remainingQty === null && (
+  <span className="text-xs text-muted-foreground ml-1">(무제한)</span>
+)}
+```
+
+#### Step 2: `app/api/seller/orders/export/route.ts` — 대용량 안전장치 추가
+
+**현재 문제:** `take` 제한 없이 전체 조회. 주문 수만 건 이상 시 메모리/타임아웃 가능.
+
+**수정 방향 (최소 수정 — 스트리밍 전환 전 단기 보호):**
+```typescript
+// 현재: prisma.order.findMany({ where, ... }) — take 없음
+// 수정: 10,000건 상한 추가 (실질적 상한선)
+const orders = await prisma.order.findMany({
+  where,
+  include: { ... },
+  orderBy: { createdAt: 'desc' },
+  take: 10000, // 대용량 보호
+});
+```
+
+**커밋:** `fix: QuantitySelector 무제한 코드 99 상한 완화 + CSV export 10000건 상한 (Task 32)`
+
+---
+
+### Task 33: 청약확인 발송 + 청약철회 버튼 (법적 의무)
+
+**우선순위:** HIGH (전자상거래법 제13조 — 주문 완료 시 청약확인 발송 의무)
+**배경:** 현재 구매자에게 주문 완료 후 어떤 확인도 없음. 전자상거래법 위반 리스크.
+
+#### Step 1: `lib/email.ts` — 구매자용 청약확인 이메일 함수 추가
+
+```typescript
+// 기존 sendEmail 함수 유지, 아래 추가:
+export async function sendOrderConfirmation(params: {
+  buyerEmail?: string; // 비회원 구매자 이메일 없음 — 현재는 셀러에게 발송
+  sellerEmail: string;
+  sellerName: string;
+  orderId: string;
+  productName: string;
+  quantity: number;
+  amount: number;
+  buyerName: string;
+}) {
+  // 셀러에게 새 주문 알림 (기존 로직)
+  // + 구매자 이메일 없으므로 현재는 주문 조회 URL만 응답에 포함
+}
+```
+
+**현실적 접근 (비회원 구매자 — 이메일 없음):**
+- 구매자가 이메일을 입력하지 않으므로 직접 이메일 발송 불가
+- 단기 해결책: **주문 완료 화면(`chat/page.tsx`)에 청약확인 내용 표시**
+  - 주문번호, 상품명, 수량, 결제금액, 청약철회 안내 문구 포함
+
+#### Step 2: `app/(buyer)/chat/page.tsx` — 주문 완료 화면 청약확인 내용 추가
+
+주문 완료(`complete` 단계) UI에 아래 내용 추가:
+
+```tsx
+// 현재 완료 화면 아래에 추가 (법적 고지 박스)
+<div className="mt-4 p-4 bg-blue-50 rounded-lg text-sm text-blue-800 border border-blue-200">
+  <p className="font-semibold mb-2">📋 청약확인</p>
+  <ul className="space-y-1 text-xs">
+    <li>주문번호: {orderId}</li>
+    <li>상품명: {productName}</li>
+    <li>수량: {quantity}개</li>
+    <li>결제금액: ₩{amount.toLocaleString()}</li>
+    <li className="mt-2 text-blue-600">
+      청약철회: 결제 후 7일 이내 구매자 주문 조회 페이지에서 신청 가능
+    </li>
+  </ul>
+</div>
+```
+
+#### Step 3: `app/(buyer)/lookup/page.tsx` — 청약철회 신청 버튼 추가
+
+결제 후 7일 이내 주문에 "청약철회 신청" 버튼 표시:
+
+```tsx
+// 주문 상태가 PAID이고 결제일로부터 7일 이내인 경우:
+{order.status === 'PAID' &&
+  new Date(order.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+  <button
+    onClick={() => setShowWithdrawConfirm(true)}
+    className="text-sm text-red-600 underline"
+  >
+    청약철회 신청 →
+  </button>
+)}
+```
+
+**청약철회 API:** `POST /api/orders/[id]/withdraw`
+- 인증: 전화번호 매칭 (buyerPhone 확인)
+- 처리: 관리자에게 이메일 알림 + 주문 상태 유지 (관리자가 수동 환불 처리)
+- 응답: "청약철회 요청이 접수되었습니다. 영업일 3일 이내 처리됩니다."
+
+**커밋:** `feat: 청약확인 UI + 청약철회 신청 기능 (Task 33 — 전자상거래법 대응)`
+
+---
+
 ## 4. 기술 부채 잔여 목록
 
 | 항목 | 우선순위 | 계획 |
@@ -514,10 +634,12 @@ return redirect(`${baseUrl}?result=success`);
 | terms/privacy 삭제 요청 링크 없음 (B-33) | MED | ✅ 완료 (9b7adfe) |
 | seller/orders isLoading Skeleton 없음 | LOW | ✅ Task 30 완료 (9ffc548) |
 | seller/dashboard fetch 에러 무시 | LOW | ✅ Task 30 완료 (9ffc548) |
-| data-deletion API 인증 없음 (보안) | MED | 🟢 Task 31 진행 중 |
-| seller/orders 상태 필터 없음 | MED | 🟢 Task 31 진행 중 |
-| QuantitySelector maxQty 99 하드코딩 | LOW | 배포 후 개선 |
-| CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
+| data-deletion API 인증 없음 (보안) | MED | 🔴 Task 31 미구현 (즉시 필요) |
+| seller/orders 상태 필터 없음 | MED | 🔴 Task 31 미구현 (즉시 필요) |
+| QuantitySelector maxQty 99 하드코딩 | LOW | Task 32 예정 |
+| CSV 주문 내보내기 대용량 처리 (B-14) | LOW | Task 32 예정 |
+| 주문 완료 청약확인 발송 (법적 의무) | HIGH | Task 33 예정 |
+| 청약철회 신청 버튼 (7일 이내) | MED | Task 33 예정 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 
 ---
