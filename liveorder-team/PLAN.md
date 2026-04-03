@@ -1,8 +1,8 @@
 # LIVEORDER 개발 계획서
 
-> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 미완료 확인, Task 29 B-32 계획 추가)
-> 현재 단계: **Phase 3 마무리 — Task 28 (B-28/B-29) 진행 중 → Task 29 (B-32) 예정**
-> P3-0~P3-6 완료. B-30/B-31 수정 완료. Task 28 코드 미반영 확인(admin/orders: take:50 하드코딩, seller/orders: .catch(()=>{}) 잔존). Task 29 (B-32 인증 토큰 만료) 계획 수립. Task 14 (Vercel 배포) 병행.
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 28~29 완료, B-33 완료, Task 30 착수)
+> 현재 단계: **Phase 3 마무리 — Task 30 (LOW 버그 번들) 진행 중**
+> P3-0~P3-8 완료. B-28~B-33 전체 수정 완료. HIGH QA 버그 모두 해결. Task 30: seller/orders isLoading + seller/dashboard 에러 처리 + PLAN.md env vars 업데이트. Task 14 (Vercel 배포) 병행.
 
 ---
 
@@ -49,7 +49,7 @@
 
 ## 2. 배포 체크리스트 (Task 14)
 
-### 2.1 환경변수 8개
+### 2.1 환경변수 (서버사이드 9개 + 클라이언트사이드 2개)
 
 | 변수명 | 설명 | 필수 |
 |--------|------|------|
@@ -61,6 +61,10 @@
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob 토큰 | ✅ |
 | `CRON_SECRET` | 정산 크론 Bearer 토큰 | ✅ |
 | `NEXTAUTH_URL` | 프로덕션 URL (예: `https://liveorder.vercel.app`) | ✅ |
+| `RESEND_API_KEY` | 이메일 알림 (P3-2 필수) | ✅ |
+| `NEXT_PUBLIC_PORTONE_STORE_ID` | PortOne 결제창 클라이언트 호출 ⚠️ NEXT_PUBLIC 필수 | ✅ |
+| `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` | PortOne 채널 키 클라이언트 호출 ⚠️ NEXT_PUBLIC 필수 | ✅ |
+| `ADMIN_EMAIL` | 관리자 알림 수신 이메일 (미설정 시 admin@liveorder.app 폴백) | 선택 |
 
 ### 2.2 배포 후 스모크 테스트
 
@@ -504,9 +508,12 @@ return redirect(`${baseUrl}?result=success`);
 | 배송 추적 API 없음 (B-12) | LOW | ✅ P3-4 완료 (Task 25, fbadce1) |
 | 셀러 이메일 인증 없음 | LOW | ✅ P3-5 완료 (Task 26, 17fc5ce) |
 | 구매자 데이터 삭제권 없음 (GDPR) | MED | ✅ P3-6 완료 (Task 27, 3b39223) |
-| admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | 🔄 Task 28 진행 중 (미구현 확인) |
-| seller/orders fetch 에러 무시 (B-29) | LOW | 🔄 Task 28 진행 중 (미구현 확인) |
-| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | 📋 Task 29 계획 수립 완료 |
+| admin/orders API 페이지네이션 표준 불일치 (B-28) | LOW | ✅ Task 28 완료 (1ddddfc) |
+| seller/orders fetch 에러 무시 (B-29) | LOW | ✅ Task 28 완료 (1ddddfc) |
+| 이메일 인증 토큰 만료 검증 없음 (B-32) | LOW | ✅ Task 29 완료 (1ee50ab) |
+| terms/privacy 삭제 요청 링크 없음 (B-33) | MED | ✅ 완료 (9b7adfe) |
+| seller/orders isLoading Skeleton 없음 | LOW | 🟢 Task 30 진행 중 |
+| seller/dashboard fetch 에러 무시 | LOW | 🟢 Task 30 진행 중 |
 | CSV 주문 내보내기 대용량 처리 (B-14) | LOW | 스트리밍 검토 |
 | Redis 캐싱 (B-10) | LOW | 트래픽 확인 후 |
 

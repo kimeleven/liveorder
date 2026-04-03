@@ -4,3 +4,6 @@
 [done] B-01 크론 인증(CRON_SECRET Bearer) + B-02 레이스컨디션(원자적 조건부 UPDATE) 수정
 [done] Task 19 + UX-1 완료 — 2026-04-03
 [done] Task 28 (B-28/B-29) + HIGH QA bugs fixed (pgTid unique, partial refund, settlement DELIVERED)
+[done] Task 29 (B-32) email verify token expiry implemented
+[done] B-33: terms/privacy 개인정보 삭제 요청 링크 추가 (MED QA)
+[next] Task 30: seller/orders isLoading Skeleton + seller/dashboard fetch 에러 처리 + PLAN.md env vars 업데이트

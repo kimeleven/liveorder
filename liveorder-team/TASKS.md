@@ -1,14 +1,14 @@
 # LIVEORDER 개발 태스크
 
-> 최종 업데이트: 2026-04-03 (Planner 재검토 — Task 28 미구현 확인, Task 29 B-32 추가)
+> 최종 업데이트: 2026-04-03 (PM 조율 — Task 29/B-33 완료 반영, Task 30 착수)
 
 ---
 
-## 🟢 Dev1 현재 할당 — **Task 29: B-32 이메일 인증 토큰 만료 검증**
+## 🟢 Dev1 현재 할당 — **Task 30: UX 품질 개선 + 환경변수 문서 업데이트**
 
-> **완료:** Task 21 (P3-0) ✅ · Task 22 (P3-1) ✅ · Task 23 (P3-2 이메일) ✅ · B-27 ✅ · Task 24 (P3-3 차트) ✅ · Task 25 (P3-4 배송추적) ✅ · Task 26 (P3-5 이메일 인증) ✅ · Task 27 (P3-6 GDPR) ✅ · B-30 ✅ · B-31 ✅ · Task 28 (B-28/B-29) ✅
-> **완료 (Task 28):** B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique 제약 + 부분환불 상태 수정 + 정산 DELIVERED 포함 (2026-04-03)
-> **다음 예정:** Task 29 — B-32 이메일 인증 토큰 만료 검증
+> **완료:** Task 21~29 ✅ · B-27 ✅ · B-30 ✅ · B-31 ✅ · B-32 ✅ · B-33 ✅ · HIGH QA 버그 전체 수정 ✅
+> **완료 (Task 29/B-33):** B-32 이메일 인증 토큰 만료 검증 + B-33 terms/privacy 삭제 요청 링크 추가 (2026-04-03)
+> **다음 예정:** Task 30 — LOW/MED 버그 번들 (seller/orders isLoading, seller/dashboard 에러, PLAN.md env vars)
 
 ---
 
@@ -338,6 +338,69 @@ JSX에 에러 표시 추가 (로딩 Skeleton 아래):
 
 ---
 
+### Task 30: LOW 버그 번들 — seller UX 개선 + PLAN.md 환경변수 업데이트
+
+**우선순위:** LOW — Task 29 완료 후
+**상태:** 🟢 Dev1 진행 중
+
+#### Step 1: `app/seller/orders/page.tsx` — isLoading Skeleton 추가
+
+`isLoading` state를 추가하고, 데이터 fetch 중 Skeleton 표시 (admin/orders와 동일한 패턴):
+
+```typescript
+const [isLoading, setIsLoading] = useState(true);
+
+// fetchOrders 시작 시:
+setIsLoading(true);
+// fetchOrders 완료 시 (finally):
+setIsLoading(false);
+```
+
+JSX에 로딩 상태 추가:
+```tsx
+{isLoading ? (
+  <div className="space-y-2">
+    {[...Array(5)].map((_, i) => (
+      <Skeleton key={i} className="h-16 w-full" />
+    ))}
+  </div>
+) : (
+  // 기존 테이블/카드 렌더링
+)}
+```
+
+#### Step 2: `app/seller/dashboard/page.tsx:64` — fetch 에러 처리
+
+`.catch(() => {})` → 에러 state + UI 표시:
+
+```typescript
+const [dashboardError, setDashboardError] = useState<string | null>(null);
+
+// catch 블록:
+.catch((err) => {
+  console.error('[seller/dashboard] fetch failed:', err);
+  setDashboardError('대시보드 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
+});
+```
+
+JSX 상단에 에러 배너 추가:
+```tsx
+{dashboardError && (
+  <div className="text-center py-4 text-red-500 text-sm">{dashboardError}</div>
+)}
+```
+
+#### Step 3: `liveorder-team/PLAN.md` — 환경변수 목록 업데이트
+
+`2.1 환경변수` 표에 누락된 3개 추가:
+- `NEXT_PUBLIC_PORTONE_STORE_ID` — PortOne 결제창 호출 (프론트엔드 필수)
+- `NEXT_PUBLIC_PORTONE_CHANNEL_KEY` — PortOne 채널 키 (프론트엔드 필수)
+- `ADMIN_EMAIL` — 관리자 알림 이메일 (선택, 미설정 시 admin@liveorder.app 폴백)
+
+**커밋:** `fix: seller/orders 로딩 Skeleton + seller/dashboard 에러 처리 + PLAN.md env vars 업데이트 (Task 30)`
+
+---
+
 ### Task 29: B-32 이메일 인증 토큰 만료 검증
 
 **우선순위:** LOW — Task 28 완료 후
@@ -422,7 +485,9 @@ data: {
 
 | 완료일 | 작업 | 커밋 |
 |--------|------|------|
-| 2026-04-03 | Task 28: B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique + 부분환불 상태 + 정산 DELIVERED 포함 | - |
+| 2026-04-03 | B-33: terms/privacy 개인정보 삭제 요청 링크 추가 | 9b7adfe |
+| 2026-04-03 | Task 29: B-32 이메일 인증 토큰 만료 검증 (DB 스키마 + register/resend/verify + expired 페이지) | 1ee50ab |
+| 2026-04-03 | Task 28: B-28 admin/orders 페이지네이션 표준화 + B-29 seller/orders 에러 처리 + pgTid unique + 부분환불 상태 + 정산 DELIVERED 포함 | 1ddddfc |
 | 2026-04-03 | B-30/B-31: 우체국택배 배송 추적 키 수정 + 이메일 미인증 셀러 로그인 차단 (lib/auth.ts emailVerified 체크) | fc0236f |
 | 2026-04-03 | Task 27: P3-6 구매자 GDPR 삭제권 — data-deletion API, request 페이지, privacy 페이지 | 3b39223 |
 | 2026-04-03 | Task 26: P3-5 셀러 이메일 인증 — schema 변경, verify API, resend API, verify 페이지, 대시보드 배너 | 17fc5ce |

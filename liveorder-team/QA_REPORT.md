@@ -1,8 +1,9 @@
 # QA Report - 2026-04-03
 
 > QA Engineer: Claude Sonnet 4.6
-> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 49910b0 기준)
+> 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 9b7adfe 기준)
 > 검토 방법: 소스 코드 직접 열람 + 기획서/PLAN/TASKS 대조
+> 업데이트: 2026-04-03 (PM 조율 — Task 28/29/B-33 수정 사항 반영)
 
 ---
 
@@ -49,23 +50,23 @@
 
 ### PLAN.md 명시 미구현
 
-- [priority: MED] [B-28 admin/orders API 페이지네이션 불일치]: `app/api/admin/orders/route.ts:35` — `take: 50` 하드코딩. 응답 형식 `{ orders, total }`이 셀러 API 표준 `{ data, pagination }` 불일치. 프론트엔드(`app/admin/orders/page.tsx:196`)가 `Math.ceil(total / 50)` 하드코딩으로 Pagination 컴포넌트 totalPages 계산. PLAN.md Task 28 미구현 명시 → `app/api/admin/orders/route.ts:35`
+- ~~[priority: MED] [B-28 admin/orders API 페이지네이션 불일치]~~ **✅ FIXED — commit 1ddddfc (Task 28)**
 
-- [priority: MED] [B-29 seller/orders 에러 무시]: `app/seller/orders/page.tsx:88` — `.catch(() => {})` 잔존. fetch 실패 시 사용자 피드백 없이 빈 목록만 표시됨. PLAN.md Task 28 미구현 명시 → `app/seller/orders/page.tsx:88`
+- ~~[priority: MED] [B-29 seller/orders 에러 무시]~~ **✅ FIXED — commit 1ddddfc (Task 28)**
 
-- [priority: LOW] [B-32 이메일 인증 토큰 만료 미검증]: `app/api/seller/auth/verify/route.ts` — 토큰 만료 시간 검증 없음. 이메일 본문(resend/route.ts:43)에 "24시간 이내 사용" 안내하지만 실제 코드는 무기한 유효. `prisma/schema.prisma`에 `emailVerifyTokenExpiresAt` 필드 없음. Task 29 계획 수립 완료, 미구현 → `app/api/seller/auth/verify/route.ts`
+- ~~[priority: LOW] [B-32 이메일 인증 토큰 만료 미검증]~~ **✅ FIXED — commit 1ee50ab (Task 29)**
 
 ### 신규 발견 버그
 
-- [priority: HIGH] [pgTid unique 제약 없음 — 중복 주문 생성 가능]: `app/api/payments/confirm/route.ts` — 동일 `portonePaymentId`로 중복 호출 시 방지 로직 없음. `prisma/schema.prisma` Order 모델에 `pgTid` @unique 제약 없음. 트랜잭션 내 코드 수량 원자적 UPDATE는 있으나 pgTid 중복 체크 부재. 동일 PG TID로 주문 2건 생성 가능 → `app/api/payments/confirm/route.ts` + `prisma/schema.prisma` (Order.pgTid)
+- ~~[priority: HIGH] [pgTid unique 제약 없음 — 중복 주문 생성 가능]~~ **✅ FIXED — commit 1ddddfc (Task 28)**
 
-- [priority: HIGH] [부분 환불 후 주문 상태 오처리]: `app/api/admin/orders/[id]/refund/route.ts:83` — 부분 환불(amount < order.amount) 시에도 주문 status를 항상 `REFUNDED`로 변경. 부분 환불된 주문은 아직 유효한 상태임에도 전액 환불과 동일하게 처리됨. 부분 환불 후 추가 환불 불가, 정산 로직과 충돌 가능 → `app/api/admin/orders/[id]/refund/route.ts:83`
+- ~~[priority: HIGH] [부분 환불 후 주문 상태 오처리]~~ **✅ FIXED — commit 1ddddfc (Task 28)**
 
 - [priority: MED] [개인정보 삭제 API 인증 없음 — 악용 가능]: `app/api/buyer/data-deletion/route.ts:5-29` — 인증 없이 이름+전화번호만으로 타인 주문 개인정보 삭제 가능. rate limiting, captcha, 추가 인증 수단 전무. 타인의 이름+전화번호를 아는 경우 배송 정보 전체 삭제 가능 → `app/api/buyer/data-deletion/route.ts`
 
-- [priority: MED] [정산 배치 — SHIPPING 상태 주문 영구 누락]: `app/api/cron/settlements/route.ts:24-27` — 정산 대상을 `status: "PAID"` 단독으로 필터링. 운송장 등록 시 SHIPPING으로 전환된 주문은 정산 대상에서 영구 제외됨. 기획서 5.2절 "배송 완료 확인 후 정산 개시" 요건 미충족 → `app/api/cron/settlements/route.ts:24`
+- ~~[priority: MED] [정산 배치 — SHIPPING 상태 주문 영구 누락]~~ **✅ FIXED — commit 1ddddfc (Task 28, DELIVERED 포함)**
 
-- [priority: MED] [terms/privacy 페이지에 삭제 요청 링크 없음]: `app/(buyer)/terms/privacy/page.tsx` — footer에서 `/terms/privacy`로 링크하지만 이 페이지에는 P3-6 삭제 요청 링크가 없음. 삭제 요청 링크는 `/privacy/page.tsx`에만 있음. 구매자 landing footer → terms/privacy 경로에서 삭제 요청 기능 접근 불가 → `app/(buyer)/page.tsx:111`, `app/(buyer)/terms/privacy/page.tsx`
+- ~~[priority: MED] [terms/privacy 페이지에 삭제 요청 링크 없음]~~ **✅ FIXED — commit 9b7adfe (B-33)**
 
 - [priority: MED] [seller/orders 상태 필터 없음]: `app/seller/orders/page.tsx` + `app/api/seller/orders/route.ts` — 주문 목록에 상태 필터 UI 없음. API도 status 필터 파라미터 미지원. 주문 수 증가 시 특정 상태(배송중 등) 확인 불편 → `app/api/seller/orders/route.ts`
 
@@ -162,14 +163,14 @@
 
 ## 요약 지표
 
-| 구분 | 건수 |
-|------|------|
-| 정상 동작 확인 | 34건 |
-| 버그/이슈 — HIGH | 2건 |
-| 버그/이슈 — MED | 5건 |
-| 버그/이슈 — LOW | 7건 |
-| PLAN.md 명시 미구현 | 3건 |
-| 미구현 기능 (기획서 기준) | 17건 |
-| 권고사항 | 16건 |
+| 구분 | 건수 | 변동 |
+|------|------|------|
+| 정상 동작 확인 | 34건 | - |
+| 버그/이슈 — HIGH | 0건 | -2 ✅ (모두 수정) |
+| 버그/이슈 — MED (미해결) | 2건 | -3 ✅ |
+| 버그/이슈 — LOW (미해결) | 6건 | -1 ✅ (B-32 수정) |
+| PLAN.md 명시 미구현 | 0건 | -3 ✅ (모두 완료) |
+| 미구현 기능 (기획서 기준) | 17건 | - |
+| 권고사항 | 16건 | - |
 
-**전반적 평가:** MVP 핵심 플로우(코드 입력→결제→주문 생성→셀러 확인→배송→정산)는 동작 가능한 수준으로 구현됨. HIGH 이슈(pgTid 중복 주문 방지, 부분 환불 상태 오처리)와 정산 배치 DELIVERED 누락을 우선 수정하고, PLAN.md Task 28/29를 완료한 뒤 배포 권장.
+**전반적 평가 (2026-04-03 업데이트):** 모든 HIGH 버그 수정 완료. Task 28/29 완료. B-33 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 완전 동작. 잔여 MED 이슈(개인정보 삭제 API rate limiting, seller/orders 상태 필터)는 배포 후 단기 수정 권장. **배포 가능 상태.**
