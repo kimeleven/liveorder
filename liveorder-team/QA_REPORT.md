@@ -3,7 +3,7 @@
 > QA Engineer: Claude Sonnet 4.6
 > 검토 범위: Phase 1 ~ Phase 3 전체 (최신 커밋 ab7a56e 기준)
 > 검토 방법: 소스 코드 직접 열람 + 기획서/PLAN/TASKS 대조
-> 업데이트: 2026-04-03 (PM 조율 — Task 30 완료 반영: seller/orders Skeleton, seller/dashboard 에러 처리)
+> 업데이트: 2026-04-03 (PM 조율 — Task 31 완료 반영: data-deletion rate limiting, seller/orders 상태 필터)
 
 ---
 
@@ -62,13 +62,13 @@
 
 - ~~[priority: HIGH] [부분 환불 후 주문 상태 오처리]~~ **✅ FIXED — commit 1ddddfc (Task 28)**
 
-- [priority: MED] [개인정보 삭제 API 인증 없음 — 악용 가능]: `app/api/buyer/data-deletion/route.ts:5-29` — 인증 없이 이름+전화번호만으로 타인 주문 개인정보 삭제 가능. rate limiting, captcha, 추가 인증 수단 전무. 타인의 이름+전화번호를 아는 경우 배송 정보 전체 삭제 가능 → `app/api/buyer/data-deletion/route.ts`
+- ~~[priority: MED] [개인정보 삭제 API 인증 없음 — 악용 가능]~~ **✅ FIXED — commit b57439d (Task 31, IP 기반 rate limiting 1시간 5회 제한)**
 
 - ~~[priority: MED] [정산 배치 — SHIPPING 상태 주문 영구 누락]~~ **✅ FIXED — commit 1ddddfc (Task 28, DELIVERED 포함)**
 
 - ~~[priority: MED] [terms/privacy 페이지에 삭제 요청 링크 없음]~~ **✅ FIXED — commit 9b7adfe (B-33)**
 
-- [priority: MED] [seller/orders 상태 필터 없음]: `app/seller/orders/page.tsx` + `app/api/seller/orders/route.ts` — 주문 목록에 상태 필터 UI 없음. API도 status 필터 파라미터 미지원. 주문 수 증가 시 특정 상태(배송중 등) 확인 불편 → `app/api/seller/orders/route.ts`
+- ~~[priority: MED] [seller/orders 상태 필터 없음]~~ **✅ FIXED — commit b57439d (Task 31, API status 파라미터 + UI Select 드롭다운)**
 
 - ~~[priority: LOW] [seller/orders — isLoading 상태 없음]~~ **✅ FIXED — commit 9ffc548 (Task 30)**
 
@@ -167,10 +167,10 @@
 |------|------|------|
 | 정상 동작 확인 | 34건 | - |
 | 버그/이슈 — HIGH | 0건 | -2 ✅ (모두 수정) |
-| 버그/이슈 — MED (미해결) | 2건 | -3 ✅ |
+| 버그/이슈 — MED (미해결) | 0건 | -2 ✅ (Task 31 수정) |
 | 버그/이슈 — LOW (미해결) | 3건 | -3 ✅ (Task 30 수정) |
 | PLAN.md 명시 미구현 | 0건 | -3 ✅ (모두 완료) |
 | 미구현 기능 (기획서 기준) | 17건 | - |
 | 권고사항 | 16건 | - |
 
-**전반적 평가 (2026-04-03 업데이트):** 모든 HIGH 버그 수정 완료. Task 28/29/30 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 완전 동작. 잔여 MED 이슈(개인정보 삭제 API rate limiting, seller/orders 상태 필터) → Task 31 대상. LOW 3건(QuantitySelector 99 하드코딩, ADMIN_EMAIL 폴백 도메인, CSV export 무제한)은 배포 후 단기 수정 권장. **배포 가능 상태.**
+**전반적 평가 (2026-04-03 업데이트):** 모든 HIGH/MED 버그 수정 완료. Task 28/29/30/31 완료. 핵심 플로우(코드 입력→결제→주문→배송→정산) 완전 동작. 잔여 LOW 3건(QuantitySelector 99 하드코딩, ADMIN_EMAIL 폴백 도메인, CSV export 무제한) → Task 32 대상. Task 33 청약확인 법적 의무(HIGH) 구현 필요. **배포 가능 상태 — Task 33 우선 완료 권장.**
