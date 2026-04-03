@@ -29,12 +29,40 @@ const statusLabel: Record<string, string> = {
   REFUNDED: "환불",
 };
 
+const WITHDRAW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default function LookupPage() {
   const [phone, setPhone] = useState("");
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<OrderResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawDone, setWithdrawDone] = useState(false);
+  const [withdrawError, setWithdrawError] = useState("");
+
+  async function handleWithdraw() {
+    if (!order) return;
+    if (!confirm("청약철회를 신청하시겠습니까? 신청 후 영업일 3일 이내 처리됩니다.")) return;
+    setWithdrawLoading(true);
+    setWithdrawError("");
+    try {
+      const res = await fetch(`/api/orders/${order.id}/withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buyerPhone: phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWithdrawError(data.error || "청약철회 신청에 실패했습니다.");
+      } else {
+        setWithdrawDone(true);
+      }
+    } catch {
+      setWithdrawError("서버 오류가 발생했습니다.");
+    }
+    setWithdrawLoading(false);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,6 +134,35 @@ export default function LookupPage() {
                 <p>수량: {order.quantity}개</p>
                 <p>금액: ₩{order.amount.toLocaleString()}</p>
                 <p>주문일: {new Date(order.createdAt).toLocaleString("ko-KR")}</p>
+                {/* 청약철회 버튼 — 전자상거래법 제17조: PAID + 7일 이내 */}
+                {order.status === "PAID" &&
+                  Date.now() - new Date(order.createdAt).getTime() <= WITHDRAW_WINDOW_MS && (
+                  <div className="mt-3 pt-3 border-t">
+                    {withdrawDone ? (
+                      <p className="text-sm text-green-700 font-medium">
+                        ✅ 청약철회 요청이 접수되었습니다. 영업일 3일 이내 처리됩니다.
+                      </p>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 border-red-200 hover:bg-red-50 text-xs"
+                          onClick={handleWithdraw}
+                          disabled={withdrawLoading}
+                        >
+                          {withdrawLoading ? "처리 중..." : "청약철회 신청 →"}
+                        </Button>
+                        {withdrawError && (
+                          <p className="mt-1 text-xs text-destructive">{withdrawError}</p>
+                        )}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          결제일로부터 7일 이내 청약철회 신청 가능 (전자상거래법 제17조)
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
                 {order.trackingNo && (
                   <div className="mt-2 p-3 bg-blue-50 rounded-lg">
                     <p className="font-medium text-blue-800">배송 정보</p>
