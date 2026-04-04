@@ -35,7 +35,10 @@ model Seller {
   phone        String   @db.VarChar(20)
   bankAccount  String?  @map("bank_account") @db.VarChar(30)
   bankName     String?  @map("bank_name") @db.VarChar(20)
-  tradeRegNo   String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  tradeRegNo         String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  emailVerified      Boolean  @default(false) @map("email_verified")
+  emailVerifyToken          String?   @map("email_verify_token") @db.VarChar(100)
+  emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
   status       SellerStatus @default(PENDING)
   plan         SellerPlan   @default(FREE)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -105,6 +108,7 @@ model Code {
 model Order {
   id            String      @id @default(uuid()) @db.Uuid
   codeId        String      @map("code_id") @db.Uuid
+  settlementId  String?     @map("settlement_id") @db.Uuid
   buyerName     String      @map("buyer_name") @db.VarChar(50)
   buyerPhone    String      @map("buyer_phone") @db.VarChar(20)
   address       String
@@ -113,12 +117,13 @@ model Order {
   quantity      Int         @default(1)
   amount        Int // 결제금액
   status        OrderStatus @default(PAID)
-  pgTid         String?     @map("pg_tid") @db.VarChar(100) // PG사 거래번호
+  pgTid         String?     @unique @map("pg_tid") @db.VarChar(100) // PG사 거래번호
   trackingNo    String?     @map("tracking_no") @db.VarChar(50) // 운송장번호
   carrier       String?     @db.VarChar(30) // 택배사
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  code Code @relation(fields: [codeId], references: [id])
+  code       Code        @relation(fields: [codeId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])
 
   @@index([codeId, status])
   @@index([buyerPhone])
@@ -128,6 +133,7 @@ model Order {
 enum OrderStatus {
   PAID      // 결제 완료
   SHIPPING  // 배송 중 (선택)
+  DELIVERED // 배송 완료
   SETTLED   // 정산 완료
   REFUNDED  // 환불
 }
@@ -147,7 +153,8 @@ model Settlement {
   settledAt   DateTime?        @map("settled_at") @db.Timestamptz
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
 
-  seller Seller @relation(fields: [sellerId], references: [id])
+  seller Seller  @relation(fields: [sellerId], references: [id])
+  orders Order[]
 
   @@map("settlements")
 }

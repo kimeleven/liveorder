@@ -31,15 +31,39 @@ export type FlowStep =
   | "payment_complete"
   | "complete";
 
+export interface FlowProduct {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  imageUrl?: string;
+  category?: string;
+  stock?: number;
+}
+
+export interface FlowSeller {
+  id: string;
+  name: string;
+  businessNo?: string;
+}
+
+export interface FlowAddress {
+  buyerName: string;
+  buyerPhone: string;
+  address: string;
+  addressDetail?: string;
+  memo?: string;
+}
+
 export interface FlowState {
   step: FlowStep;
   codeKey?: string;
   codeId?: string;
   productId?: string;
-  product?: Record<string, unknown>;
-  seller?: Record<string, unknown>;
+  product?: FlowProduct;
+  seller?: FlowSeller;
   quantity?: number;
-  address?: Record<string, unknown>;
+  address?: FlowAddress;
   orderId?: string;
 }
 

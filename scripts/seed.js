@@ -28,6 +28,16 @@ async function main() {
   await client.connect();
   console.log("DB 연결 완료");
 
+  // 0. 관리자 생성
+  const adminPassword = await bcrypt.hash("qwer1234", 10);
+  await client.query(
+    `INSERT INTO admins (id, email, password, name)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (email) DO NOTHING`,
+    [uuid(), "kimeleven@gmail.com", adminPassword, "관리자"]
+  );
+  console.log("관리자 생성:", "kimeleven@gmail.com / qwer1234");
+
   // 1. 판매자 생성
   const sellerPassword = await bcrypt.hash("qwer1234", 10);
   const sellerId = uuid();

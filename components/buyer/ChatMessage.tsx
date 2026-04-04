@@ -1,7 +1,8 @@
 "use client";
 
-import { ChatMessage } from "@/stores/buyer-store";
+import { ChatMessage, useBuyerStore } from "@/stores/buyer-store";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import ProductCard from "./cards/ProductCard";
 import QuantitySelector from "./cards/QuantitySelector";
 import AddressForm from "./cards/AddressForm";
@@ -15,6 +16,7 @@ interface Props {
 
 export default function ChatMessageBubble({ message }: Props) {
   const isIncoming = message.direction === "incoming";
+  const { setFlow, updateFlowStep } = useBuyerStore();
 
   if (message.type === "divider") {
     return (
@@ -59,6 +61,39 @@ export default function ChatMessageBubble({ message }: Props) {
         {message.type === "tracking-update" && (
           <TrackingUpdate data={message.payload} />
         )}
+      </div>
+    );
+  }
+
+  // 에러 메시지 (재시도 버튼 포함)
+  if (message.type === "error") {
+    const retryAction = message.payload.retryAction as "code" | "payment" | undefined;
+
+    function handleRetry() {
+      if (retryAction === "code") {
+        setFlow({ step: "idle" });
+      } else if (retryAction === "payment") {
+        updateFlowStep("payment_pending");
+      }
+    }
+
+    return (
+      <div className="flex justify-start">
+        <div className="flex flex-col gap-2 max-w-[80%]">
+          <div className="rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm bg-destructive/10 text-destructive border border-destructive/20">
+            {message.payload.text as string}
+          </div>
+          {retryAction && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start text-xs h-7"
+              onClick={handleRetry}
+            >
+              다시 시도
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

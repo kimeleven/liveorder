@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SellerShell from "@/components/seller/SellerShell";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { ImagePlus, X, Copy, Check } from "lucide-react";
 
 const categories = [
   "패션의류",
@@ -31,9 +33,48 @@ export default function NewProductPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [category, setCategory] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imagePreview, setImagePreview] = useState("");
+  const [autoCodeResult, setAutoCodeResult] = useState<{ productId: string; codeKey: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageUploading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/seller/products/upload", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "이미지 업로드에 실패했습니다.");
+        return;
+      }
+      setImageUrl(data.url);
+      setImagePreview(data.url);
+    } catch {
+      setError("이미지 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setImageUploading(false);
+    }
+  }
+
+  const [categoryError, setCategoryError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!category) {
+      setCategoryError("카테고리를 선택해 주세요.");
+      return;
+    }
+    setCategoryError("");
     setLoading(true);
     setError("");
 
@@ -49,6 +90,7 @@ export default function NewProductPage() {
           price: formData.get("price"),
           stock: formData.get("stock"),
           category,
+          imageUrl: imageUrl || null,
         }),
       });
 
@@ -59,11 +101,68 @@ export default function NewProductPage() {
         return;
       }
 
+      const data = await res.json();
+      if (data.autoCode?.codeKey) {
+        setAutoCodeResult({ productId: data.id, codeKey: data.autoCode.codeKey });
+        setLoading(false);
+        return;
+      }
+
       router.push("/seller/products");
     } catch {
       setError("서버 오류가 발생했습니다.");
       setLoading(false);
     }
+  }
+
+  async function handleCopy() {
+    if (!autoCodeResult) return;
+    await navigator.clipboard.writeText(autoCodeResult.codeKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (autoCodeResult) {
+    return (
+      <SellerShell>
+        <div className="max-w-md mx-auto space-y-6 text-center">
+          <div>
+            <h1 className="text-2xl font-bold">상품이 등록되었습니다!</h1>
+            <p className="text-muted-foreground mt-1">코드가 자동으로 발급되었습니다</p>
+          </div>
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground">발급된 코드</p>
+              <p className="text-3xl font-mono font-bold tracking-widest">
+                {autoCodeResult.codeKey}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                라이브 방송 중 이 코드를 구매자에게 공유하세요.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={handleCopy} variant="default">
+                  {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                  {copied ? "복사됨" : "코드 복사"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/seller/codes/new?productId=${autoCodeResult.productId}`)}
+                >
+                  추가 코드 발급
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => router.push("/seller/products")}
+              >
+                상품 목록으로
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </SellerShell>
+    );
   }
 
   return (
@@ -77,6 +176,42 @@ export default function NewProductPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* 상품 이미지 */}
+              <div className="space-y-2">
+                <Label>상품 이미지</Label>
+                {imagePreview ? (
+                  <div className="relative w-full h-48 rounded-lg overflow-hidden border bg-muted">
+                    <Image
+                      src={imagePreview}
+                      alt="상품 이미지"
+                      fill
+                      className="object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setImageUrl(""); setImagePreview(""); }}
+                      className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <ImagePlus className="h-8 w-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">
+                      {imageUploading ? "업로드 중..." : "이미지 선택 (JPG, PNG, WebP, 5MB 이하)"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleImageChange}
+                      disabled={imageUploading}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="name">상품명 *</Label>
                 <Input id="name" name="name" required />
@@ -109,8 +244,8 @@ export default function NewProductPage() {
               </div>
               <div className="space-y-2">
                 <Label>카테고리 *</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v ?? "")} required>
-                  <SelectTrigger>
+                <Select value={category} onValueChange={(v) => { setCategory(v ?? ""); setCategoryError(""); }}>
+                  <SelectTrigger className={categoryError ? "border-destructive" : ""}>
                     <SelectValue placeholder="카테고리 선택" />
                   </SelectTrigger>
                   <SelectContent>
@@ -121,12 +256,13 @@ export default function NewProductPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {categoryError && <p className="text-sm text-destructive">{categoryError}</p>}
               </div>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="flex gap-3">
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading || imageUploading}>
                   {loading ? "등록 중..." : "상품 등록"}
                 </Button>
                 <Button

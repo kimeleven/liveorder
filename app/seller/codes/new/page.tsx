@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import QRCode from "qrcode";
 
 interface Product {
   id: string;
@@ -28,6 +29,7 @@ export default function NewCodePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
 
   useEffect(() => {
     fetch("/api/seller/products")
@@ -46,7 +48,7 @@ export default function NewCodePage() {
     const formData = new FormData(e.currentTarget);
 
     try {
-      const res = await fetch("/api/codes", {
+      const res = await fetch("/api/seller/codes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -64,6 +66,11 @@ export default function NewCodePage() {
       }
 
       setGeneratedCode(data.codeKey);
+      // Generate QR code for /order/[code] URL
+      const orderUrl = `${window.location.origin}/order/${data.codeKey}`;
+      QRCode.toDataURL(orderUrl, { width: 256, margin: 2 })
+        .then((url) => setQrDataUrl(url))
+        .catch(() => {});
       setLoading(false);
     } catch {
       setError("서버 오류가 발생했습니다.");
@@ -84,6 +91,23 @@ export default function NewCodePage() {
               <p className="mt-4 text-sm text-muted-foreground">
                 라이브 방송 중 이 코드를 구매자에게 공유하세요.
               </p>
+              {qrDataUrl && (
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  <p className="text-xs text-muted-foreground">QR 코드 스캔으로 바로 주문</p>
+                  <img
+                    src={qrDataUrl}
+                    alt={`QR code for ${generatedCode}`}
+                    className="w-40 h-40 rounded-lg border"
+                  />
+                  <a
+                    href={qrDataUrl}
+                    download={`qr-${generatedCode}.png`}
+                    className="text-xs text-primary underline"
+                  >
+                    QR 이미지 다운로드
+                  </a>
+                </div>
+              )}
               <div className="mt-6 flex gap-3 justify-center">
                 <Button
                   onClick={() =>

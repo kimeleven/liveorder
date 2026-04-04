@@ -53,7 +53,16 @@ export default function PrivacyPage() {
           보유 기간이 경과한 개인정보는 지체 없이 파기합니다.
         </p>
 
-        <h2>4. 문의</h2>
+        <h2>4. 개인정보 삭제 요청</h2>
+        <p>
+          개인정보 삭제를 요청하시려면{" "}
+          <Link href="/privacy/request" className="text-blue-600 underline">
+            개인정보 삭제 요청 페이지
+          </Link>
+          를 이용해 주세요.
+        </p>
+
+        <h2>5. 문의</h2>
         <p>
           개인정보 관련 문의는 고객센터를 통해 접수하실 수 있습니다.
         </p>

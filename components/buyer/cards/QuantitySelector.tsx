@@ -14,7 +14,9 @@ export default function QuantitySelector({ data }: Props) {
   const [qty, setQty] = useState(1);
   const { currentFlow, updateFlowStep, addMessage } = useBuyerStore();
   const price = (data.price as number) ?? 0;
-  const maxQty = (data.remainingQty as number | null) ?? 99;
+  const remainingQty = data.remainingQty as number | null;
+  const isUnlimited = remainingQty === null;
+  const maxQty = remainingQty ?? 999;
   const isInteractive = currentFlow?.step === "product_shown";
 
   function handleConfirm() {
@@ -35,7 +37,12 @@ export default function QuantitySelector({ data }: Props) {
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
-        <p className="text-sm font-medium">수량을 선택해주세요</p>
+        <p className="text-sm font-medium">
+          수량을 선택해주세요
+          {isUnlimited && (
+            <span className="ml-2 text-xs text-muted-foreground font-normal">(무제한)</span>
+          )}
+        </p>
         <div className="flex items-center justify-center gap-4">
           <Button
             size="icon"
