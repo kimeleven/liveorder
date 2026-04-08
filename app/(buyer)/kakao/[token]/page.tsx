@@ -28,6 +28,7 @@ export default function KakaoPayPage() {
           'pendingCode',
           JSON.stringify({ code: data.code.codeKey, data })
         )
+        sessionStorage.setItem('kakaoSource', 'true')
         router.replace('/chat')
       })
       .catch((e) => setError(e.message || '오류가 발생했습니다.'))

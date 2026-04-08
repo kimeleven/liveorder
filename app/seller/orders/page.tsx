@@ -51,6 +51,7 @@ interface OrderItem {
   trackingNo: string | null;
   carrier: string | null;
   createdAt: string;
+  source: string;
   code: { codeKey: string; product: { name: string } };
 }
 
@@ -239,7 +240,16 @@ export default function OrdersPage() {
                       <TableCell className="font-mono text-sm">
                         {order.code.codeKey}
                       </TableCell>
-                      <TableCell>{order.buyerName}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {order.source === 'kakao' && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0 bg-yellow-100 text-yellow-800 border-yellow-200">
+                              카카오
+                            </Badge>
+                          )}
+                          {order.buyerName}
+                        </div>
+                      </TableCell>
                       <TableCell>{order.quantity}</TableCell>
                       <TableCell>₩{order.amount.toLocaleString()}</TableCell>
                       <TableCell>

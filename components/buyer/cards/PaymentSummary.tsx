@@ -29,6 +29,8 @@ export default function PaymentSummary({ data }: Props) {
     const address = data.address as Record<string, unknown>;
 
     try {
+      const source = sessionStorage.getItem('kakaoSource') === 'true' ? 'kakao' : 'web'
+
       // PortOne SDK 로드
       if (!window.PortOne) {
         await new Promise<void>((resolve, reject) => {
@@ -82,6 +84,7 @@ export default function PaymentSummary({ data }: Props) {
           memo: address.memo,
           quantity: data.quantity,
           amount: totalAmount,
+          source,
         }),
       });
 

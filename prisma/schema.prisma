@@ -119,6 +119,7 @@ model Order {
   quantity      Int         @default(1)
   amount        Int // 결제금액
   status        OrderStatus @default(PAID)
+  source        String      @default("web") @map("source") @db.VarChar(10)
   pgTid         String?     @unique @map("pg_tid") @db.VarChar(100) // PG사 거래번호
   trackingNo    String?     @map("tracking_no") @db.VarChar(50) // 운송장번호
   carrier       String?     @db.VarChar(30) // 택배사

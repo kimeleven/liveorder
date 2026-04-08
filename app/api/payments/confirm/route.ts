@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       memo,
       quantity,
       amount,
+      source,
     } = body;
 
     if (
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
             quantity: Number(quantity),
             amount: Number(amount),
             status: "PAID",
+            source: source === 'kakao' ? 'kakao' : 'web',
             pgTid: portonePaymentId,
           },
         });

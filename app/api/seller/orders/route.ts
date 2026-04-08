@@ -21,7 +21,17 @@ export async function GET(req: NextRequest) {
   const [orders, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        buyerName: true,
+        buyerPhone: true,
+        quantity: true,
+        amount: true,
+        status: true,
+        trackingNo: true,
+        carrier: true,
+        createdAt: true,
+        source: true,
         code: {
           select: {
             codeKey: true,
