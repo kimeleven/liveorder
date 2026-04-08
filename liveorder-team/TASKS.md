@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Planner — Task 41~42 완료 확인 + Task 43 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Planner — Task 43 완료 확인 + Task 44 스펙 수립)_
 
 ---
 
@@ -49,307 +49,244 @@ _최종 업데이트: 2026-04-09 (Planner — Task 41~42 완료 확인 + Task 43
 
 ## Dev1 현재 작업
 
-### Task 43: 운송장 일괄 CSV 업로드
+### Task 44: 셀러 주문 실시간 현황 개선
 
-**우선순위:** MEDIUM
-**이유:** 주문량 증가 시 개별 운송장 등록은 매우 비효율. CSV 일괄 업로드로 셀러 운영 편의성 개선.
-
----
-
-#### 43A: 배송지 CSV에 주문ID 컬럼 추가
-
-**파일 수정:** `app/api/seller/orders/export/route.ts`
-
-현재 헤더:
-```
-주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로
-```
-
-변경 후 (주문ID 첫 번째 컬럼 추가):
-```typescript
-const header = "주문ID,주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
-```
-
-rows map 첫 원소로 `o.id` 추가:
-```typescript
-const rows = orders
-  .map((o) =>
-    [
-      o.id,  // ← 추가
-      new Date(o.createdAt).toLocaleString("ko-KR"),
-      o.code.product.name,
-      o.code.codeKey,
-      o.buyerName,
-      o.buyerPhone,
-      o.address,
-      o.addressDetail ?? "",
-      o.memo ?? "",
-      o.quantity,
-      o.amount,
-      o.status,
-      o.trackingNo ?? "",
-      o.source === 'kakao' ? '카카오' : '웹',
-    ]
-    .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
-    .join(",")
-  )
-  .join("\n");
-```
+**우선순위:** HIGH
+**이유:** 셀러가 주문 관리 페이지에서 신규 주문을 수동 새로고침 없이 확인하고, 다른 페이지에서도 미처리 주문 수를 즉시 파악할 수 있어야 함. 주별/월별 매출 분석도 추가.
 
 ---
 
-#### 43B: 일괄 운송장 업로드 API
-
-**파일 신규 생성:** `app/api/seller/orders/tracking/bulk/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-
-const VALID_CARRIERS = ['CJ대한통운', '로젠택배', '한진택배', '롯데택배', '우체국택배']
-const TRACKING_NO_REGEX = /^\d{10,15}$/
-
-interface BulkRow {
-  orderId: string
-  carrier: string
-  trackingNo: string
-}
-
-export async function POST(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  const sellerId = session.user.id
-
-  const body = await req.json()
-  const rows: BulkRow[] = body.rows
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return NextResponse.json({ error: '업로드할 데이터가 없습니다.' }, { status: 400 })
-  }
-  if (rows.length > 500) {
-    return NextResponse.json({ error: '한 번에 최대 500건까지 처리 가능합니다.' }, { status: 400 })
-  }
-
-  let success = 0
-  const errors: { orderId: string; error: string }[] = []
-
-  for (const row of rows) {
-    const { orderId, carrier, trackingNo } = row
-
-    if (!orderId || !carrier || !trackingNo) {
-      errors.push({ orderId: orderId ?? '', error: '주문ID, 택배사, 운송장번호는 필수입니다.' })
-      continue
-    }
-    if (!VALID_CARRIERS.includes(carrier)) {
-      errors.push({ orderId, error: `지원하지 않는 택배사: ${carrier}` })
-      continue
-    }
-    if (!TRACKING_NO_REGEX.test(trackingNo)) {
-      errors.push({ orderId, error: '운송장번호는 숫자 10~15자리입니다.' })
-      continue
-    }
-
-    try {
-      const order = await prisma.order.findFirst({
-        where: {
-          id: orderId,
-          code: { product: { sellerId } },
-          status: { in: ['PAID', 'SHIPPING'] },
-        },
-      })
-
-      if (!order) {
-        errors.push({ orderId, error: '주문을 찾을 수 없거나 권한이 없습니다.' })
-        continue
-      }
-
-      await prisma.order.update({
-        where: { id: orderId },
-        data: { carrier, trackingNo, status: 'SHIPPING' },
-      })
-      success++
-    } catch {
-      errors.push({ orderId, error: '처리 중 오류가 발생했습니다.' })
-    }
-  }
-
-  return NextResponse.json({ success, failed: errors.length, errors })
-}
-```
-
----
-
-#### 43C: 운송장 일괄 업로드 UI
+#### 44A: 셀러 주문 목록 30초 자동 갱신
 
 **파일 수정:** `app/seller/orders/page.tsx`
 
-**1. imports에 Upload 아이콘 추가:**
+기존 `useEffect` (fetchOrders 최초 호출) 아래에 interval 추가:
+
 ```typescript
-import { Download, Truck, Upload } from "lucide-react"
+// 30초마다 자동 갱신
+useEffect(() => {
+  const timer = setInterval(() => {
+    fetchOrders(page)
+  }, 30000)
+  return () => clearInterval(timer)
+}, [page, statusFilter])
 ```
 
-**2. state 추가 (기존 state 선언 아래):**
+**주의:** `fetchOrders`가 closure이므로 deps에 `page`, `statusFilter` 포함 필수. 페이지/필터 변경 시 interval 재설정됨.
+
+**완료 조건:**
+- [ ] `useEffect` interval 30초 추가
+- [ ] 컴포넌트 unmount 시 `clearInterval` 정상 동작
+
+---
+
+#### 44B: 미처리(PAID) 주문 수 배지 API
+
+**파일 신규 생성:** `app/api/seller/orders/unread/route.ts`
+
 ```typescript
-const [bulkDialog, setBulkDialog] = useState(false)
-const [bulkParsed, setBulkParsed] = useState<{ orderId: string; carrier: string; trackingNo: string }[]>([])
-const [bulkResult, setBulkResult] = useState<{ success: number; failed: number; errors: { orderId: string; error: string }[] } | null>(null)
-const [bulkLoading, setBulkLoading] = useState(false)
-const [bulkError, setBulkError] = useState('')
-```
+import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 
-**3. 유틸 함수 추가 (컴포넌트 내부, JSX 앞):**
-```typescript
-function parseBulkCsv(text: string) {
-  const lines = text.trim().split('\n').slice(1) // 헤더 제거
-  return lines
-    .map((line) => {
-      const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim())
-      return { orderId: cols[0] ?? '', carrier: cols[1] ?? '', trackingNo: cols[2] ?? '' }
-    })
-    .filter((r) => r.orderId && r.carrier && r.trackingNo)
-}
-
-function downloadBulkTemplate() {
-  const csv = '\uFEFF주문ID,택배사,운송장번호\n'
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'tracking_template.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function handleBulkFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-  setBulkError('')
-  setBulkResult(null)
-  const file = e.target.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    const text = ev.target?.result as string
-    const parsed = parseBulkCsv(text)
-    setBulkParsed(parsed)
-    if (parsed.length === 0) setBulkError('유효한 데이터가 없습니다. 템플릿을 확인해주세요.')
+export async function GET() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ count: 0 }, { status: 401 })
   }
-  reader.readAsText(file, 'UTF-8')
-}
 
-async function submitBulkTracking() {
-  if (bulkParsed.length === 0) return
-  setBulkLoading(true)
-  setBulkError('')
-  try {
-    const res = await fetch('/api/seller/orders/tracking/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: bulkParsed }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setBulkError(data.error || '업로드에 실패했습니다.')
-      return
-    }
-    setBulkResult(data)
-    if (data.success > 0) fetchOrders(page)
-  } catch {
-    setBulkError('서버 오류가 발생했습니다.')
-  } finally {
-    setBulkLoading(false)
+  const count = await prisma.order.count({
+    where: {
+      code: { product: { sellerId: session.user.id } },
+      status: 'PAID',
+    },
+  })
+
+  return NextResponse.json({ count })
+}
+```
+
+**완료 조건:**
+- [ ] `GET /api/seller/orders/unread` → `{ count: number }` 반환
+- [ ] 401 시 `{ count: 0 }` 반환 (UI가 배지 숨김 처리)
+
+---
+
+#### 44C: SellerShell 헤더 미처리 주문 배지
+
+**파일 수정:** SellerShell 컴포넌트 또는 셀러 레이아웃
+
+먼저 파일 위치 확인:
+```bash
+find components -name "*.tsx" | xargs grep -l "seller\|Seller" 2>/dev/null
+cat app/seller/layout.tsx
+```
+
+**구현 내용 — SellerShell (또는 레이아웃) 최상위에 추가:**
+```typescript
+const [paidCount, setPaidCount] = useState(0)
+
+useEffect(() => {
+  async function fetchUnread() {
+    try {
+      const res = await fetch('/api/seller/orders/unread')
+      if (res.ok) {
+        const { count } = await res.json()
+        setPaidCount(count)
+      }
+    } catch { /* 무시 */ }
   }
+  fetchUnread()
+  const timer = setInterval(fetchUnread, 60000)
+  return () => clearInterval(timer)
+}, [])
+```
+
+**주문 관리 링크에 배지 삽입:**
+```tsx
+<Link href="/seller/orders" className="flex items-center gap-2">
+  주문 관리
+  {paidCount > 0 && (
+    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-xs font-bold text-white bg-red-500 rounded-full">
+      {paidCount > 99 ? '99+' : paidCount}
+    </span>
+  )}
+</Link>
+```
+
+**완료 조건:**
+- [ ] 60초 폴링으로 PAID 주문 수 갱신
+- [ ] 0건이면 배지 미표시, 1건 이상이면 빨간 원 배지 표시
+- [ ] 99건 초과 시 "99+" 표시
+
+---
+
+#### 44D: 셀러 대시보드 주별/월별 매출 차트
+
+**파일 수정:** `app/api/seller/dashboard/route.ts`
+
+`GET` 핸들러 상단에 period 파라미터 추출 추가:
+```typescript
+const { searchParams } = new URL(req.url)
+const period = searchParams.get('period') ?? 'daily' // 'daily' | 'weekly' | 'monthly'
+```
+
+일별/주별/월별 분기 처리 — 기존 일별 로직을 분기로 감싸기:
+```typescript
+let salesRows: { date: string; orders: bigint; revenue: bigint }[]
+
+if (period === 'weekly') {
+  // 최근 8주
+  salesRows = await prisma.$queryRaw`
+    SELECT
+      TO_CHAR(DATE_TRUNC('week', o.created_at AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD') AS date,
+      COUNT(*)::bigint AS orders,
+      COALESCE(SUM(o.amount), 0)::bigint AS revenue
+    FROM orders o
+    JOIN codes c ON c.id = o.code_id
+    JOIN products p ON p.id = c.product_id
+    WHERE p.seller_id = ${sellerId}::uuid
+      AND o.status NOT IN ('REFUNDED')
+      AND o.created_at >= NOW() - INTERVAL '8 weeks'
+    GROUP BY DATE_TRUNC('week', o.created_at AT TIME ZONE 'Asia/Seoul')
+    ORDER BY 1
+  `
+} else if (period === 'monthly') {
+  // 최근 6개월
+  salesRows = await prisma.$queryRaw`
+    SELECT
+      TO_CHAR(DATE_TRUNC('month', o.created_at AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD') AS date,
+      COUNT(*)::bigint AS orders,
+      COALESCE(SUM(o.amount), 0)::bigint AS revenue
+    FROM orders o
+    JOIN codes c ON c.id = o.code_id
+    JOIN products p ON p.id = c.product_id
+    WHERE p.seller_id = ${sellerId}::uuid
+      AND o.status NOT IN ('REFUNDED')
+      AND o.created_at >= NOW() - INTERVAL '6 months'
+    GROUP BY DATE_TRUNC('month', o.created_at AT TIME ZONE 'Asia/Seoul')
+    ORDER BY 1
+  `
+} else {
+  // daily (기존 로직 그대로)
+  salesRows = await prisma.$queryRaw`...기존 7일 쿼리...`
 }
 ```
 
-**4. 헤더 버튼에 "일괄 운송장 등록" 버튼 추가** (배송지 다운로드 버튼 뒤):
-```tsx
-<Button
-  variant="outline"
-  onClick={() => {
-    setBulkDialog(true)
-    setBulkParsed([])
-    setBulkResult(null)
-    setBulkError('')
-  }}
->
-  <Upload className="mr-2 h-4 w-4" /> 일괄 운송장 등록
-</Button>
-```
-
-**5. 기존 운송장 다이얼로그 아래에 일괄 등록 다이얼로그 추가:**
-```tsx
-<Dialog open={bulkDialog} onOpenChange={setBulkDialog}>
-  <DialogContent className="max-w-lg">
-    <DialogHeader>
-      <DialogTitle>운송장 일괄 등록</DialogTitle>
-    </DialogHeader>
-    <div className="space-y-4">
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>CSV 파일로 여러 주문의 운송장을 한번에 등록합니다.</span>
-        <Button variant="link" size="sm" className="p-0 h-auto" onClick={downloadBulkTemplate}>
-          템플릿 다운로드
-        </Button>
-      </div>
-      <div className="space-y-1">
-        <Label>CSV 파일 선택</Label>
-        <Input type="file" accept=".csv" onChange={handleBulkFileChange} />
-        <p className="text-xs text-muted-foreground">
-          형식: 주문ID, 택배사, 운송장번호 (헤더 포함)
-        </p>
-      </div>
-      {bulkParsed.length > 0 && !bulkResult && (
-        <p className="text-sm text-muted-foreground">
-          {bulkParsed.length}건 파싱 완료. 업로드 버튼을 클릭하세요.
-        </p>
-      )}
-      {bulkError && <p className="text-sm text-destructive">{bulkError}</p>}
-      {bulkResult && (
-        <div className="rounded-md border p-3 space-y-1 text-sm">
-          <p className="text-green-600 font-medium">✓ 성공: {bulkResult.success}건</p>
-          {bulkResult.failed > 0 && (
-            <>
-              <p className="text-destructive font-medium">✗ 실패: {bulkResult.failed}건</p>
-              <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
-                {bulkResult.errors.slice(0, 5).map((e, i) => (
-                  <li key={i}>{e.orderId.slice(0, 8)}… — {e.error}</li>
-                ))}
-                {bulkResult.errors.length > 5 && (
-                  <li>외 {bulkResult.errors.length - 5}건...</li>
-                )}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-    <DialogFooter>
-      <Button variant="outline" onClick={() => setBulkDialog(false)}>닫기</Button>
-      {!bulkResult && (
-        <Button
-          onClick={submitBulkTracking}
-          disabled={bulkLoading || bulkParsed.length === 0}
-        >
-          {bulkLoading ? '업로드 중...' : `${bulkParsed.length}건 업로드`}
-        </Button>
-      )}
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
+응답 키는 기존 `dailySales`로 유지 (하위 호환):
+```typescript
+return NextResponse.json({ ..., dailySales: salesRows.map(...) })
 ```
 
 ---
 
-#### 43 완료 조건
+**파일 수정:** `app/seller/dashboard/page.tsx`
 
-- [ ] `app/api/seller/orders/export/route.ts` — 주문ID 첫 번째 컬럼 추가
-- [ ] `app/api/seller/orders/tracking/bulk/route.ts` — POST 핸들러 신규 생성, 500건 상한, 셀러 소유 검증
-- [ ] `app/seller/orders/page.tsx` — Upload import, state 추가, 3개 함수, "일괄 운송장 등록" 버튼, 다이얼로그
-- [ ] 로컬 테스트:
-  - 배송지 CSV 다운로드 → 주문ID 컬럼 확인
-  - 템플릿 다운로드 → 데이터 입력 → 업로드 → 주문 목록 SHIPPING 전환 확인
-  - 잘못된 운송장번호 → 실패 에러 메시지 확인
+**state 추가:**
+```typescript
+const [chartPeriod, setChartPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily')
+```
+
+**fetchDashboard 수정** — period 파라미터 전달:
+```typescript
+const res = await fetch(`/api/seller/dashboard?period=${chartPeriod}`)
+```
+
+**chartPeriod 변경 시 재조회 useEffect 추가:**
+```typescript
+useEffect(() => {
+  fetchDashboard()
+}, [chartPeriod])
+```
+
+**차트 위 탭 UI 추가:**
+```tsx
+<div className="flex gap-1 mb-3">
+  {(['daily', 'weekly', 'monthly'] as const).map((p) => (
+    <Button
+      key={p}
+      variant={chartPeriod === p ? 'default' : 'outline'}
+      size="sm"
+      onClick={() => setChartPeriod(p)}
+      className="text-xs h-7 px-3"
+    >
+      {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
+    </Button>
+  ))}
+</div>
+```
+
+**X축 레이블 포맷 함수 추가:**
+```typescript
+function formatChartLabel(dateStr: string, period: string) {
+  const d = new Date(dateStr)
+  if (period === 'monthly') return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`
+  return `${d.getMonth()+1}/${d.getDate()}${period === 'weekly' ? '주' : ''}`
+}
+```
+
+Recharts `XAxis` `tickFormatter` 수정:
+```tsx
+<XAxis
+  dataKey="date"
+  tickFormatter={(v) => formatChartLabel(v, chartPeriod)}
+/>
+```
+
+**완료 조건:**
+- [ ] `app/api/seller/dashboard/route.ts` — period 파라미터 처리 (daily/weekly/monthly 분기)
+- [ ] `app/seller/dashboard/page.tsx` — chartPeriod state + 탭 UI + useEffect
+- [ ] 주별/월별 차트 데이터가 정상 표시되는지 확인
+
+---
+
+#### 44 완료 조건 (전체)
+
+- [ ] `app/seller/orders/page.tsx` — 30초 interval 자동 갱신 (44A)
+- [ ] `app/api/seller/orders/unread/route.ts` — PAID 주문 수 반환 API (44B)
+- [ ] SellerShell 또는 레이아웃 파일 — 60초 폴링 + 주문 배지 UI (44C)
+- [ ] `app/api/seller/dashboard/route.ts` — period 파라미터 처리 (44D)
+- [ ] `app/seller/dashboard/page.tsx` — 차트 기간 탭 (44D)
 - [ ] git commit + push
 
 ---
@@ -411,6 +348,7 @@ async function submitBulkTracking() {
 
 | Task | 내용 | 완료일 |
 |------|------|--------|
+| Task 43 | 운송장 일괄 CSV 업로드 (export 주문ID, bulk API, UI 다이얼로그) | 2026-04-09 |
 | Task 42 | 셀러 대시보드 채널별 통계 API + UI 카드 | 2026-04-09 |
 | Task 41 | 카카오 세션 일회성 삭제, CSV 주문경로 컬럼 추가 | 2026-04-09 |
 | Task 40 | `orders.source` 필드 추가 (web/kakao), 카카오 진입 sessionStorage 플래그, 결제 API source 저장, 셀러 주문 목록 카카오 배지 UI | 2026-04-09 |
