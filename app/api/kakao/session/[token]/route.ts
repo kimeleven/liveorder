@@ -20,6 +20,9 @@ export async function GET(
     return NextResponse.json({ error: '만료된 링크입니다.' }, { status: 410 })
   }
 
+  // 일회성 토큰: 사용 즉시 삭제 (재사용 방지)
+  await prisma.kakaoPaySession.delete({ where: { token } })
+
   const { code } = session
   const product = code.product
   const seller = product.seller

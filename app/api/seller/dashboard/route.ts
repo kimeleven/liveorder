@@ -66,6 +66,35 @@ export async function GET() {
   `;
   const dailySales = dailySalesRaw.map((r) => ({ date: r.date, total: Number(r.total) }));
 
+  // 채널별 주문 통계 (최근 30일, 환불 제외)
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const channelStats = await prisma.order.groupBy({
+    by: ['source'],
+    where: {
+      code: { product: { sellerId } },
+      status: { notIn: ['REFUNDED'] },
+      createdAt: { gte: thirtyDaysAgo },
+    },
+    _count: { id: true },
+    _sum: { amount: true },
+  })
+
+  const kakaoStat = channelStats.find(s => s.source === 'kakao')
+  const webStat = channelStats.find(s => s.source === 'web')
+
+  const channelSummary = {
+    kakao: {
+      count: kakaoStat?._count.id ?? 0,
+      amount: Number(kakaoStat?._sum.amount ?? 0),
+    },
+    web: {
+      count: webStat?._count.id ?? 0,
+      amount: Number(webStat?._sum.amount ?? 0),
+    },
+  }
+
   return NextResponse.json({
     totalProducts,
     activeCodes,
@@ -75,5 +104,6 @@ export async function GET() {
     emailVerified: seller?.emailVerified ?? true,
     recentOrders,
     dailySales,
+    channelStats: channelSummary,
   });
 }

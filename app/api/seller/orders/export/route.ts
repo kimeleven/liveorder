@@ -17,7 +17,7 @@ export async function GET() {
     take: 10000,
   });
 
-  const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장\n";
+  const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
   const rows = orders
     .map((o) =>
       [
@@ -33,6 +33,7 @@ export async function GET() {
         o.amount,
         o.status,
         o.trackingNo ?? "",
+        o.source === 'kakao' ? '카카오' : '웹',
       ].join(",")
     )
     .join("\n");

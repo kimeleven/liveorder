@@ -35,6 +35,10 @@ interface DashboardStats {
   emailVerified?: boolean;
   recentOrders?: RecentOrder[];
   dailySales?: { date: string; total: number }[];
+  channelStats?: {
+    kakao: { count: number; amount: number }
+    web: { count: number; amount: number }
+  };
 }
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
@@ -239,6 +243,41 @@ export default function SellerDashboardPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        )}
+
+        {/* 채널별 주문 통계 (최근 30일) */}
+        {stats.channelStats && (
+          <div className="mt-6">
+            <h2 className="text-sm font-medium text-muted-foreground mb-3">
+              채널별 주문 (최근 30일)
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">
+                    카카오
+                  </span>
+                  <span className="text-sm text-muted-foreground">채널</span>
+                </div>
+                <p className="text-2xl font-bold">{stats.channelStats.kakao.count}건</p>
+                <p className="text-sm text-muted-foreground">
+                  {stats.channelStats.kakao.amount.toLocaleString()}원
+                </p>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                    웹
+                  </span>
+                  <span className="text-sm text-muted-foreground">직접입력</span>
+                </div>
+                <p className="text-2xl font-bold">{stats.channelStats.web.count}건</p>
+                <p className="text-sm text-muted-foreground">
+                  {stats.channelStats.web.amount.toLocaleString()}원
+                </p>
+              </Card>
+            </div>
+          </div>
         )}
 
         <Card className="border-yellow-200 bg-yellow-50">
