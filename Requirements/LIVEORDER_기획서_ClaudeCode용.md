@@ -1,5 +1,5 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v2.3
+## Claude Code 개발 기획서 v2.4
 > 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-09 | v2.4 | Task 37 완료 (seller.id 버그 수정). Phase 4 핵심 플로우 완전 구현. Task 38 스펙: `docs/kakao-openbuilder-setup.md` + 셀러 코드 페이지 카카오 공지 복사 버튼 + 셀러 대시보드 카카오 채널 안내 카드. |
 | 2026-04-09 | v2.3 | Task 36 완료 확인 (webhook + session API + 카카오 결제 진입 페이지 모두 구현됨). Task 37 버그 발견: `/api/kakao/session/[token]` seller 응답에 `id` 누락 → FlowSeller 타입 불일치. Task 37 수정 + 오픈빌더 연동 문서화 스펙 수립. |
 | 2026-04-09 | v2.2 | Task 34+35 완료 확인. Task 36 스킬 서버 스펙 확정 (webhook + session API + 카카오 결제 진입 페이지). Phase 4 API 명세 업데이트. |
 | 2026-04-09 | v2.1 | Phase 4 카카오톡 챗봇 주문 시스템 추가. Task 34 (사업자등록증 업로드) 미구현 재확인. 팀 재가동. |
