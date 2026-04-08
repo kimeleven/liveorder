@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download, Truck } from "lucide-react";
+import { Download, Truck, Upload } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -79,6 +79,11 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkDialog, setBulkDialog] = useState(false);
+  const [bulkParsed, setBulkParsed] = useState<{ orderId: string; carrier: string; trackingNo: string }[]>([]);
+  const [bulkResult, setBulkResult] = useState<{ success: number; failed: number; errors: { orderId: string; error: string }[] } | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkError, setBulkError] = useState('');
 
   async function fetchOrders(currentPage = page, currentStatus = statusFilter) {
     setIsLoading(true);
@@ -145,6 +150,66 @@ export default function OrdersPage() {
     }
   }
 
+  function parseBulkCsv(text: string) {
+    const lines = text.trim().split('\n').slice(1) // 헤더 제거
+    return lines
+      .map((line) => {
+        const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim())
+        return { orderId: cols[0] ?? '', carrier: cols[1] ?? '', trackingNo: cols[2] ?? '' }
+      })
+      .filter((r) => r.orderId && r.carrier && r.trackingNo)
+  }
+
+  function downloadBulkTemplate() {
+    const csv = '\uFEFF주문ID,택배사,운송장번호\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'tracking_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleBulkFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setBulkError('')
+    setBulkResult(null)
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const parsed = parseBulkCsv(text)
+      setBulkParsed(parsed)
+      if (parsed.length === 0) setBulkError('유효한 데이터가 없습니다. 템플릿을 확인해주세요.')
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  async function submitBulkTracking() {
+    if (bulkParsed.length === 0) return
+    setBulkLoading(true)
+    setBulkError('')
+    try {
+      const res = await fetch('/api/seller/orders/tracking/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: bulkParsed }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setBulkError(data.error || '업로드에 실패했습니다.')
+        return
+      }
+      setBulkResult(data)
+      if (data.success > 0) fetchOrders(page)
+    } catch {
+      setBulkError('서버 오류가 발생했습니다.')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   async function downloadExcel() {
     const res = await fetch("/api/seller/orders/export");
     const blob = await res.blob();
@@ -190,6 +255,17 @@ export default function OrdersPage() {
                 <Download className="mr-2 h-4 w-4" /> 배송지 다운로드
               </Button>
             )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkDialog(true)
+                setBulkParsed([])
+                setBulkResult(null)
+                setBulkError('')
+              }}
+            >
+              <Upload className="mr-2 h-4 w-4" /> 일괄 운송장 등록
+            </Button>
           </div>
         </div>
 
@@ -326,6 +402,63 @@ export default function OrdersPage() {
               <Button onClick={submitTracking} disabled={trackingLoading}>
                 {trackingLoading ? "등록 중..." : "등록"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={bulkDialog} onOpenChange={setBulkDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>운송장 일괄 등록</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>CSV 파일로 여러 주문의 운송장을 한번에 등록합니다.</span>
+                <Button variant="link" size="sm" className="p-0 h-auto" onClick={downloadBulkTemplate}>
+                  템플릿 다운로드
+                </Button>
+              </div>
+              <div className="space-y-1">
+                <Label>CSV 파일 선택</Label>
+                <Input type="file" accept=".csv" onChange={handleBulkFileChange} />
+                <p className="text-xs text-muted-foreground">
+                  형식: 주문ID, 택배사, 운송장번호 (헤더 포함)
+                </p>
+              </div>
+              {bulkParsed.length > 0 && !bulkResult && (
+                <p className="text-sm text-muted-foreground">
+                  {bulkParsed.length}건 파싱 완료. 업로드 버튼을 클릭하세요.
+                </p>
+              )}
+              {bulkError && <p className="text-sm text-destructive">{bulkError}</p>}
+              {bulkResult && (
+                <div className="rounded-md border p-3 space-y-1 text-sm">
+                  <p className="text-green-600 font-medium">✓ 성공: {bulkResult.success}건</p>
+                  {bulkResult.failed > 0 && (
+                    <>
+                      <p className="text-destructive font-medium">✗ 실패: {bulkResult.failed}건</p>
+                      <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                        {bulkResult.errors.slice(0, 5).map((e, i) => (
+                          <li key={i}>{e.orderId.slice(0, 8)}… — {e.error}</li>
+                        ))}
+                        {bulkResult.errors.length > 5 && (
+                          <li>외 {bulkResult.errors.length - 5}건...</li>
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBulkDialog(false)}>닫기</Button>
+              {!bulkResult && (
+                <Button
+                  onClick={submitBulkTracking}
+                  disabled={bulkLoading || bulkParsed.length === 0}
+                >
+                  {bulkLoading ? '업로드 중...' : `${bulkParsed.length}건 업로드`}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -17,24 +17,27 @@ export async function GET() {
     take: 10000,
   });
 
-  const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
+  const header = "주문ID,주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
   const rows = orders
     .map((o) =>
       [
+        o.id,
         new Date(o.createdAt).toLocaleString("ko-KR"),
-        `"${o.code.product.name}"`,
+        o.code.product.name,
         o.code.codeKey,
         o.buyerName,
         o.buyerPhone,
-        `"${o.address}"`,
-        `"${o.addressDetail ?? ""}"`,
-        `"${o.memo ?? ""}"`,
+        o.address,
+        o.addressDetail ?? "",
+        o.memo ?? "",
         o.quantity,
         o.amount,
         o.status,
         o.trackingNo ?? "",
         o.source === 'kakao' ? '카카오' : '웹',
-      ].join(",")
+      ]
+        .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+        .join(",")
     )
     .join("\n");
 
