@@ -1,104 +1,73 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { buildProductCard, sendKakaoMessage } from "@/lib/kakao";
-import { nanoid } from "nanoid";
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
+import crypto from 'crypto'
 
-const CODE_PATTERN = /[A-Z]{3}-\d{4}-[A-Z0-9]{4}/;
+const CODE_PATTERN = /[A-Z0-9]{3}-[0-9]{4}-[A-Z0-9]{4}/
+
+function simpleTextResponse(text: string) {
+  return NextResponse.json({
+    version: '2.0',
+    template: { outputs: [{ simpleText: { text } }] },
+  })
+}
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body = await req.json()
+  const utterance: string = body?.userRequest?.utterance ?? ''
 
-  const userKey: string = body?.userRequest?.user?.id ?? "";
-  const utterance: string = body?.userRequest?.utterance ?? "";
-
-  const match = utterance.toUpperCase().match(CODE_PATTERN);
+  const match = utterance.toUpperCase().match(CODE_PATTERN)
   if (!match) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [
-          { simpleText: { text: "코드를 입력해주세요.\n예: ABC-1234-XY01" } },
-        ],
-      },
-    });
+    return simpleTextResponse('상품 코드를 입력해주세요.\n예: ABC-1234-ABCD')
   }
 
-  const codeKey = match[0];
+  const codeKey = match[0]
 
   const code = await prisma.code.findUnique({
     where: { codeKey },
     include: { product: { include: { seller: true } } },
-  });
+  })
 
-  if (!code || !code.isActive || code.expiresAt < new Date()) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [
-          {
-            simpleText: {
-              text: "유효하지 않은 코드입니다. 코드를 다시 확인해 주세요.",
-            },
-          },
-        ],
-      },
-    });
-  }
+  if (!code) return simpleTextResponse('존재하지 않는 코드입니다.')
+  if (!code.isActive) return simpleTextResponse('비활성화된 코드입니다.')
+  if (code.expiresAt < new Date()) return simpleTextResponse('만료된 코드입니다.')
+  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return simpleTextResponse('품절된 상품입니다.')
+  if (code.product.seller.status !== 'APPROVED') return simpleTextResponse('판매 중단된 상품입니다.')
 
-  if (code.product.seller.status !== "APPROVED") {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [
-          { simpleText: { text: "현재 이용할 수 없는 코드입니다." } },
-        ],
-      },
-    });
-  }
+  // 세션 토큰 생성 (32자 hex, 30분 만료)
+  const token = crypto.randomBytes(16).toString('hex')
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
 
-  if (code.maxQty > 0 && code.usedQty >= code.maxQty) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [
-          { simpleText: { text: "해당 코드는 수량이 소진되었습니다." } },
-        ],
-      },
-    });
-  }
-
-  // 결제 세션 토큰 생성 (30분 만료)
-  const sessionToken = nanoid(32);
   await prisma.kakaoPaySession.create({
-    data: {
-      token: sessionToken,
-      codeId: code.id,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-    },
-  });
+    data: { token, codeId: code.id, expiresAt },
+  })
 
-  const paymentUrl = `${process.env.NEXTAUTH_URL}/kakao/${sessionToken}`;
+  const paymentUrl = `${process.env.NEXTAUTH_URL}/kakao/${token}`
+  const product = code.product
 
-  // 카카오 응답 포맷 (스킬 응답)
   return NextResponse.json({
-    version: "2.0",
+    version: '2.0',
     template: {
       outputs: [
         {
-          basicCard: {
-            title: code.product.name,
-            description: `가격: ₩${code.product.price.toLocaleString()}\n재고: ${
-              code.product.stock === 0
-                ? "무제한"
-                : code.product.stock + "개 남음"
-            }`,
-            thumbnail: code.product.imageUrl
-              ? { imageUrl: code.product.imageUrl }
-              : undefined,
+          commerceCard: {
+            description: product.name,
+            price: product.price,
+            currency: 'won',
+            thumbnails: [
+              {
+                imageUrl:
+                  product.imageUrl ?? 'https://liveorder.vercel.app/og-image.png',
+                link: { web: paymentUrl, mobile_web: paymentUrl },
+              },
+            ],
+            profile: {
+              thumbnail: 'https://liveorder.vercel.app/og-image.png',
+              nickName: product.seller.name,
+            },
             buttons: [
               {
-                label: "결제하기",
-                action: "webLink",
+                label: '결제하기',
+                action: 'webLink',
                 webLinkUrl: paymentUrl,
               },
             ],
@@ -106,5 +75,5 @@ export async function POST(req: NextRequest) {
         },
       ],
     },
-  });
+  })
 }
