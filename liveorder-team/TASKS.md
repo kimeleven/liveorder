@@ -1,408 +1,343 @@
-# LIVEORDER 개발 태스크
-
-> 최종 업데이트: 2026-04-09 (Planner — 팀 재가동. Task 34 미구현 확인. Phase 4 카카오톡 챗봇 태스크 추가.)
-
----
-
-## 🔧 Dev1 현재 할당 — **Task 34 → Task 35 순서로 진행**
-
-> **완료:** Task 21~33 ✅ · B-27~B-33 ✅ · HIGH/MED QA 버그 전체 수정 ✅ · 법적 의무(청약확인/청약철회) ✅
-> **배포 블로커 없음** — Task 14 (Vercel 수동 배포) 진행 가능
+# LiveOrder v3 — 팀 태스크 현황
+_Eddy(PM) 관리_
+_최종 업데이트: 2026-04-09 (Planner — Task 36 상세 스펙 수립)_
 
 ---
 
-### ✅ Task 34: 사업자등록증 이미지 업로드 (셀러 회원가입 필수)
+## ⚠️ 프로젝트 방향
 
-**우선순위:** MED
-**상태:** ✅ 완료 (2026-04-09, 커밋 89f5fab)
-
-**배경:** 셀러 신뢰도 검증. 기획서 3.1.1절 필수 요건.
-현재: `prisma/schema.prisma`에 `bizRegImageUrl` 필드 없음. API 없음. 폼 없음.
-참조: `app/api/seller/products/upload/route.ts` 패턴 재사용.
-
-**수정 파일 6개 (순서대로):**
-
-#### Step 1: `prisma/schema.prisma`
-`tradeRegNo` 필드 아래에 추가:
-```prisma
-bizRegImageUrl String? @map("biz_reg_image_url")
-```
-마이그레이션:
-```bash
-npx prisma migrate dev --name add_biz_reg_image
-```
-
-#### Step 2: `app/api/seller/biz-reg-upload/route.ts` 신규 생성
-`app/api/seller/products/upload/route.ts` 복사 후:
-- filename: `biz-reg/${session.user.id}/${Date.now()}.${ext}`
-- allowedTypes: `image/jpeg, image/png, image/webp, image/gif, application/pdf`
-- status 체크 없음 (PENDING 셀러도 업로드 가능)
-
-#### Step 3: `app/seller/auth/register/page.tsx`
-추가 state:
-```typescript
-const [bizRegImageUrl, setBizRegImageUrl] = useState<string>("");
-const [bizRegUploading, setBizRegUploading] = useState(false);
-const [bizRegFileName, setBizRegFileName] = useState<string>("");
-```
-
-업로드 핸들러 (handleSubmit 위에):
-```typescript
-async function handleBizRegUpload(e: React.ChangeEvent<HTMLInputElement>) {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  setBizRegUploading(true);
-  setBizRegFileName(file.name);
-  setError("");
-  try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/seller/biz-reg-upload", { method: "POST", body: fd });
-    if (!res.ok) {
-      const err = await res.json();
-      setError(err.error ?? "업로드 실패");
-      return;
-    }
-    const { url } = await res.json();
-    setBizRegImageUrl(url);
-  } catch {
-    setError("파일 업로드 중 오류가 발생했습니다.");
-  } finally {
-    setBizRegUploading(false);
-  }
-}
-```
-
-handleSubmit 내 `setLoading(true)` 직후:
-```typescript
-if (!bizRegImageUrl) {
-  setError("사업자등록증 이미지를 업로드해 주세요.");
-  setLoading(false);
-  return;
-}
-```
-
-data 객체에 `bizRegImageUrl` 추가. JSX에 파일 input 추가 (bankAccount 입력 아래):
-```tsx
-<div className="space-y-2">
-  <Label htmlFor="bizRegImage">
-    사업자등록증 *
-    <span className="ml-1 text-xs text-muted-foreground">(JPG/PNG/PDF, 5MB 이하)</span>
-  </Label>
-  <div className="flex items-center gap-2">
-    <Input
-      id="bizRegImage"
-      type="file"
-      accept="image/*,application/pdf"
-      onChange={handleBizRegUpload}
-      disabled={bizRegUploading}
-      className="text-sm"
-    />
-    {bizRegUploading && (
-      <span className="text-xs text-muted-foreground">업로드 중...</span>
-    )}
-  </div>
-  {bizRegImageUrl && (
-    <p className="text-xs text-green-600">✓ 업로드 완료: {bizRegFileName}</p>
-  )}
-</div>
-```
-
-#### Step 4: `app/api/sellers/register/route.ts`
-- destructuring에 `bizRegImageUrl` 추가
-- 필수 검증: `!bizRegImageUrl` 포함 → `"필수 항목을 모두 입력해주세요. (사업자등록증 이미지 포함)"`
-- `prisma.seller.create` data에 `bizRegImageUrl` 추가
-
-#### Step 5: `app/api/admin/sellers/route.ts`
-- `select`에 `bizRegImageUrl: true` 추가
-
-#### Step 6: `app/admin/sellers/page.tsx`
-- `SellerItem` 인터페이스에 `bizRegImageUrl?: string | null` 추가
-- `<TableHead>사업자등록증</TableHead>` 추가 (상태 열 앞)
-- 각 행에 셀 추가:
-```tsx
-<TableCell>
-  {seller.bizRegImageUrl ? (
-    <a href={seller.bizRegImageUrl} target="_blank" rel="noopener noreferrer"
-       className="text-xs text-blue-600 underline">보기</a>
-  ) : (
-    <span className="text-xs text-muted-foreground">미첨부</span>
-  )}
-</TableCell>
-```
-
-**완료 커밋:** `feat: Task 34 — 사업자등록증 이미지 업로드 (Vercel Blob)`
+**v1**: 기존 코드 유지 (그대로 둠)
+**v2**: DROP (없음)
+**v3**: 카카오톡 챗봇 기반 주문 시스템 — v1 코드 위에 확장
 
 ---
 
-### ✅ Task 35: 카카오톡 챗봇 주문 시스템 — 웹훅 API
+## 🚨 v3 핵심 기획 (Sanghun 확정 2026-04-09)
 
-**우선순위:** HIGH (Phase 4 핵심)
-**상태:** ✅ 완료 (2026-04-09, 커밋 a7183c7)
+### 비즈니스 모델
+- **플랫폼 제공자(우리)** — 오픈빌더 봇 관리, 스킬 서버 운영, 전체 인프라
+- **판매자** — 카카오톡 비즈니스 채널 개설 + 상품 등록만
+- **고객** — 카카오톡에서 판매자 채널 친구추가 → 챗봇으로 주문
 
-**배경:** LiveOrder v3 재가동 (2026-04-09). 구매자가 카카오톡 채널에서 코드 입력 → 챗봇이 상품 정보 표시 → 결제 링크 발송 플로우 구현.
+### 아키텍처 (확정 2026-04-09)
 
-**환경변수 (Vercel에 추가 필요):**
+**우리 채널 1개 + 봇 1개 + 판매자 선택 구조**
+
 ```
-KAKAO_CHANNEL_ID          # 카카오 채널 ID
-KAKAO_REST_API_KEY        # 카카오 REST API 키
-KAKAO_BIZMSG_ACCESS_TOKEN # 카카오 비즈메시지 액세스 토큰 (철수토큰)
+[liveorder 채널 1개] → [liveorder 봇 1개] → [스킬 서버]
+                                                │
+                                                ├→ 고객이 코드 입력
+                                                ├→ 코드로 상품 DB 조회
+                                                ├→ KakaoPaySession 생성
+                                                ├→ commerceCard 응답
+                                                └→ /kakao/[token] → 결제 진행
 ```
 
-#### Step 1: `lib/kakao.ts` 신규 생성
+- 봇 이름: liveorder
+- 봇 ID: 69d6729b9fac321ddc6b5d64
+
+### 주문 플로우
+1. 고객이 **liveorder 채널** 친구추가
+2. 코드 입력 (예: ABC-1234-ABCD)
+3. 봇이 상품 카드(commerceCard) + "결제하기" 버튼 전송
+4. "결제하기" 클릭 → `/kakao/[token]` 접속
+5. 토큰 검증 → 기존 채팅 결제 플로우 (수량 선택 → PortOne → 배송지 입력)
+6. 주문 완료
+
+---
+
+## Dev1 현재 작업
+
+### Task 36: 카카오 오픈빌더 스킬 서버 + 결제 연결 페이지
+
+**구현해야 할 파일 3개:**
+
+---
+
+#### 36A: `app/api/kakao/webhook/route.ts`
+
+카카오 오픈빌더 → POST /api/kakao/webhook
+
 ```typescript
-// 카카오 채널 메시지 발송 유틸
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import crypto from 'crypto'
 
-const KAKAO_API_BASE = "https://kapi.kakao.com";
-
-export async function sendKakaoMessage(
-  userId: string,
-  message: KakaoMessage
-): Promise<void> {
-  const res = await fetch(`${KAKAO_API_BASE}/v1/api/talk/friends/message/default/send`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.KAKAO_BIZMSG_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      receiver_uuids: [userId],
-      template_object: message,
-    }),
-  });
-  if (!res.ok) {
-    console.error("[kakao] message send failed:", await res.text());
-  }
+// 카카오 스킬 서버 응답 헬퍼
+function simpleTextResponse(text: string) {
+  return NextResponse.json({
+    version: '2.0',
+    template: { outputs: [{ simpleText: { text } }] }
+  })
 }
-
-export interface KakaoMessage {
-  object_type: string;
-  [key: string]: unknown;
-}
-
-export function buildProductCard(
-  productName: string,
-  price: number,
-  stock: number,
-  imageUrl: string | null,
-  paymentUrl: string
-): KakaoMessage {
-  return {
-    object_type: "commerce",
-    content: {
-      title: productName,
-      image_url: imageUrl ?? "https://liveorder.vercel.app/og-image.png",
-      image_width: 640,
-      image_height: 640,
-      description: `₩${price.toLocaleString()} | 재고: ${stock === 0 ? "무제한" : stock + "개"}`,
-      link: { web_url: paymentUrl, mobile_web_url: paymentUrl },
-    },
-    commerce: {
-      regular_price: price,
-    },
-    buttons: [
-      {
-        title: "결제하기",
-        link: { web_url: paymentUrl, mobile_web_url: paymentUrl },
-      },
-    ],
-  };
-}
-```
-
-#### Step 2: `app/api/kakao/webhook/route.ts` 신규 생성
-
-웹훅 수신 + 코드 처리 + 메시지 응답:
-```typescript
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { buildProductCard, sendKakaoMessage } from "@/lib/kakao";
-import { nanoid } from "nanoid";
-
-const CODE_PATTERN = /[A-Z]{3}-\d{4}-[A-Z0-9]{4}/;
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body = await req.json()
+  const utterance: string = body?.userRequest?.utterance ?? ''
 
-  // 카카오 웹훅 서명 검증 (선택 — KAKAO_REST_API_KEY 헤더 비교)
-  // const signature = req.headers.get("X-Kakao-Signature");
-
-  const userKey: string = body?.userRequest?.user?.id;
-  const utterance: string = body?.userRequest?.utterance ?? "";
-
-  const match = utterance.toUpperCase().match(CODE_PATTERN);
-  if (!match) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [{ simpleText: { text: "코드를 입력해주세요.\n예: ABC-1234-XY01" } }],
-      },
-    });
+  // 코드 패턴 추출 (대소문자 무관)
+  const codeMatch = utterance.toUpperCase().match(/[A-Z0-9]{3}-[0-9]{4}-[A-Z0-9]{4}/)
+  if (!codeMatch) {
+    return simpleTextResponse('상품 코드를 입력해주세요.\n예: ABC-1234-ABCD')
   }
 
-  const codeKey = match[0];
+  const codeKey = codeMatch[0]
 
-  // 코드 조회
-  const code = await prisma.code.findUnique({
+  // DB 조회 (code + product + seller)
+  const code = await db.code.findUnique({
     where: { codeKey },
-    include: { product: { include: { seller: true } } },
-  });
+    include: { product: { include: { seller: true } } }
+  })
 
-  if (!code || !code.isActive || code.expiresAt < new Date()) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [{ simpleText: { text: "유효하지 않은 코드입니다. 코드를 다시 확인해 주세요." } }],
-      },
-    });
-  }
+  // 유효성 검증
+  if (!code) return simpleTextResponse('존재하지 않는 코드입니다.')
+  if (!code.isActive) return simpleTextResponse('비활성화된 코드입니다.')
+  if (code.expiresAt < new Date()) return simpleTextResponse('만료된 코드입니다.')
+  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return simpleTextResponse('품절된 상품입니다.')
+  if (code.product.seller.status !== 'APPROVED') return simpleTextResponse('판매 중단된 상품입니다.')
 
-  if (code.product.seller.status !== "APPROVED") {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [{ simpleText: { text: "현재 이용할 수 없는 코드입니다." } }],
-      },
-    });
-  }
+  // 세션 토큰 생성 (32자 hex, 30분 만료)
+  const token = crypto.randomBytes(16).toString('hex')
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
 
-  if (code.maxQty > 0 && code.usedQty >= code.maxQty) {
-    return NextResponse.json({
-      version: "2.0",
-      template: {
-        outputs: [{ simpleText: { text: "해당 코드는 수량이 소진되었습니다." } }],
-      },
-    });
-  }
+  await db.kakaoPaySession.create({
+    data: { token, codeId: code.id, expiresAt }
+  })
 
-  // 결제 세션 토큰 생성 (30분 만료)
-  const sessionToken = nanoid(32);
-  await prisma.kakaoPaySession.create({
-    data: {
-      token: sessionToken,
-      codeId: code.id,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-    },
-  });
+  const paymentUrl = `${process.env.NEXTAUTH_URL}/kakao/${token}`
+  const product = code.product
 
-  const paymentUrl = `${process.env.NEXTAUTH_URL}/kakao/${sessionToken}`;
-  const card = buildProductCard(
-    code.product.name,
-    code.product.price,
-    code.product.stock,
-    code.product.imageUrl,
-    paymentUrl
-  );
-
-  // 카카오 응답 포맷 (스킬 응답)
+  // commerceCard 응답
   return NextResponse.json({
-    version: "2.0",
+    version: '2.0',
     template: {
-      outputs: [
-        {
-          basicCard: {
-            title: code.product.name,
-            description: `가격: ₩${code.product.price.toLocaleString()}\n재고: ${code.product.stock === 0 ? "무제한" : code.product.stock + "개 남음"}`,
-            thumbnail: code.product.imageUrl
-              ? { imageUrl: code.product.imageUrl }
-              : undefined,
-            buttons: [
-              {
-                label: "결제하기",
-                action: "webLink",
-                webLinkUrl: paymentUrl,
-              },
-            ],
+      outputs: [{
+        commerceCard: {
+          description: product.name,
+          price: product.price,
+          currency: 'won',
+          thumbnails: [{
+            imageUrl: product.imageUrl ?? 'https://liveorder.vercel.app/og-image.png',
+            link: { web: paymentUrl, mobile_web: paymentUrl }
+          }],
+          profile: {
+            thumbnail: 'https://liveorder.vercel.app/og-image.png',
+            nickName: product.seller.name
           },
-        },
-      ],
-    },
-  });
+          buttons: [{
+            label: '결제하기',
+            action: 'webLink',
+            webLinkUrl: paymentUrl
+          }]
+        }
+      }]
+    }
+  })
 }
 ```
-
-#### Step 3: `prisma/schema.prisma` — KakaoPaySession 모델 추가
-```prisma
-model KakaoPaySession {
-  id        String   @id @default(uuid()) @db.Uuid
-  token     String   @unique @db.VarChar(64)
-  codeId    String   @map("code_id") @db.Uuid
-  expiresAt DateTime @map("expires_at") @db.Timestamptz
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  code Code @relation(fields: [codeId], references: [id])
-
-  @@map("kakao_pay_sessions")
-}
-```
-
-`Code` 모델에 relation 추가:
-```prisma
-kakaoPaySessions KakaoPaySession[]
-```
-
-마이그레이션:
-```bash
-npx prisma migrate dev --name add_kakao_pay_session
-```
-
-**완료 커밋:** `feat: Task 35 — 카카오톡 챗봇 웹훅 API + KakaoPaySession`
 
 ---
 
-### 🔧 Task 36: 카카오 결제 연결 웹 페이지
+#### 36B: `app/api/kakao/session/[token]/route.ts`
 
-**우선순위:** HIGH (Task 35 완료 후 착수)
-**상태:** ⬜ 미착수 (Task 35 완료됨 → 착수 가능)
+세션 토큰 검증 API (결제 페이지에서 호출)
 
-**신규 파일:** `app/(buyer)/kakao/[token]/page.tsx`
-
-기능:
-1. URL의 `token` 파라미터로 `KakaoPaySession` 조회
-2. 만료 시 에러 페이지 표시 ("링크가 만료되었습니다. 카카오 채널에서 코드를 다시 입력해 주세요.")
-3. 유효하면 해당 코드의 상품 정보 표시
-4. 수량 선택 UI (기존 `QuantitySelector` 컴포넌트 재사용)
-5. "결제하기" 클릭 시 기존 `PaymentSummary` 결제 플로우로 연결
-6. 결제 완료 후 배송지 입력 (`AddressForm`) → 주문 완료
-
-**구현 스펙:**
 ```typescript
-// app/(buyer)/kakao/[token]/page.tsx
-// 1. GET KakaoPaySession by token
-// 2. If expired: show error message
-// 3. If valid: load code + product info
-// 4. Render: KakaoOrderFlow (새 컴포넌트)
-//   - ProductCard (상품 정보)
-//   - QuantitySelector
-//   - PaymentSummary (결제 버튼)
-//   - → 결제 완료 후 AddressForm
-//   - → 주문 완료 화면
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const { token } = await params
+
+  const session = await db.kakaoPaySession.findUnique({
+    where: { token },
+    include: {
+      code: {
+        include: { product: { include: { seller: true } } }
+      }
+    }
+  })
+
+  if (!session || session.expiresAt < new Date()) {
+    return NextResponse.json({ error: '만료된 링크입니다.' }, { status: 410 })
+  }
+
+  const { code } = session
+  const product = code.product
+  const seller = product.seller
+
+  // /api/codes/[codeKey] 응답과 동일한 형식
+  return NextResponse.json({
+    valid: true,
+    code: {
+      id: code.id,
+      codeKey: code.codeKey,
+      maxQty: code.maxQty,
+      usedQty: code.usedQty,
+      remainingQty: code.maxQty === 0 ? null : code.maxQty - code.usedQty,
+    },
+    product: {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      imageUrl: product.imageUrl,
+      category: product.category,
+    },
+    seller: {
+      name: seller.name,
+      businessNo: seller.businessNo,
+      tradeRegNo: seller.tradeRegNo,
+    }
+  })
+}
 ```
 
-**참조 파일:** `app/(buyer)/chat/page.tsx` + `stores/buyer-store.ts` (기존 채팅 플로우 참고)
+---
 
-**완료 커밋:** `feat: Task 36 — 카카오 결제 연결 페이지 (/kakao/[token])`
+#### 36C: `app/(buyer)/kakao/[token]/page.tsx`
+
+카카오 결제 진입 페이지 (기존 `/order/[code]/page.tsx` 패턴 동일)
+
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+
+export default function KakaoPayPage() {
+  const router = useRouter()
+  const params = useParams()
+  const token = params.token as string
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!token) return
+
+    fetch(`/api/kakao/session/${token}`)
+      .then((r) => {
+        if (r.status === 410) throw new Error('만료된 링크입니다. 카카오톡에서 다시 시도해주세요.')
+        if (!r.ok) throw new Error('서버 오류가 발생했습니다.')
+        return r.json()
+      })
+      .then((data) => {
+        if (!data.valid) {
+          setError(data.error || '유효하지 않은 링크입니다.')
+          return
+        }
+        // 기존 chat 페이지와 동일한 pendingCode 형식으로 저장
+        sessionStorage.setItem(
+          'pendingCode',
+          JSON.stringify({ code: data.code.codeKey, data })
+        )
+        router.replace('/chat')
+      })
+      .catch((e) => setError(e.message || '오류가 발생했습니다.'))
+  }, [token, router])
+
+  if (error) {
+    return (
+      <div className="flex flex-col flex-1 items-center justify-center px-6 text-center space-y-4">
+        <p className="text-destructive font-semibold">{error}</p>
+        <a href="/" className="underline text-sm text-muted-foreground">
+          처음으로 돌아가기
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col flex-1 items-center justify-center px-6 text-center space-y-4">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <p className="text-sm text-muted-foreground">결제 페이지 로딩 중...</p>
+    </div>
+  )
+}
+```
+
+---
+
+### 구현 시 주의사항
+1. `params` 타입: Next.js 16에서 `params`는 `Promise<{...}>` → `await params` 필요
+2. `crypto`는 Node.js built-in (import 필요, nanoid 불필요)
+3. `NEXTAUTH_URL` 환경변수로 paymentUrl 생성
+4. 기존 `/api/codes/[codeKey]` 응답 형식과 맞춰야 `/chat`에서 올바르게 처리됨
+
+### 완료 후 확인 사항
+- `curl -X POST http://localhost:3000/api/kakao/webhook -H 'Content-Type: application/json' -d '{"userRequest":{"utterance":"ABC-1234-ABCD"}}'` 로 테스트
+- commerceCard 응답의 `webLinkUrl`이 정상 URL인지 확인
+- `/kakao/[token]` 접속 시 `/chat`으로 redirect 되는지 확인
+- 만료 토큰 (수동 DB 수정) 접속 시 에러 메시지 표시 확인
+
+---
+
+## Planner 📋 역할
+
+### 매 실행마다:
+1. 기존 v1 코드 분석 → v3 확장 포인트 파악
+2. 오픈빌더 봇 시나리오 설계 (대화 흐름, 블록 구조)
+3. DB 스키마 설계 (판매자-봇 매핑, 상품, 주문, 배송)
+4. API 설계 (스킬 서버 엔드포인트)
+5. PLAN.md에 Phase별 기획 작성
+
+---
+
+## Dev1 📋 역할
+
+### 매 실행마다:
+1. TASKS.md에서 Dev1 할당 태스크 확인
+2. PLAN.md에서 기획 내용 파악
+3. 구현 → 테스트 → git add → commit → push
+4. TASKS.md 업데이트
+
+### 기술 규칙:
+- 기존 v1 코드 구조 유지 — 새 기능은 별도 디렉토리/모듈로 추가
+- DB 변경은 Prisma migration으로
+- git user: kimeleven / kimeleven@gmail.com
+
+---
+
+## Dev2 📋 역할
+
+### 매 실행마다:
+1. TASKS.md에서 Dev2 할당 태스크 확인
+2. 프론트엔드/관리자 페이지 구현
+3. 판매자 관리자 페이지 (상품 등록, 주문 관리)
+4. 구현 → 테스트 → git add → commit → push
+
+---
+
+## QA 📋 역할
+
+### 매 실행마다:
+1. 변경 파일만 검토 (git diff)
+2. 스킬 서버 API 테스트
+3. QA_REPORT.md 업데이트
+
+---
+
+## 로컬 환경
+- 프로젝트: ~/eddy-agent/liveorder
+- DB: PostgreSQL localhost:5432, liveorder
+- GitHub: kimeleven/liveorder
+- 기존 스택: Next.js + Prisma + PostgreSQL
 
 ---
 
 ## 완료된 작업
 
-| Task | 내용 | 커밋 |
-|------|------|------|
-| Task 21 | 셀러 이메일 인증 (B-22, P3-5) | 1ee50ab |
-| Task 22 | 셀러 이메일 재발송 API | 1ee50ab |
-| Task 23 | 관리자 주문 목록 + 환불 UI (P3-6) | 1ddddfc |
-| Task 24 | 셀러 대시보드 recharts 차트 (P3-3) | 기구현 |
-| Task 25 | 배송 추적 링크 (P3-4) | 기구현 |
-| Task 26 | pgTid unique 제약 (B-28) | 1ddddfc |
-| Task 27 | 환불 상태 처리 수정 (B-29) | 1ddddfc |
-| Task 28 | 정산 배치 DELIVERED 포함 + sellerId FK (B-31) | 1ddddfc |
-| Task 29 | 이메일 인증 토큰 만료 검증 24h (B-32) | 1ee50ab |
-| Task 30 | seller/orders Skeleton + dashboard 에러 처리 | 9ffc548 |
-| Task 31 | seller/orders 상태 필터 + data-deletion rate limiting | b57439d |
-| Task 32 | QuantitySelector 무제한 UX + CSV export 10000건 상한 | 87052f1 |
-| Task 33 | 청약확인 UI + 청약철회 API (전자상거래법 대응) | 012ec5a |
-| Task 34 | 사업자등록증 이미지 업로드 (Vercel Blob) | 89f5fab |
-| Task 35 | 카카오톡 챗봇 웹훅 API + KakaoPaySession | a7183c7 |
-| B-28~B-33 | QA 버그 전체 수정 | 각 커밋 |
-| P3-0~P3-8 | Phase 3 로드맵 | 완료 |
+| Task | 내용 | 완료일 |
+|------|------|--------|
+| Task 34 | 사업자등록증 이미지 업로드 — `app/api/seller/biz-reg-upload/route.ts`, `app/seller/auth/register/page.tsx` UI, DB 마이그레이션 | 2026-04-09 |
+| Task 35 | KakaoPaySession DB 마이그레이션 (`kakao_pay_sessions` 테이블), `lib/kakao.ts` 기본 구조, Prisma schema 반영 | 2026-04-09 |
+| Task 1~33 | Phase 1+2+3 전체 기능 (v1 웹 플랫폼) | 2026-04-04 |
+
+---
+
+## 규칙
+- Sanghun에게 직접 보고 금지 — Eddy가 통합 보고
+- QA는 변경분만 검토 (토큰 절약)
+- git user: kimeleven
