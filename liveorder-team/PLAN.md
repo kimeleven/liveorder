@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 39 완료 반영, Task 40 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 40 완료 확인, Task 41~42 스펙 수립)_
 
 ---
 
@@ -23,9 +23,11 @@ _최종 업데이트: 2026-04-09 (Task 39 완료 반영, Task 40 스펙 수립)_
 | Task 37 | `/api/kakao/session/[token]` seller.id 누락 버그 수정 | ✅ 완료 |
 | Task 38 | OpenBuilder 설정 문서 + 셀러 코드 페이지 카카오 공지 복사 버튼 + 셀러 대시보드 안내 카드 | ✅ 완료 |
 | Task 39 | 카카오 세션 자동 정리 cron + 웹훅 봇 ID 검증 | ✅ 완료 |
+| Task 40 | 주문 소스 추적 (`source: 'web' \| 'kakao'`) — DB 스키마, 결제 API, 셀러 주문 목록 카카오 배지 UI | ✅ 완료 |
 
 ### 현재 진행
-- **Task 40**: 주문 소스 추적 (`source: 'web' | 'kakao'`) — 셀러가 카카오 경로 주문 식별
+- **Task 41**: 카카오 세션 일회성 보장 (보안) + CSV source 컬럼 추가
+- **Task 42**: 셀러 대시보드 채널별 통계 (카카오 vs 웹)
 
 ---
 
@@ -41,271 +43,226 @@ _최종 업데이트: 2026-04-09 (Task 39 완료 반영, Task 40 스펙 수립)_
 
 [구매자] 결제하기 클릭 → /kakao/[token]
                           │
-                          ├→ GET /api/kakao/session/[token] 검증
+                          ├→ GET /api/kakao/session/[token] 검증 + 즉시 삭제 ← Task 41 개선
                           ├→ sessionStorage pendingCode 저장
-                          ├→ sessionStorage kakaoSource='true' 저장 ← Task 40 추가
+                          ├→ sessionStorage kakaoSource='true' 저장
                           └→ /chat redirect → 기존 결제 플로우
 
 [PaymentSummary] → POST /api/payments/confirm
                           │
-                          ├→ sessionStorage에서 kakaoSource 읽기 ← Task 40 추가
-                          └→ body에 source: 'kakao' | 'web' 포함 ← Task 40 추가
+                          ├→ sessionStorage에서 kakaoSource 읽기
+                          └→ body에 source: 'kakao' | 'web' 포함
 
 [Vercel Cron 매일 03:00] → DELETE expired kakao_pay_sessions
+[셀러 CSV 다운로드] → source 컬럼 포함 (웹/카카오) ← Task 41 추가
+[셀러 대시보드] → 채널별 주문 비율 통계 ← Task 42 추가
 ```
 
 ---
 
-## Phase 4: Task 40 상세 스펙
+## Phase 4: Task 41 상세 스펙
 
 ### 배경 / 문제
 
-현재 카카오 채널을 통해 들어온 주문과 웹 직접 입력 주문이 `Order` 테이블에서 구분되지 않음.
-셀러가 주문 목록에서 "카카오 채널 주문"을 식별할 수 없어 CS/분석에 불편함.
+1. **보안**: 현재 `/api/kakao/session/[token]`은 검증만 하고 세션을 삭제하지 않음.
+   동일 토큰으로 여러 번 접근 가능 → 일회성 토큰이 아님.
+2. **CSV 누락**: 셀러 CSV 내보내기에 `source` 컬럼 없어 채널 분석 불가.
 
 ---
 
-### Task 40A: DB 스키마 변경 — `source` 필드 추가
+### Task 41A: 카카오 세션 일회성 처리
 
-**파일 수정:** `prisma/schema.prisma`
+**파일 수정:** `app/api/kakao/session/[token]/route.ts`
 
-`Order` 모델에 추가:
-```prisma
-source    String   @default("web") @map("source") @db.VarChar(10) // 'web' | 'kakao'
+현재 `findUnique` 후 응답만 반환. 세션 검증 성공 시 즉시 삭제 추가:
+
+```typescript
+// 세션 검증 성공 후 즉시 삭제 (일회성 토큰 보장)
+await prisma.kakaoPaySession.delete({ where: { token } })
 ```
 
-전체 `Order` 모델 변경 후 (기존 필드 중간에 삽입):
-```prisma
-model Order {
-  id            String      @id @default(uuid()) @db.Uuid
-  codeId        String      @map("code_id") @db.Uuid
-  settlementId  String?     @map("settlement_id") @db.Uuid
-  buyerName     String      @map("buyer_name") @db.VarChar(50)
-  buyerPhone    String      @map("buyer_phone") @db.VarChar(20)
-  address       String
-  addressDetail String?     @map("address_detail")
-  memo          String?
-  quantity      Int         @default(1)
-  amount        Int
-  status        OrderStatus @default(PAID)
-  source        String      @default("web") @map("source") @db.VarChar(10)  // ← 추가
-  pgTid         String?     @unique @map("pg_tid") @db.VarChar(100)
-  trackingNo    String?     @map("tracking_no") @db.VarChar(50)
-  carrier       String?     @db.VarChar(30)
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  ...
+전체 수정 후 GET 핸들러 구조:
+```typescript
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const { token } = await params
+
+  const session = await prisma.kakaoPaySession.findUnique({
+    where: { token },
+    include: {
+      code: {
+        include: { product: { include: { seller: true } } },
+      },
+    },
+  })
+
+  if (!session || session.expiresAt < new Date()) {
+    return NextResponse.json({ error: '만료된 링크입니다.' }, { status: 410 })
+  }
+
+  // 일회성 토큰: 사용 즉시 삭제
+  await prisma.kakaoPaySession.delete({ where: { token } })
+
+  const { code } = session
+  // ... 이하 기존 응답 로직 동일
 }
 ```
 
-**마이그레이션 실행:**
-```bash
-npx prisma migrate dev --name add_order_source
+**주의:** `delete` 실패 시(이미 삭제됨) → 이미 사용된 세션이므로 410 반환이 맞음.
+`findUnique`와 `delete`를 트랜잭션으로 묶지 않아도 됨 (delete 실패 = 사용된 토큰).
+
+---
+
+### Task 41B: CSV 내보내기에 source 컬럼 추가
+
+**파일 수정:** `app/api/seller/orders/export/route.ts`
+
+1. `header` 문자열에 "주문경로" 컬럼 추가:
+```typescript
+const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
+```
+
+2. `rows` map에 source 컬럼 추가 (마지막):
+```typescript
+o.trackingNo ?? "",
+o.source === 'kakao' ? '카카오' : '웹',  // ← 추가
+```
+
+3. prisma 쿼리에 `source: true` 추가 (현재 `include`만 있음, `select` 없으므로 자동 포함됨):
+```typescript
+// 현재 쿼리에서 order에 source가 자동 포함되지만 명시적으로 확인
+// prisma.order.findMany에서 select 없이 include만 사용하므로 source 자동 포함
 ```
 
 ---
 
-### Task 40B: 카카오 진입 페이지에 소스 플래그 저장
+### Task 41 완료 조건
 
-**파일 수정:** `app/(buyer)/kakao/[token]/page.tsx`
+- [ ] `app/api/kakao/session/[token]/route.ts` — 검증 성공 후 `prisma.kakaoPaySession.delete` 추가
+- [ ] `app/api/seller/orders/export/route.ts` — "주문경로" 헤더 + source 값 ('웹'/'카카오') 추가
+- [ ] 로컬 테스트: `curl http://localhost:3000/api/kakao/session/[valid-token]` 두 번 호출 → 두 번째 410 확인
+- [ ] git commit + push
 
-`sessionStorage.setItem('pendingCode', ...)` 직후에 추가:
+---
+
+## Phase 4: Task 42 상세 스펙
+
+### 배경 / 목적
+
+셀러가 대시보드에서 카카오 채널과 웹 직접 입력 주문의 비율을 한눈에 볼 수 있도록 통계 추가.
+이미 `orders.source` 필드가 있으므로 API + UI만 추가.
+
+---
+
+### Task 42A: 셀러 대시보드 API에 채널별 통계 추가
+
+**파일 수정:** `app/api/seller/dashboard/route.ts`
+
+기존 응답에 `channelStats` 추가:
+
 ```typescript
-sessionStorage.setItem('kakaoSource', 'true')
-router.replace('/chat')
+// 채널별 주문 통계 (최근 30일)
+const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+const channelStats = await prisma.order.groupBy({
+  by: ['source'],
+  where: {
+    code: { product: { sellerId: seller.id } },
+    status: { notIn: ['REFUNDED'] },
+    createdAt: { gte: thirtyDaysAgo },
+  },
+  _count: { id: true },
+  _sum: { amount: true },
+})
+
+// 응답 형식으로 변환
+const kakaoOrders = channelStats.find(s => s.source === 'kakao')
+const webOrders = channelStats.find(s => s.source === 'web')
+
+const channelSummary = {
+  kakao: {
+    count: kakaoOrders?._count.id ?? 0,
+    amount: Number(kakaoOrders?._sum.amount ?? 0),
+  },
+  web: {
+    count: webOrders?._count.id ?? 0,
+    amount: Number(webOrders?._sum.amount ?? 0),
+  },
+}
 ```
 
-전체 `.then(data => ...)` 블록:
+기존 return 응답에 추가:
 ```typescript
-.then((data) => {
-  if (!data.valid) {
-    setError(data.error || '유효하지 않은 링크입니다.')
-    return
-  }
-  sessionStorage.setItem(
-    'pendingCode',
-    JSON.stringify({ code: data.code.codeKey, data })
-  )
-  sessionStorage.setItem('kakaoSource', 'true')  // ← 추가
-  router.replace('/chat')
+return NextResponse.json({
+  ...기존필드,
+  channelStats: channelSummary,  // ← 추가
 })
 ```
 
 ---
 
-### Task 40C: 결제 확인 컴포넌트에서 소스 전송
+### Task 42B: 셀러 대시보드 UI에 채널 통계 카드 추가
 
-**파일 수정:** `components/buyer/cards/PaymentSummary.tsx`
+**파일 수정:** `app/seller/dashboard/page.tsx`
 
-`handlePayment()` 내 `fetch("/api/payments/confirm", ...)` body에 `source` 추가:
-```typescript
-// sessionStorage에서 카카오 소스 플래그 읽기
-const source = sessionStorage.getItem('kakaoSource') === 'true' ? 'kakao' : 'web'
+기존 통계 카드 섹션 (매출, 주문 수, 처리 중 등) 아래에 "채널별 주문" 섹션 추가:
 
-const res = await fetch("/api/payments/confirm", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    portonePaymentId,
-    codeId: currentFlow?.codeId,
-    buyerName: address.buyerName,
-    buyerPhone: address.buyerPhone,
-    address: address.address,
-    addressDetail: address.addressDetail,
-    memo: address.memo,
-    quantity: data.quantity,
-    amount: totalAmount,
-    source,  // ← 추가
-  }),
-});
+```tsx
+{/* 채널별 주문 통계 */}
+{stats.channelStats && (
+  <div className="mt-6">
+    <h2 className="text-sm font-medium text-muted-foreground mb-3">
+      채널별 주문 (최근 30일)
+    </h2>
+    <div className="grid grid-cols-2 gap-4">
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">
+            카카오
+          </span>
+          <span className="text-sm text-muted-foreground">채널</span>
+        </div>
+        <p className="text-2xl font-bold">{stats.channelStats.kakao.count}건</p>
+        <p className="text-sm text-muted-foreground">
+          {stats.channelStats.kakao.amount.toLocaleString()}원
+        </p>
+      </Card>
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+            웹
+          </span>
+          <span className="text-sm text-muted-foreground">직접입력</span>
+        </div>
+        <p className="text-2xl font-bold">{stats.channelStats.web.count}건</p>
+        <p className="text-sm text-muted-foreground">
+          {stats.channelStats.web.amount.toLocaleString()}원
+        </p>
+      </Card>
+    </div>
+  </div>
+)}
 ```
 
-**주의:** `source` 읽는 코드는 `handlePayment()` 함수 내부 try 블록 진입 직후, `portonePaymentId` 생성 전에 위치시킬 것.
-
----
-
-### Task 40D: 결제 확인 API에서 source 저장
-
-**파일 수정:** `app/api/payments/confirm/route.ts`
-
-1. `body` 구조분해에 `source` 추가:
+**타입 수정:** dashboard 데이터 타입에 `channelStats` 추가:
 ```typescript
-const {
-  portonePaymentId,
-  codeId,
-  buyerName,
-  buyerPhone,
-  address,
-  addressDetail,
-  memo,
-  quantity,
-  amount,
-  source,  // ← 추가
-} = body;
-```
-
-2. `tx.order.create` data에 `source` 추가:
-```typescript
-const newOrder = await tx.order.create({
-  data: {
-    codeId,
-    buyerName,
-    buyerPhone,
-    address,
-    addressDetail,
-    memo,
-    quantity: Number(quantity),
-    amount: Number(amount),
-    status: "PAID",
-    pgTid: portonePaymentId,
-    source: source === 'kakao' ? 'kakao' : 'web',  // ← 추가 (유효성 검증)
-  },
-});
-```
-
----
-
-### Task 40E: 셀러 주문 API에 source 포함
-
-**파일 수정:** `app/api/seller/orders/route.ts`
-
-주문 조회 `select` 블록에 `source: true` 추가:
-```typescript
-select: {
-  id: true,
-  buyerName: true,
-  buyerPhone: true,
-  quantity: true,
-  amount: true,
-  status: true,
-  source: true,  // ← 추가
-  trackingNo: true,
-  carrier: true,
-  createdAt: true,
-  code: {
-    select: {
-      codeKey: true,
-      product: { select: { name: true } },
-    },
-  },
-},
-```
-
----
-
-### Task 40F: 셀러 주문 목록 UI에 카카오 배지 표시
-
-**파일 수정:** `app/seller/orders/page.tsx`
-
-1. `OrderItem` 인터페이스에 `source` 추가:
-```typescript
-interface OrderItem {
-  id: string;
-  buyerName: string;
-  buyerPhone: string;
-  quantity: number;
-  amount: number;
-  status: string;
-  source: string;  // ← 추가
-  trackingNo: string | null;
-  carrier: string | null;
-  createdAt: string;
-  code: { codeKey: string; product: { name: string } };
+channelStats?: {
+  kakao: { count: number; amount: number }
+  web: { count: number; amount: number }
 }
 ```
 
-2. 주문 목록 테이블의 주문자명 셀에 배지 추가:
-```tsx
-<TableCell>
-  <div className="flex items-center gap-1.5">
-    {order.source === 'kakao' && (
-      <Badge variant="secondary" className="text-xs px-1.5 py-0 bg-yellow-100 text-yellow-800 border-yellow-200">
-        카카오
-      </Badge>
-    )}
-    {order.buyerName}
-  </div>
-</TableCell>
-```
-
 ---
 
-### Task 40 완료 조건
+### Task 42 완료 조건
 
-```bash
-# 1. 마이그레이션 확인
-npx prisma migrate status
-# 응답: "Database schema is up to date!"
-
-# 2. 스키마 확인 (orders 테이블에 source 컬럼 존재)
-psql -U a1111 -d liveorder -c "\d orders"
-# source 컬럼 확인
-
-# 3. 웹 주문 테스트 (source = 'web')
-# 브라우저에서 코드 직접 입력 → 결제 완료 후 DB 확인
-psql -U a1111 -d liveorder -c "SELECT id, source FROM orders ORDER BY created_at DESC LIMIT 3;"
-# source = 'web'
-
-# 4. 카카오 플로우 시뮬레이션 (source = 'kakao')
-# /kakao/[valid-token] 접속 → /chat 리다이렉트 → 결제 완료 후 DB 확인
-# source = 'kakao'
-
-# 5. 셀러 주문 목록 API 확인
-curl -b "cookie-from-seller-session" http://localhost:3000/api/seller/orders
-# 응답 orders[].source 필드 포함 확인
-```
-
----
-
-## Task 41 (다음 단계 예정): Vercel 배포 + 카카오 연동 환경변수
-
-### 배경
-v3 카카오 챗봇 기능이 완성됐으나 Vercel 배포에 카카오 관련 환경변수 미설정.
-
-### 작업 내용
-1. `KAKAO_BOT_ID=69d6729b9fac321ddc6b5d64` — Vercel 환경변수 설정
-2. `CRON_SECRET` — Vercel 환경변수 설정 (세션 정리 cron 인증)
-3. `NEXTAUTH_URL` — 프로덕션 URL 설정 (카카오 결제 URL 생성에 필수)
-4. `docs/kakao-openbuilder-setup.md` 문서 기반으로 오픈빌더 스킬 서버 URL 등록
+- [ ] `app/api/seller/dashboard/route.ts` — `channelStats` 응답 추가
+- [ ] `app/seller/dashboard/page.tsx` — 채널별 주문 카드 UI 추가
+- [ ] 로컬 테스트: `curl -b session http://localhost:3000/api/seller/dashboard` → `channelStats` 포함 확인
+- [ ] 대시보드 화면에서 카카오/웹 카드 표시 확인
+- [ ] git commit + push
 
 ---
 
@@ -315,3 +272,30 @@ v3 카카오 챗봇 기능이 완성됐으나 Vercel 배포에 카카오 관련 
 - 토큰 생성: `crypto.randomBytes(16).toString('hex')` (nanoid 없음, Node.js built-in)
 - 카카오 오픈빌더 응답 타임아웃: 5초 → DB 조회는 최소화
 - Cron 인증: `CRON_SECRET` Bearer (기존 settlements cron과 동일 방식)
+
+---
+
+## Vercel 배포 환경변수 체크리스트 (운영팀 전달용)
+
+```
+필수:
+[ ] DATABASE_URL
+[ ] NEXTAUTH_SECRET (32자 이상)
+[ ] NEXTAUTH_URL (프로덕션 URL, 예: https://liveorder.vercel.app)
+[ ] PORTONE_API_KEY
+[ ] PORTONE_STORE_ID
+[ ] PORTONE_API_SECRET (환불 필수)
+[ ] BLOB_READ_WRITE_TOKEN (Vercel Blob)
+[ ] CRON_SECRET (카카오 세션 정리 cron 인증)
+[ ] RESEND_API_KEY (이메일 알림)
+[ ] KAKAO_BOT_ID=69d6729b9fac321ddc6b5d64
+
+프론트엔드 (NEXT_PUBLIC):
+[ ] NEXT_PUBLIC_PORTONE_STORE_ID
+[ ] NEXT_PUBLIC_PORTONE_CHANNEL_KEY
+
+선택:
+[ ] ADMIN_EMAIL (미설정 시 admin@liveorder.app 폴백)
+[ ] PLATFORM_FEE_RATE (미설정 시 0.025)
+[ ] SETTLEMENT_DELAY_DAYS (미설정 시 3)
+```
