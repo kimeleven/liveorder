@@ -42,6 +42,7 @@ export async function GET(
       category: product.category,
     },
     seller: {
+      id: seller.id,
       name: seller.name,
       businessNo: seller.businessNo,
       tradeRegNo: seller.tradeRegNo,
