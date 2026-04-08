@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Planner — Task 36 상세 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Planner — Task 38 완료 확인 + Task 39 스펙 수립)_
 
 ---
 
@@ -26,6 +26,7 @@ _최종 업데이트: 2026-04-09 (Planner — Task 36 상세 스펙 수립)_
 ```
 [liveorder 채널 1개] → [liveorder 봇 1개] → [스킬 서버]
                                                 │
+                                                ├→ 봇 ID 검증 (KAKAO_BOT_ID)
                                                 ├→ 고객이 코드 입력
                                                 ├→ 코드로 상품 DB 조회
                                                 ├→ KakaoPaySession 생성
@@ -48,237 +49,126 @@ _최종 업데이트: 2026-04-09 (Planner — Task 36 상세 스펙 수립)_
 
 ## Dev1 현재 작업
 
-### ✅ Task 38: 오픈빌더 설정 문서 + 셀러 카카오 안내 UI (완료 2026-04-09)
+### Task 39: 카카오 세션 자동 정리 cron + 웹훅 봇 ID 검증
 
-- `docs/kakao-openbuilder-setup.md` — 오픈빌더 스킬 서버 등록 절차, 응답 형식, 코드 검증 순서, 테스트 방법 문서화
-- `app/seller/codes/page.tsx` — 코드별 "공지 복사" 버튼 추가 (카카오톡 안내 문구 클립보드 복사)
-- `app/seller/dashboard/page.tsx` — 카카오 채널 주문 연동 안내 카드 추가
-
----
-
-### ✅ Task 36: 카카오 오픈빌더 스킬 서버 + 결제 연결 페이지 (완료 2026-04-09)
-
-**구현해야 할 파일 3개:**
+**우선순위:** HIGH
+**이유:** 만료 세션 DB 누적 방지 (운영 안정성) + 무단 webhook 호출 차단 (보안)
 
 ---
 
-#### 36A: `app/api/kakao/webhook/route.ts`
+#### 39A: 세션 정리 Cron 생성
 
-카카오 오픈빌더 → POST /api/kakao/webhook
+**파일 생성:** `app/api/cron/kakao-session-cleanup/route.ts`
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import crypto from 'crypto'
-
-// 카카오 스킬 서버 응답 헬퍼
-function simpleTextResponse(text: string) {
-  return NextResponse.json({
-    version: '2.0',
-    template: { outputs: [{ simpleText: { text } }] }
-  })
-}
+import { prisma } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const utterance: string = body?.userRequest?.utterance ?? ''
-
-  // 코드 패턴 추출 (대소문자 무관)
-  const codeMatch = utterance.toUpperCase().match(/[A-Z0-9]{3}-[0-9]{4}-[A-Z0-9]{4}/)
-  if (!codeMatch) {
-    return simpleTextResponse('상품 코드를 입력해주세요.\n예: ABC-1234-ABCD')
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+    }
   }
 
-  const codeKey = codeMatch[0]
+  try {
+    const result = await prisma.kakaoPaySession.deleteMany({
+      where: { expiresAt: { lt: new Date() } }
+    })
 
-  // DB 조회 (code + product + seller)
-  const code = await db.code.findUnique({
-    where: { codeKey },
-    include: { product: { include: { seller: true } } }
-  })
-
-  // 유효성 검증
-  if (!code) return simpleTextResponse('존재하지 않는 코드입니다.')
-  if (!code.isActive) return simpleTextResponse('비활성화된 코드입니다.')
-  if (code.expiresAt < new Date()) return simpleTextResponse('만료된 코드입니다.')
-  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return simpleTextResponse('품절된 상품입니다.')
-  if (code.product.seller.status !== 'APPROVED') return simpleTextResponse('판매 중단된 상품입니다.')
-
-  // 세션 토큰 생성 (32자 hex, 30분 만료)
-  const token = crypto.randomBytes(16).toString('hex')
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-
-  await db.kakaoPaySession.create({
-    data: { token, codeId: code.id, expiresAt }
-  })
-
-  const paymentUrl = `${process.env.NEXTAUTH_URL}/kakao/${token}`
-  const product = code.product
-
-  // commerceCard 응답
-  return NextResponse.json({
-    version: '2.0',
-    template: {
-      outputs: [{
-        commerceCard: {
-          description: product.name,
-          price: product.price,
-          currency: 'won',
-          thumbnails: [{
-            imageUrl: product.imageUrl ?? 'https://liveorder.vercel.app/og-image.png',
-            link: { web: paymentUrl, mobile_web: paymentUrl }
-          }],
-          profile: {
-            thumbnail: 'https://liveorder.vercel.app/og-image.png',
-            nickName: product.seller.name
-          },
-          buttons: [{
-            label: '결제하기',
-            action: 'webLink',
-            webLinkUrl: paymentUrl
-          }]
-        }
-      }]
-    }
-  })
+    return NextResponse.json({
+      ok: true,
+      deleted: result.count,
+      timestamp: new Date().toISOString()
+    })
+  } catch (e) {
+    console.error('[kakao-session-cleanup] 실패:', e)
+    return NextResponse.json({ error: '정리 실패' }, { status: 500 })
+  }
 }
 ```
 
 ---
 
-#### 36B: `app/api/kakao/session/[token]/route.ts`
+#### 39B: vercel.json cron 추가
 
-세션 토큰 검증 API (결제 페이지에서 호출)
+**파일 수정:** `vercel.json`
+
+기존:
+```json
+{
+  "crons": [
+    { "path": "/api/cron/settlements", "schedule": "0 9 * * *" }
+  ]
+}
+```
+
+수정 후:
+```json
+{
+  "crons": [
+    { "path": "/api/cron/settlements", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/kakao-session-cleanup", "schedule": "0 3 * * *" }
+  ]
+}
+```
+
+---
+
+#### 39C: 웹훅 봇 ID 검증 추가
+
+**파일 수정:** `app/api/kakao/webhook/route.ts`
+
+`POST` 함수 내 utterance 추출 **이전**에 다음 코드 삽입:
 
 ```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params
-
-  const session = await db.kakaoPaySession.findUnique({
-    where: { token },
-    include: {
-      code: {
-        include: { product: { include: { seller: true } } }
-      }
-    }
-  })
-
-  if (!session || session.expiresAt < new Date()) {
-    return NextResponse.json({ error: '만료된 링크입니다.' }, { status: 410 })
+// 봇 ID 검증 (환경변수 설정 시에만 검증 — 개발 환경에서는 KAKAO_BOT_ID 미설정으로 스킵)
+const expectedBotId = process.env.KAKAO_BOT_ID
+if (expectedBotId) {
+  const botId = body?.bot?.id
+  if (botId !== expectedBotId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-
-  const { code } = session
-  const product = code.product
-  const seller = product.seller
-
-  // /api/codes/[codeKey] 응답과 동일한 형식
-  return NextResponse.json({
-    valid: true,
-    code: {
-      id: code.id,
-      codeKey: code.codeKey,
-      maxQty: code.maxQty,
-      usedQty: code.usedQty,
-      remainingQty: code.maxQty === 0 ? null : code.maxQty - code.usedQty,
-    },
-    product: {
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      imageUrl: product.imageUrl,
-      category: product.category,
-    },
-    seller: {
-      name: seller.name,
-      businessNo: seller.businessNo,
-      tradeRegNo: seller.tradeRegNo,
-    }
-  })
 }
+```
+
+**주의:** `body`는 이미 `await req.json()` 후이므로 `body?.bot?.id` 접근 가능.
+
+---
+
+#### 39D: 완료 후 검증
+
+```bash
+# 1. 세션 정리 cron 로컬 테스트
+curl -X POST http://localhost:3000/api/cron/kakao-session-cleanup \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+# 기대: { "ok": true, "deleted": 0, "timestamp": "..." }
+
+# 2. 봇 ID 검증 테스트 (KAKAO_BOT_ID 환경변수 설정 필요)
+# .env.local에 KAKAO_BOT_ID=69d6729b9fac321ddc6b5d64 추가 후:
+curl -X POST http://localhost:3000/api/kakao/webhook \
+  -H 'Content-Type: application/json' \
+  -d '{"bot":{"id":"WRONG_ID"},"userRequest":{"utterance":"ABC-1234-ABCD"}}'
+# 기대: 403 Forbidden
+
+# 3. 정상 요청 (올바른 봇 ID)
+curl -X POST http://localhost:3000/api/kakao/webhook \
+  -H 'Content-Type: application/json' \
+  -d '{"bot":{"id":"69d6729b9fac321ddc6b5d64"},"userRequest":{"utterance":"ABC-1234-ABCD"}}'
+# 기대: 코드 존재 시 commerceCard, 없으면 simpleText
 ```
 
 ---
 
-#### 36C: `app/(buyer)/kakao/[token]/page.tsx`
+#### 39 완료 조건
 
-카카오 결제 진입 페이지 (기존 `/order/[code]/page.tsx` 패턴 동일)
-
-```typescript
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-
-export default function KakaoPayPage() {
-  const router = useRouter()
-  const params = useParams()
-  const token = params.token as string
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!token) return
-
-    fetch(`/api/kakao/session/${token}`)
-      .then((r) => {
-        if (r.status === 410) throw new Error('만료된 링크입니다. 카카오톡에서 다시 시도해주세요.')
-        if (!r.ok) throw new Error('서버 오류가 발생했습니다.')
-        return r.json()
-      })
-      .then((data) => {
-        if (!data.valid) {
-          setError(data.error || '유효하지 않은 링크입니다.')
-          return
-        }
-        // 기존 chat 페이지와 동일한 pendingCode 형식으로 저장
-        sessionStorage.setItem(
-          'pendingCode',
-          JSON.stringify({ code: data.code.codeKey, data })
-        )
-        router.replace('/chat')
-      })
-      .catch((e) => setError(e.message || '오류가 발생했습니다.'))
-  }, [token, router])
-
-  if (error) {
-    return (
-      <div className="flex flex-col flex-1 items-center justify-center px-6 text-center space-y-4">
-        <p className="text-destructive font-semibold">{error}</p>
-        <a href="/" className="underline text-sm text-muted-foreground">
-          처음으로 돌아가기
-        </a>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center px-6 text-center space-y-4">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      <p className="text-sm text-muted-foreground">결제 페이지 로딩 중...</p>
-    </div>
-  )
-}
-```
-
----
-
-### 구현 시 주의사항
-1. `params` 타입: Next.js 16에서 `params`는 `Promise<{...}>` → `await params` 필요
-2. `crypto`는 Node.js built-in (import 필요, nanoid 불필요)
-3. `NEXTAUTH_URL` 환경변수로 paymentUrl 생성
-4. 기존 `/api/codes/[codeKey]` 응답 형식과 맞춰야 `/chat`에서 올바르게 처리됨
-
-### 완료 후 확인 사항
-- `curl -X POST http://localhost:3000/api/kakao/webhook -H 'Content-Type: application/json' -d '{"userRequest":{"utterance":"ABC-1234-ABCD"}}'` 로 테스트
-- commerceCard 응답의 `webLinkUrl`이 정상 URL인지 확인
-- `/kakao/[token]` 접속 시 `/chat`으로 redirect 되는지 확인
-- 만료 토큰 (수동 DB 수정) 접속 시 에러 메시지 표시 확인
+- [ ] `app/api/cron/kakao-session-cleanup/route.ts` 생성
+- [ ] `vercel.json`에 cleanup cron 추가
+- [ ] `app/api/kakao/webhook/route.ts`에 봇 ID 검증 추가
+- [ ] 로컬 테스트 성공 (cron 수동 호출 200, 잘못된 봇 ID 403)
+- [ ] git commit + push
 
 ---
 
@@ -339,11 +229,11 @@ export default function KakaoPayPage() {
 
 | Task | 내용 | 완료일 |
 |------|------|--------|
-| Task 34 | 사업자등록증 이미지 업로드 — `app/api/seller/biz-reg-upload/route.ts`, `app/seller/auth/register/page.tsx` UI, DB 마이그레이션 | 2026-04-09 |
-| Task 35 | KakaoPaySession DB 마이그레이션 (`kakao_pay_sessions` 테이블), `lib/kakao.ts` 기본 구조, Prisma schema 반영 | 2026-04-09 |
-| Task 36 | 스킬 서버 webhook (commerceCard 응답), 세션 검증 API `/api/kakao/session/[token]`, 카카오 결제 진입 페이지 `/kakao/[token]` | 2026-04-09 |
 | Task 38 | `docs/kakao-openbuilder-setup.md` 문서 작성, 셀러 코드 페이지 카카오 공지 복사 버튼, 셀러 대시보드 카카오 채널 안내 카드 | 2026-04-09 |
 | Task 37 | `/api/kakao/session/[token]` seller 응답에 `id` 누락 버그 수정 → FlowSeller 타입 불일치 해결 | 2026-04-09 |
+| Task 36 | 스킬 서버 webhook (commerceCard 응답), 세션 검증 API `/api/kakao/session/[token]`, 카카오 결제 진입 페이지 `/kakao/[token]` | 2026-04-09 |
+| Task 35 | KakaoPaySession DB 마이그레이션 (`kakao_pay_sessions` 테이블), `lib/kakao.ts` 기본 구조, Prisma schema 반영 | 2026-04-09 |
+| Task 34 | 사업자등록증 이미지 업로드 — `app/api/seller/biz-reg-upload/route.ts`, `app/seller/auth/register/page.tsx` UI, DB 마이그레이션 | 2026-04-09 |
 | Task 1~33 | Phase 1+2+3 전체 기능 (v1 웹 플랫폼) | 2026-04-04 |
 
 ---
