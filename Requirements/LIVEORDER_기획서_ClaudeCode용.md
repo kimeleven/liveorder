@@ -1,6 +1,6 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v2.0
-> 작성일: 2026년 3월 | 최종 수정: 2026년 4월 4일 | 플랫폼 포지션: 통신판매중개업자
+## Claude Code 개발 기획서 v2.1
+> 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
 
@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-09 | v2.1 | Phase 4 카카오톡 챗봇 주문 시스템 추가. Task 34 (사업자등록증 업로드) 미구현 재확인. 팀 재가동. |
 | 2026-04-04 | v2.0 | 기획서 전면 업데이트: 현재 구현 상태 반영 (Phase 1+2 완료, Phase 3 진행 중), 실제 기술 스택 반영 (PortOne/Neon/Vercel Blob 등), DB 스키마 Prisma 기준 동기화, 구현 상태 표시 추가 (✅/🔧/⬜), 코드에서 발견된 미문서 기능 추가 (이메일 인증, 청약철회, 데이터 삭제권 등) |
 | 2026-03 | v1.0 | 초기 기획서 작성 |
 
@@ -746,7 +747,8 @@ liveorder/
 │   └── schema.prisma         # DB 스키마
 ├── liveorder-team/           # 팀 작업 관리 문서
 │   ├── PLAN.md               # 개발 계획서
-│   └── TASKS.md              # 태스크 상세 (현재 Task 34 진행 중)
+│   ├── TASKS.md              # 태스크 상세 (현재 Task 34~36 진행 중)
+│   └── kakao.ts              # 카카오 채널 메시지 유틸 (Phase 4)
 └── Requirements/
     └── LIVEORDER_기획서_ClaudeCode용.md  # 본 문서
 ```
@@ -757,11 +759,81 @@ liveorder/
 
 | 항목 | 상태 | 비고 |
 |------|------|------|
-| 코드 구현 | ✅ Phase 1+2 완료, Phase 3 진행 중 | Task 34 진행 중 |
+| 코드 구현 | ✅ Phase 1+2 완료, Phase 3 진행 중 | Task 34 미구현, Task 35~36 예정 |
 | Vercel 배포 | 🔧 환경변수 설정 확인 중 (Task 14) | 수동 배포 |
 | 도메인 설정 | ⬜ | liveorder.kr 예정 |
 | 프로덕션 DB | ✅ Neon Serverless PostgreSQL | |
 | 프로덕션 PG | 🔧 PortOne 테스트 키 → 실결제 키 전환 필요 | |
+
+---
+
+## 14. Phase 4: 카카오톡 챗봇 주문 시스템 (2026-04-09~)
+
+### 14.1 배경 및 목적
+
+LiveOrder v3 재가동. 기존 웹 기반 주문 플로우(liveorder.kr 접속 → 코드 입력)에 더해, **카카오톡 채널을 통한 주문 플로우**를 추가하여 구매자 진입 장벽을 최소화한다.
+
+### 14.2 서비스 플로우
+
+```
+[셀러] 기존과 동일: 상품 등록 + 코드 발급
+         ↓
+[셀러] 라이브 방송 중 코드 + 카카오톡 채널 링크 공지
+         ↓
+[구매자] 카카오톡 채널 친구 추가 → 코드 입력 (예: ABC-1234-XY01)
+         ↓
+[챗봇] 코드 유효성 검증 → 상품 정보 카드 + "결제하기" 버튼 전송
+         ↓
+[구매자] "결제하기" 클릭 → liveorder.kr/kakao/[세션토큰] 접속
+         ↓
+[시스템] 세션 토큰 검증 (30분 만료) → 수량 선택 → PortOne 결제
+         ↓
+[구매자] 결제 완료 → 배송지 입력 → 주문 확정
+         ↓
+[챗봇] 주문 완료 알림 메시지 (선택 구현)
+```
+
+### 14.3 기술 스택 추가
+
+| 항목 | 기술 | 비고 |
+|------|------|------|
+| 카카오 채널 메시지 | 카카오 비즈메시지 API | 액세스 토큰 필요 |
+| 웹훅 수신 | Next.js Route Handler | POST /api/kakao/webhook |
+| 결제 세션 | KakaoPaySession (Prisma) | 30분 만료 토큰 |
+| 환경변수 | KAKAO_CHANNEL_ID, KAKAO_REST_API_KEY, KAKAO_BIZMSG_ACCESS_TOKEN | |
+
+### 14.4 신규 구현 파일
+
+| 파일 | 내용 |
+|------|------|
+| `lib/kakao.ts` | 카카오 메시지 발송 유틸 + 상품 카드 빌더 |
+| `app/api/kakao/webhook/route.ts` | 챗봇 웹훅 수신 + 코드 검증 + 응답 |
+| `app/(buyer)/kakao/[token]/page.tsx` | 카카오 결제 연결 웹 페이지 (수량선택+결제) |
+| `prisma` 마이그레이션 | `kakao_pay_sessions` 테이블 추가 |
+
+### 14.5 카드 메시지 스펙 (basicCard)
+
+```json
+{
+  "object_type": "commerce",
+  "content": {
+    "title": "상품명",
+    "description": "₩가격 | 재고: N개",
+    "image_url": "상품 이미지 URL",
+    "link": { "web_url": "https://liveorder.kr/kakao/[토큰]" }
+  },
+  "commerce": { "regular_price": 가격 },
+  "buttons": [
+    { "title": "결제하기", "link": { "web_url": "https://liveorder.kr/kakao/[토큰]" } }
+  ]
+}
+```
+
+### 14.6 보안 고려사항
+
+- 웹훅 수신 시 카카오 서명 검증 (X-Kakao-Signature 헤더)
+- KakaoPaySession 토큰: nanoid(32), 30분 만료, 1회 사용 후 폐기 검토
+- 결제 완료 시 기존 pgTid unique 제약으로 중복 결제 방지
 
 ---
 
