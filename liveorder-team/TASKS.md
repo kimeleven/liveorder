@@ -11,10 +11,10 @@
 
 ---
 
-### 🔧 Task 34: 사업자등록증 이미지 업로드 (셀러 회원가입 필수)
+### ✅ Task 34: 사업자등록증 이미지 업로드 (셀러 회원가입 필수)
 
 **우선순위:** MED
-**상태:** ⬜ 미구현 (2026-04-09 확인)
+**상태:** ✅ 완료 (2026-04-09, 커밋 89f5fab)
 
 **배경:** 셀러 신뢰도 검증. 기획서 3.1.1절 필수 요건.
 현재: `prisma/schema.prisma`에 `bizRegImageUrl` 필드 없음. API 없음. 폼 없음.
@@ -135,10 +135,10 @@ data 객체에 `bizRegImageUrl` 추가. JSX에 파일 input 추가 (bankAccount 
 
 ---
 
-### 🆕 Task 35: 카카오톡 챗봇 주문 시스템 — 웹훅 API
+### ✅ Task 35: 카카오톡 챗봇 주문 시스템 — 웹훅 API
 
 **우선순위:** HIGH (Phase 4 핵심)
-**상태:** ⬜ 미착수 (Task 34 완료 후 착수)
+**상태:** ✅ 완료 (2026-04-09, 커밋 a7183c7)
 
 **배경:** LiveOrder v3 재가동 (2026-04-09). 구매자가 카카오톡 채널에서 코드 입력 → 챗봇이 상품 정보 표시 → 결제 링크 발송 플로우 구현.
 
@@ -350,10 +350,10 @@ npx prisma migrate dev --name add_kakao_pay_session
 
 ---
 
-### 🆕 Task 36: 카카오 결제 연결 웹 페이지
+### 🔧 Task 36: 카카오 결제 연결 웹 페이지
 
 **우선순위:** HIGH (Task 35 완료 후 착수)
-**상태:** ⬜ 미착수
+**상태:** ⬜ 미착수 (Task 35 완료됨 → 착수 가능)
 
 **신규 파일:** `app/(buyer)/kakao/[token]/page.tsx`
 
@@ -402,5 +402,7 @@ npx prisma migrate dev --name add_kakao_pay_session
 | Task 31 | seller/orders 상태 필터 + data-deletion rate limiting | b57439d |
 | Task 32 | QuantitySelector 무제한 UX + CSV export 10000건 상한 | 87052f1 |
 | Task 33 | 청약확인 UI + 청약철회 API (전자상거래법 대응) | 012ec5a |
+| Task 34 | 사업자등록증 이미지 업로드 (Vercel Blob) | 89f5fab |
+| Task 35 | 카카오톡 챗봇 웹훅 API + KakaoPaySession | a7183c7 |
 | B-28~B-33 | QA 버그 전체 수정 | 각 커밋 |
 | P3-0~P3-8 | Phase 3 로드맵 | 완료 |
