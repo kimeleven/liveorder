@@ -12,11 +12,47 @@ export default function SellerRegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bizRegImageUrl, setBizRegImageUrl] = useState<string>("");
+  const [bizRegUploading, setBizRegUploading] = useState(false);
+  const [bizRegFileName, setBizRegFileName] = useState<string>("");
+
+  async function handleBizRegUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBizRegUploading(true);
+    setBizRegFileName(file.name);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/seller/biz-reg-upload", {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error ?? "업로드 실패");
+        return;
+      }
+      const { url } = await res.json();
+      setBizRegImageUrl(url);
+    } catch {
+      setError("파일 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setBizRegUploading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
+
+    if (!bizRegImageUrl) {
+      setError("사업자등록증 이미지를 업로드해 주세요.");
+      setLoading(false);
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
     const data = {
@@ -30,6 +66,7 @@ export default function SellerRegisterPage() {
       phone: formData.get("phone"),
       bankName: formData.get("bankName"),
       bankAccount: formData.get("bankAccount"),
+      bizRegImageUrl,
     };
 
     const confirmPassword = formData.get("confirmPassword");
@@ -125,10 +162,45 @@ export default function SellerRegisterPage() {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="bizRegImage">
+                사업자등록증 *
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (JPG/PNG/PDF, 5MB 이하)
+                </span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="bizRegImage"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={handleBizRegUpload}
+                  disabled={bizRegUploading}
+                  className="text-sm"
+                />
+                {bizRegUploading && (
+                  <span className="text-xs text-muted-foreground">
+                    업로드 중...
+                  </span>
+                )}
+              </div>
+              {bizRegImageUrl && (
+                <p className="text-xs text-green-600">
+                  ✓ 업로드 완료: {bizRegFileName}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="password">비밀번호 *</Label>
-                <Input id="password" name="password" type="password" required minLength={8} />
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  minLength={8}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">비밀번호 확인 *</Label>

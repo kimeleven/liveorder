@@ -17,6 +17,7 @@ export async function GET() {
       businessNo: true,
       phone: true,
       status: true,
+      bizRegImageUrl: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },

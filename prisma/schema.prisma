@@ -36,6 +36,7 @@ model Seller {
   bankAccount  String?  @map("bank_account") @db.VarChar(30)
   bankName     String?  @map("bank_name") @db.VarChar(20)
   tradeRegNo         String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
+  bizRegImageUrl     String?  @map("biz_reg_image_url") // 사업자등록증 이미지 URL
   emailVerified      Boolean  @default(false) @map("email_verified")
   emailVerifyToken          String?   @map("email_verify_token") @db.VarChar(100)
   emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
@@ -96,8 +97,9 @@ model Code {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  product Product @relation(fields: [productId], references: [id])
-  orders  Order[]
+  product          Product          @relation(fields: [productId], references: [id])
+  orders           Order[]
+  kakaoPaySessions KakaoPaySession[]
 
   @@map("codes")
 }
@@ -179,4 +181,19 @@ model SellerAuditLog {
   seller Seller @relation(fields: [sellerId], references: [id])
 
   @@map("seller_audit_log")
+}
+
+// ========================================
+// 카카오 결제 세션 (Task 35)
+// ========================================
+model KakaoPaySession {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique @db.VarChar(64)
+  codeId    String   @map("code_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  code Code @relation(fields: [codeId], references: [id])
+
+  @@map("kakao_pay_sessions")
 }

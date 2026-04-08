@@ -18,11 +18,12 @@ export async function POST(req: NextRequest) {
       bankAccount,
       bankName,
       tradeRegNo,
+      bizRegImageUrl,
     } = body;
 
-    if (!email || !password || !businessNo || !name || !repName || !address || !phone) {
+    if (!email || !password || !businessNo || !name || !repName || !address || !phone || !bizRegImageUrl) {
       return NextResponse.json(
-        { error: "필수 항목을 모두 입력해주세요." },
+        { error: "필수 항목을 모두 입력해주세요. (사업자등록증 이미지 포함)" },
         { status: 400 }
       );
     }
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
         bankAccount,
         bankName,
         tradeRegNo,
+        bizRegImageUrl,
         status: "PENDING",
         emailVerified: false,
         emailVerifyToken,

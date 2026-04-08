@@ -23,6 +23,7 @@ interface SellerItem {
   businessNo: string;
   phone: string;
   status: string;
+  bizRegImageUrl?: string | null;
   createdAt: string;
 }
 
@@ -87,6 +88,7 @@ export default function AdminSellersPage() {
                 <TableHead>대표자</TableHead>
                 <TableHead>사업자번호</TableHead>
                 <TableHead>이메일</TableHead>
+                <TableHead>사업자등록증</TableHead>
                 <TableHead>상태</TableHead>
                 <TableHead>등록일</TableHead>
                 <TableHead>관리</TableHead>
@@ -101,6 +103,20 @@ export default function AdminSellersPage() {
                     {seller.businessNo}
                   </TableCell>
                   <TableCell>{seller.email}</TableCell>
+                  <TableCell>
+                    {seller.bizRegImageUrl ? (
+                      <a
+                        href={seller.bizRegImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 underline"
+                      >
+                        보기
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">미첨부</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant[seller.status]}>
                       {statusLabel[seller.status]}
