@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Package, QrCode, ShoppingCart, Wallet } from "lucide-react";
+import { Package, QrCode, ShoppingCart, Wallet, MessageCircle, ArrowRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface RecentOrder {
@@ -240,6 +240,34 @@ export default function SellerDashboardPage() {
             </CardContent>
           </Card>
         )}
+
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-yellow-800">
+              <MessageCircle className="h-5 w-5" />
+              카카오톡 채널 주문 연동
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-yellow-800">
+              구매자가 카카오톡에서 <strong>liveorder</strong> 채널을 친구추가하고 코드를 입력하면 바로 결제할 수 있습니다.
+            </p>
+            <ol className="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
+              <li>코드 관리 페이지에서 코드 발급</li>
+              <li>코드 옆 <strong>"공지 복사"</strong> 버튼으로 안내 문구 복사</li>
+              <li>라이브방송 중 복사한 문구를 고객에게 공지</li>
+              <li>고객이 카카오톡에서 liveorder 채널 친구추가 후 코드 입력 → 결제</li>
+            </ol>
+            <div className="flex gap-2 pt-1">
+              <a
+                href="/seller/codes"
+                className="inline-flex items-center gap-1 text-xs font-medium text-yellow-800 underline underline-offset-2 hover:text-yellow-900"
+              >
+                코드 관리로 이동 <ArrowRight className="h-3 w-3" />
+              </a>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

@@ -48,6 +48,14 @@ _최종 업데이트: 2026-04-09 (Planner — Task 36 상세 스펙 수립)_
 
 ## Dev1 현재 작업
 
+### ✅ Task 38: 오픈빌더 설정 문서 + 셀러 카카오 안내 UI (완료 2026-04-09)
+
+- `docs/kakao-openbuilder-setup.md` — 오픈빌더 스킬 서버 등록 절차, 응답 형식, 코드 검증 순서, 테스트 방법 문서화
+- `app/seller/codes/page.tsx` — 코드별 "공지 복사" 버튼 추가 (카카오톡 안내 문구 클립보드 복사)
+- `app/seller/dashboard/page.tsx` — 카카오 채널 주문 연동 안내 카드 추가
+
+---
+
 ### ✅ Task 36: 카카오 오픈빌더 스킬 서버 + 결제 연결 페이지 (완료 2026-04-09)
 
 **구현해야 할 파일 3개:**
@@ -334,6 +342,7 @@ export default function KakaoPayPage() {
 | Task 34 | 사업자등록증 이미지 업로드 — `app/api/seller/biz-reg-upload/route.ts`, `app/seller/auth/register/page.tsx` UI, DB 마이그레이션 | 2026-04-09 |
 | Task 35 | KakaoPaySession DB 마이그레이션 (`kakao_pay_sessions` 테이블), `lib/kakao.ts` 기본 구조, Prisma schema 반영 | 2026-04-09 |
 | Task 36 | 스킬 서버 webhook (commerceCard 응답), 세션 검증 API `/api/kakao/session/[token]`, 카카오 결제 진입 페이지 `/kakao/[token]` | 2026-04-09 |
+| Task 38 | `docs/kakao-openbuilder-setup.md` 문서 작성, 셀러 코드 페이지 카카오 공지 복사 버튼, 셀러 대시보드 카카오 채널 안내 카드 | 2026-04-09 |
 | Task 37 | `/api/kakao/session/[token]` seller 응답에 `id` 누락 버그 수정 → FlowSeller 타입 불일치 해결 | 2026-04-09 |
 | Task 1~33 | Phase 1+2+3 전체 기능 (v1 웹 플랫폼) | 2026-04-04 |
 

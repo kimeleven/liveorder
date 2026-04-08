@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Copy } from "lucide-react";
+import { Plus, Copy, MessageCircle } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
 
 interface CodeItem {
@@ -64,6 +64,11 @@ export default function CodesPage() {
     navigator.clipboard.writeText(codeKey);
   }
 
+  function copyKakaoNotice(codeKey: string) {
+    const text = `카카오톡에서 'liveorder' 채널을 친구추가한 후\n채팅창에 코드 [${codeKey}]를 입력하시면\n바로 결제하실 수 있습니다!`;
+    navigator.clipboard.writeText(text);
+  }
+
   return (
     <SellerShell>
       <div className="space-y-6">
@@ -97,6 +102,7 @@ export default function CodesPage() {
                   <TableHead>상태</TableHead>
                   <TableHead>사용/최대</TableHead>
                   <TableHead>만료일시</TableHead>
+                  <TableHead>카카오 공지</TableHead>
                   <TableHead>관리</TableHead>
                 </TableRow>
               </TableHeader>
@@ -122,6 +128,18 @@ export default function CodesPage() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {new Date(code.expiresAt).toLocaleString("ko-KR")}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1 text-yellow-700 hover:text-yellow-900 hover:bg-yellow-50"
+                          onClick={() => copyKakaoNotice(code.codeKey)}
+                          title="카카오 안내 문구 복사"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          공지 복사
+                        </Button>
                       </TableCell>
                       <TableCell>
                         <Button
