@@ -13,6 +13,16 @@ function simpleTextResponse(text: string) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+
+  // 봇 ID 검증 (환경변수 설정 시에만 검증 — 개발 환경에서는 KAKAO_BOT_ID 미설정으로 스킵)
+  const expectedBotId = process.env.KAKAO_BOT_ID
+  if (expectedBotId) {
+    const botId = body?.bot?.id
+    if (botId !== expectedBotId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   const utterance: string = body?.userRequest?.utterance ?? ''
 
   const match = utterance.toUpperCase().match(CODE_PATTERN)

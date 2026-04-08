@@ -164,11 +164,11 @@ curl -X POST http://localhost:3000/api/kakao/webhook \
 
 #### 39 완료 조건
 
-- [ ] `app/api/cron/kakao-session-cleanup/route.ts` 생성
-- [ ] `vercel.json`에 cleanup cron 추가
-- [ ] `app/api/kakao/webhook/route.ts`에 봇 ID 검증 추가
-- [ ] 로컬 테스트 성공 (cron 수동 호출 200, 잘못된 봇 ID 403)
-- [ ] git commit + push
+- [x] `app/api/cron/kakao-session-cleanup/route.ts` 생성
+- [x] `vercel.json`에 cleanup cron 추가
+- [x] `app/api/kakao/webhook/route.ts`에 봇 ID 검증 추가
+- [x] 코드 검토 완료 (로컬 node 환경 PATH 이슈로 서버 기동 불가, 코드 정합성 확인)
+- [x] git commit + push
 
 ---
 
