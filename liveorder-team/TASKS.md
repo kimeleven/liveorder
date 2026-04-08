@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Planner — Task 40 완료 확인 + Task 41~42 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Planner — Task 41~42 완료 확인 + Task 43 스펙 수립)_
 
 ---
 
@@ -49,219 +49,307 @@ _최종 업데이트: 2026-04-09 (Planner — Task 40 완료 확인 + Task 41~42
 
 ## Dev1 현재 작업
 
-### Task 41: 카카오 세션 일회성 보장 + CSV source 컬럼 추가
+### Task 43: 운송장 일괄 CSV 업로드
 
-**우선순위:** HIGH (보안)
-**이유:** 동일 결제 링크 재사용 방지 + 셀러 CSV에 채널 정보 추가
-
----
-
-#### 41A: 카카오 세션 일회성 처리
-
-**파일 수정:** `app/api/kakao/session/[token]/route.ts`
-
-세션 검증 성공 후 즉시 삭제 추가. `if (!session || ...)` 블록 다음, `const { code } = session` 전에 삽입:
-
-```typescript
-// 일회성 토큰: 사용 즉시 삭제 (재사용 방지)
-await prisma.kakaoPaySession.delete({ where: { token } })
-```
-
-전체 수정된 핸들러:
-```typescript
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params
-
-  const session = await prisma.kakaoPaySession.findUnique({
-    where: { token },
-    include: {
-      code: {
-        include: { product: { include: { seller: true } } },
-      },
-    },
-  })
-
-  if (!session || session.expiresAt < new Date()) {
-    return NextResponse.json({ error: '만료된 링크입니다.' }, { status: 410 })
-  }
-
-  // 일회성 토큰: 사용 즉시 삭제
-  await prisma.kakaoPaySession.delete({ where: { token } })
-
-  const { code } = session
-  const product = code.product
-  const seller = product.seller
-
-  return NextResponse.json({
-    valid: true,
-    code: {
-      id: code.id,
-      codeKey: code.codeKey,
-      maxQty: code.maxQty,
-      usedQty: code.usedQty,
-      remainingQty: code.maxQty === 0 ? null : code.maxQty - code.usedQty,
-    },
-    product: {
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      imageUrl: product.imageUrl,
-      category: product.category,
-    },
-    seller: {
-      id: seller.id,
-      name: seller.name,
-      businessNo: seller.businessNo,
-      tradeRegNo: seller.tradeRegNo,
-    },
-  })
-}
-```
+**우선순위:** MEDIUM
+**이유:** 주문량 증가 시 개별 운송장 등록은 매우 비효율. CSV 일괄 업로드로 셀러 운영 편의성 개선.
 
 ---
 
-#### 41B: CSV 내보내기에 source 컬럼 추가
+#### 43A: 배송지 CSV에 주문ID 컬럼 추가
 
 **파일 수정:** `app/api/seller/orders/export/route.ts`
 
-1. `header` 문자열에 "주문경로" 추가:
-```typescript
-const header = "주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
+현재 헤더:
+```
+주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로
 ```
 
-2. `rows` map 배열 마지막 원소에 source 추가:
+변경 후 (주문ID 첫 번째 컬럼 추가):
 ```typescript
-o.trackingNo ?? "",
-o.source === 'kakao' ? '카카오' : '웹',  // ← 추가
+const header = "주문ID,주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n";
+```
+
+rows map 첫 원소로 `o.id` 추가:
+```typescript
+const rows = orders
+  .map((o) =>
+    [
+      o.id,  // ← 추가
+      new Date(o.createdAt).toLocaleString("ko-KR"),
+      o.code.product.name,
+      o.code.codeKey,
+      o.buyerName,
+      o.buyerPhone,
+      o.address,
+      o.addressDetail ?? "",
+      o.memo ?? "",
+      o.quantity,
+      o.amount,
+      o.status,
+      o.trackingNo ?? "",
+      o.source === 'kakao' ? '카카오' : '웹',
+    ]
+    .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+    .join(",")
+  )
+  .join("\n");
 ```
 
 ---
 
-#### 41 완료 조건
+#### 43B: 일괄 운송장 업로드 API
 
-- [ ] `app/api/kakao/session/[token]/route.ts` — `prisma.kakaoPaySession.delete` 추가
-- [ ] `app/api/seller/orders/export/route.ts` — "주문경로" 헤더 + source 값 추가
-- [ ] 로컬 테스트: 동일 토큰 두 번 GET → 두 번째 요청 410 응답 확인
-- [ ] CSV 다운로드 후 "주문경로" 컬럼 확인
-- [ ] git commit + push
-
----
-
-### Task 42: 셀러 대시보드 채널별 통계 (Task 41 완료 후 진행)
-
-**우선순위:** MEDIUM
-**이유:** 셀러가 카카오 채널 효과를 수치로 확인할 수 있도록 대시보드에 통계 표시
-
----
-
-#### 42A: 셀러 대시보드 API에 채널별 통계 추가
-
-**파일 수정:** `app/api/seller/dashboard/route.ts`
-
-기존 통계 조회 블록 뒤에 추가:
+**파일 신규 생성:** `app/api/seller/orders/tracking/bulk/route.ts`
 
 ```typescript
-// 채널별 주문 통계 (최근 30일, 환불 제외)
-const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 
-const channelStats = await prisma.order.groupBy({
-  by: ['source'],
-  where: {
-    code: { product: { sellerId: seller.id } },
-    status: { notIn: ['REFUNDED'] },
-    createdAt: { gte: thirtyDaysAgo },
-  },
-  _count: { id: true },
-  _sum: { amount: true },
-})
+const VALID_CARRIERS = ['CJ대한통운', '로젠택배', '한진택배', '롯데택배', '우체국택배']
+const TRACKING_NO_REGEX = /^\d{10,15}$/
 
-const kakaoStat = channelStats.find(s => s.source === 'kakao')
-const webStat = channelStats.find(s => s.source === 'web')
+interface BulkRow {
+  orderId: string
+  carrier: string
+  trackingNo: string
+}
 
-const channelSummary = {
-  kakao: {
-    count: kakaoStat?._count.id ?? 0,
-    amount: Number(kakaoStat?._sum.amount ?? 0),
-  },
-  web: {
-    count: webStat?._count.id ?? 0,
-    amount: Number(webStat?._sum.amount ?? 0),
-  },
+export async function POST(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const sellerId = session.user.id
+
+  const body = await req.json()
+  const rows: BulkRow[] = body.rows
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return NextResponse.json({ error: '업로드할 데이터가 없습니다.' }, { status: 400 })
+  }
+  if (rows.length > 500) {
+    return NextResponse.json({ error: '한 번에 최대 500건까지 처리 가능합니다.' }, { status: 400 })
+  }
+
+  let success = 0
+  const errors: { orderId: string; error: string }[] = []
+
+  for (const row of rows) {
+    const { orderId, carrier, trackingNo } = row
+
+    if (!orderId || !carrier || !trackingNo) {
+      errors.push({ orderId: orderId ?? '', error: '주문ID, 택배사, 운송장번호는 필수입니다.' })
+      continue
+    }
+    if (!VALID_CARRIERS.includes(carrier)) {
+      errors.push({ orderId, error: `지원하지 않는 택배사: ${carrier}` })
+      continue
+    }
+    if (!TRACKING_NO_REGEX.test(trackingNo)) {
+      errors.push({ orderId, error: '운송장번호는 숫자 10~15자리입니다.' })
+      continue
+    }
+
+    try {
+      const order = await prisma.order.findFirst({
+        where: {
+          id: orderId,
+          code: { product: { sellerId } },
+          status: { in: ['PAID', 'SHIPPING'] },
+        },
+      })
+
+      if (!order) {
+        errors.push({ orderId, error: '주문을 찾을 수 없거나 권한이 없습니다.' })
+        continue
+      }
+
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { carrier, trackingNo, status: 'SHIPPING' },
+      })
+      success++
+    } catch {
+      errors.push({ orderId, error: '처리 중 오류가 발생했습니다.' })
+    }
+  }
+
+  return NextResponse.json({ success, failed: errors.length, errors })
 }
 ```
 
-기존 return에 `channelStats: channelSummary` 추가:
-```typescript
-return NextResponse.json({
-  // ...기존 필드들...
-  channelStats: channelSummary,
-})
-```
-
 ---
 
-#### 42B: 셀러 대시보드 UI에 채널 통계 카드 추가
+#### 43C: 운송장 일괄 업로드 UI
 
-**파일 수정:** `app/seller/dashboard/page.tsx`
+**파일 수정:** `app/seller/orders/page.tsx`
 
-1. 타입 정의에 `channelStats` 추가 (Stats 인터페이스 또는 타입):
+**1. imports에 Upload 아이콘 추가:**
 ```typescript
-channelStats?: {
-  kakao: { count: number; amount: number }
-  web: { count: number; amount: number }
+import { Download, Truck, Upload } from "lucide-react"
+```
+
+**2. state 추가 (기존 state 선언 아래):**
+```typescript
+const [bulkDialog, setBulkDialog] = useState(false)
+const [bulkParsed, setBulkParsed] = useState<{ orderId: string; carrier: string; trackingNo: string }[]>([])
+const [bulkResult, setBulkResult] = useState<{ success: number; failed: number; errors: { orderId: string; error: string }[] } | null>(null)
+const [bulkLoading, setBulkLoading] = useState(false)
+const [bulkError, setBulkError] = useState('')
+```
+
+**3. 유틸 함수 추가 (컴포넌트 내부, JSX 앞):**
+```typescript
+function parseBulkCsv(text: string) {
+  const lines = text.trim().split('\n').slice(1) // 헤더 제거
+  return lines
+    .map((line) => {
+      const cols = line.split(',').map((c) => c.replace(/^"|"$/g, '').trim())
+      return { orderId: cols[0] ?? '', carrier: cols[1] ?? '', trackingNo: cols[2] ?? '' }
+    })
+    .filter((r) => r.orderId && r.carrier && r.trackingNo)
+}
+
+function downloadBulkTemplate() {
+  const csv = '\uFEFF주문ID,택배사,운송장번호\n'
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'tracking_template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function handleBulkFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  setBulkError('')
+  setBulkResult(null)
+  const file = e.target.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    const text = ev.target?.result as string
+    const parsed = parseBulkCsv(text)
+    setBulkParsed(parsed)
+    if (parsed.length === 0) setBulkError('유효한 데이터가 없습니다. 템플릿을 확인해주세요.')
+  }
+  reader.readAsText(file, 'UTF-8')
+}
+
+async function submitBulkTracking() {
+  if (bulkParsed.length === 0) return
+  setBulkLoading(true)
+  setBulkError('')
+  try {
+    const res = await fetch('/api/seller/orders/tracking/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: bulkParsed }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setBulkError(data.error || '업로드에 실패했습니다.')
+      return
+    }
+    setBulkResult(data)
+    if (data.success > 0) fetchOrders(page)
+  } catch {
+    setBulkError('서버 오류가 발생했습니다.')
+  } finally {
+    setBulkLoading(false)
+  }
 }
 ```
 
-2. 기존 통계 카드 섹션 아래에 채널 비교 섹션 추가:
+**4. 헤더 버튼에 "일괄 운송장 등록" 버튼 추가** (배송지 다운로드 버튼 뒤):
 ```tsx
-{/* 채널별 주문 통계 (최근 30일) */}
-{stats.channelStats && (
-  <div className="mt-6">
-    <h2 className="text-sm font-medium text-muted-foreground mb-3">
-      채널별 주문 (최근 30일)
-    </h2>
-    <div className="grid grid-cols-2 gap-4">
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">
-            카카오
-          </span>
-          <span className="text-sm text-muted-foreground">채널</span>
-        </div>
-        <p className="text-2xl font-bold">{stats.channelStats.kakao.count}건</p>
-        <p className="text-sm text-muted-foreground">
-          {stats.channelStats.kakao.amount.toLocaleString()}원
+<Button
+  variant="outline"
+  onClick={() => {
+    setBulkDialog(true)
+    setBulkParsed([])
+    setBulkResult(null)
+    setBulkError('')
+  }}
+>
+  <Upload className="mr-2 h-4 w-4" /> 일괄 운송장 등록
+</Button>
+```
+
+**5. 기존 운송장 다이얼로그 아래에 일괄 등록 다이얼로그 추가:**
+```tsx
+<Dialog open={bulkDialog} onOpenChange={setBulkDialog}>
+  <DialogContent className="max-w-lg">
+    <DialogHeader>
+      <DialogTitle>운송장 일괄 등록</DialogTitle>
+    </DialogHeader>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>CSV 파일로 여러 주문의 운송장을 한번에 등록합니다.</span>
+        <Button variant="link" size="sm" className="p-0 h-auto" onClick={downloadBulkTemplate}>
+          템플릿 다운로드
+        </Button>
+      </div>
+      <div className="space-y-1">
+        <Label>CSV 파일 선택</Label>
+        <Input type="file" accept=".csv" onChange={handleBulkFileChange} />
+        <p className="text-xs text-muted-foreground">
+          형식: 주문ID, 택배사, 운송장번호 (헤더 포함)
         </p>
-      </Card>
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-            웹
-          </span>
-          <span className="text-sm text-muted-foreground">직접입력</span>
-        </div>
-        <p className="text-2xl font-bold">{stats.channelStats.web.count}건</p>
+      </div>
+      {bulkParsed.length > 0 && !bulkResult && (
         <p className="text-sm text-muted-foreground">
-          {stats.channelStats.web.amount.toLocaleString()}원
+          {bulkParsed.length}건 파싱 완료. 업로드 버튼을 클릭하세요.
         </p>
-      </Card>
+      )}
+      {bulkError && <p className="text-sm text-destructive">{bulkError}</p>}
+      {bulkResult && (
+        <div className="rounded-md border p-3 space-y-1 text-sm">
+          <p className="text-green-600 font-medium">✓ 성공: {bulkResult.success}건</p>
+          {bulkResult.failed > 0 && (
+            <>
+              <p className="text-destructive font-medium">✗ 실패: {bulkResult.failed}건</p>
+              <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                {bulkResult.errors.slice(0, 5).map((e, i) => (
+                  <li key={i}>{e.orderId.slice(0, 8)}… — {e.error}</li>
+                ))}
+                {bulkResult.errors.length > 5 && (
+                  <li>외 {bulkResult.errors.length - 5}건...</li>
+                )}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
     </div>
-  </div>
-)}
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setBulkDialog(false)}>닫기</Button>
+      {!bulkResult && (
+        <Button
+          onClick={submitBulkTracking}
+          disabled={bulkLoading || bulkParsed.length === 0}
+        >
+          {bulkLoading ? '업로드 중...' : `${bulkParsed.length}건 업로드`}
+        </Button>
+      )}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 ```
 
 ---
 
-#### 42 완료 조건
+#### 43 완료 조건
 
-- [ ] `app/api/seller/dashboard/route.ts` — `channelStats` 응답 추가
-- [ ] `app/seller/dashboard/page.tsx` — 채널별 주문 카드 UI 추가
-- [ ] 로컬 테스트: dashboard API 응답에 `channelStats` 포함 확인
-- [ ] 대시보드 화면에서 카카오/웹 카드 표시 확인
+- [ ] `app/api/seller/orders/export/route.ts` — 주문ID 첫 번째 컬럼 추가
+- [ ] `app/api/seller/orders/tracking/bulk/route.ts` — POST 핸들러 신규 생성, 500건 상한, 셀러 소유 검증
+- [ ] `app/seller/orders/page.tsx` — Upload import, state 추가, 3개 함수, "일괄 운송장 등록" 버튼, 다이얼로그
+- [ ] 로컬 테스트:
+  - 배송지 CSV 다운로드 → 주문ID 컬럼 확인
+  - 템플릿 다운로드 → 데이터 입력 → 업로드 → 주문 목록 SHIPPING 전환 확인
+  - 잘못된 운송장번호 → 실패 에러 메시지 확인
 - [ ] git commit + push
 
 ---
@@ -323,6 +411,8 @@ channelStats?: {
 
 | Task | 내용 | 완료일 |
 |------|------|--------|
+| Task 42 | 셀러 대시보드 채널별 통계 API + UI 카드 | 2026-04-09 |
+| Task 41 | 카카오 세션 일회성 삭제, CSV 주문경로 컬럼 추가 | 2026-04-09 |
 | Task 40 | `orders.source` 필드 추가 (web/kakao), 카카오 진입 sessionStorage 플래그, 결제 API source 저장, 셀러 주문 목록 카카오 배지 UI | 2026-04-09 |
 | Task 39 | `app/api/cron/kakao-session-cleanup/route.ts` cron 생성, `vercel.json` cron 추가, `app/api/kakao/webhook/route.ts` 봇 ID 검증 | 2026-04-09 |
 | Task 38 | `docs/kakao-openbuilder-setup.md` 문서 작성, 셀러 코드 페이지 카카오 공지 복사 버튼, 셀러 대시보드 카카오 채널 안내 카드 | 2026-04-09 |
