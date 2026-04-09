@@ -124,6 +124,7 @@ model Order {
   pgTid         String?     @unique @map("pg_tid") @db.VarChar(100) // PG사 거래번호
   trackingNo    String?     @map("tracking_no") @db.VarChar(50) // 운송장번호
   carrier       String?     @db.VarChar(30) // 택배사
+  buyerIp       String?     @map("buyer_ip") @db.VarChar(45) // 구매자 IP (이상 거래 감지용)
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
   code       Code        @relation(fields: [codeId], references: [id])

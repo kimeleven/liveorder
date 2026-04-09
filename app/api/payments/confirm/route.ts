@@ -5,6 +5,12 @@ import { sendEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
+    // IP 추출 (Vercel: x-forwarded-for 헤더 사용)
+    const buyerIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      null;
+
     const body = await req.json();
     const {
       portonePaymentId,
@@ -119,6 +125,7 @@ export async function POST(req: NextRequest) {
             status: "PAID",
             source: source === 'kakao' ? 'kakao' : 'web',
             pgTid: portonePaymentId,
+            buyerIp,
           },
         });
 

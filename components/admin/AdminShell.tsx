@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldAlert,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/admin/products", label: "상품 관리", icon: Package },
   { href: "/admin/orders", label: "주문 관리", icon: ShoppingCart },
   { href: "/admin/settlements", label: "정산 관리", icon: Wallet },
+  { href: "/admin/fraud", label: "이상 거래", icon: ShieldAlert },
 ];
 
 export default function AdminShell({

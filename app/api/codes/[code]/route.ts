@@ -1,11 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+// IP rate limiting: 1분 내 10회 초과 시 429 반환 (서버리스 warm instance 내 유지)
+const codeCheckRateLimit = new Map<string, { count: number; resetAt: number }>();
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    // IP rate limiting 체크
+    const clientIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown";
+
+    const now = Date.now();
+    const windowMs = 60_000; // 1분
+    const maxAttempts = 10;
+
+    const rl = codeCheckRateLimit.get(clientIp) ?? { count: 0, resetAt: now + windowMs };
+    if (now > rl.resetAt) {
+      rl.count = 0;
+      rl.resetAt = now + windowMs;
+    }
+    rl.count++;
+    codeCheckRateLimit.set(clientIp, rl);
+
+    if (rl.count > maxAttempts) {
+      return NextResponse.json(
+        { valid: false, reason: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+        { status: 429 }
+      );
+    }
+
     const { code: codeKey } = await params;
 
     const code = await prisma.code.findUnique({
