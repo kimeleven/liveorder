@@ -16,7 +16,17 @@ export async function GET(req: NextRequest) {
   const statusFilter = statusParam && validStatuses.includes(statusParam)
     ? { status: statusParam }
     : {};
-  const where = { code: { product: { sellerId: session.user.id } }, ...statusFilter };
+  const q = searchParams.get('q')?.trim() || '';
+  const where = {
+    code: { product: { sellerId: session.user.id } },
+    ...statusFilter,
+    ...(q ? {
+      OR: [
+        { buyerName: { contains: q, mode: 'insensitive' as const } },
+        { buyerPhone: { contains: q } },
+      ]
+    } : {}),
+  };
 
   const [orders, total] = await prisma.$transaction([
     prisma.order.findMany({

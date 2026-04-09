@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, Truck, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
 import Pagination from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -84,13 +85,17 @@ export default function OrdersPage() {
   const [bulkResult, setBulkResult] = useState<{ success: number; failed: number; errors: { orderId: string; error: string }[] } | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkError, setBulkError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const router = useRouter();
 
-  async function fetchOrders(currentPage = page, currentStatus = statusFilter) {
+  async function fetchOrders(currentPage = page, currentStatus = statusFilter, currentQuery = searchQuery) {
     setIsLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(currentPage), limit: '20' });
       if (currentStatus) params.set('status', currentStatus);
+      if (currentQuery) params.set('q', currentQuery);
       const r = await fetch(`/api/seller/orders?${params.toString()}`);
       const res = await r.json();
       if (res.data) {
@@ -107,18 +112,18 @@ export default function OrdersPage() {
   }
 
   useEffect(() => {
-    fetchOrders(page, statusFilter);
+    fetchOrders(page, statusFilter, searchQuery);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusFilter]);
+  }, [page, statusFilter, searchQuery]);
 
   // 30초마다 자동 갱신
   useEffect(() => {
     const timer = setInterval(() => {
-      fetchOrders(page, statusFilter)
+      fetchOrders(page, statusFilter, searchQuery)
     }, 30000)
     return () => clearInterval(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusFilter]);
+  }, [page, statusFilter, searchQuery]);
 
   function openTrackingDialog(orderId: string) {
     setTrackingDialog({ open: true, orderId });
@@ -240,7 +245,23 @@ export default function OrdersPage() {
               주문 {total}건
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <form onSubmit={e => { e.preventDefault(); setSearchQuery(searchInput); setPage(1) }}
+              className="flex gap-2 items-center">
+              <Input
+                placeholder="구매자명 또는 전화번호"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-44 h-8"
+              />
+              <Button type="submit" variant="outline" size="sm">검색</Button>
+              {searchQuery && (
+                <Button type="button" variant="ghost" size="sm"
+                  onClick={() => { setSearchInput(''); setSearchQuery(''); setPage(1) }}>
+                  초기화
+                </Button>
+              )}
+            </form>
             <Select
               value={statusFilter || 'ALL'}
               onValueChange={(v) => {
@@ -317,7 +338,11 @@ export default function OrdersPage() {
                     variant: "outline" as const,
                   };
                   return (
-                    <TableRow key={order.id}>
+                    <TableRow
+                      key={order.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/seller/orders/${order.id}`)}
+                    >
                       <TableCell className="text-sm">
                         {new Date(order.createdAt).toLocaleString("ko-KR")}
                       </TableCell>
@@ -347,7 +372,10 @@ export default function OrdersPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => openTrackingDialog(order.id)}
+                            onClick={e => {
+                              e.stopPropagation()
+                              openTrackingDialog(order.id)
+                            }}
                           >
                             <Truck className="mr-1 h-3 w-3" />
                             운송장 등록
