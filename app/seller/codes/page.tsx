@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import SellerShell from "@/components/seller/SellerShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,7 @@ interface CodeItem {
 }
 
 export default function CodesPage() {
+  const router = useRouter();
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -110,11 +112,15 @@ export default function CodesPage() {
                 {codes.map((code) => {
                   const status = getStatus(code);
                   return (
-                    <TableRow key={code.id}>
+                    <TableRow
+                      key={code.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push("/seller/codes/" + code.id)}
+                    >
                       <TableCell className="font-mono font-semibold">
                         <div className="flex items-center gap-2">
                           {code.codeKey}
-                          <button onClick={() => copyCode(code.codeKey)}>
+                          <button onClick={(e) => { e.stopPropagation(); copyCode(code.codeKey); }}>
                             <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                           </button>
                         </div>
@@ -134,7 +140,7 @@ export default function CodesPage() {
                           size="sm"
                           variant="ghost"
                           className="gap-1 text-yellow-700 hover:text-yellow-900 hover:bg-yellow-50"
-                          onClick={() => copyKakaoNotice(code.codeKey)}
+                          onClick={(e) => { e.stopPropagation(); copyKakaoNotice(code.codeKey); }}
                           title="카카오 안내 문구 복사"
                         >
                           <MessageCircle className="h-3.5 w-3.5" />
@@ -145,7 +151,7 @@ export default function CodesPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => toggleCode(code.id)}
+                          onClick={(e) => { e.stopPropagation(); toggleCode(code.id); }}
                         >
                           {code.isActive ? "중지" : "활성화"}
                         </Button>
