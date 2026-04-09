@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 55 완료 확인, Task 56 스펙 수립: 셀러 상품 활성/비활성 토글 + 비활성 목록 필터)_
+_최종 업데이트: 2026-04-09 (Task 56 완료 확인, Task 57 스펙 수립: 셀러 코드 목록 상태 필터 + 검색)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-09 (Task 55 완료 확인, Task 56 스펙 수립: 
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 56 진행) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 57 진행) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -49,90 +49,205 @@ _최종 업데이트: 2026-04-09 (Task 55 완료 확인, Task 56 스펙 수립: 
 | 53 | 셀러 코드 상세 페이지 `/seller/codes/[id]` + `GET /api/seller/codes/[id]` (코드 상세+주문목록+통계) |
 | 54 | 셀러 상품 상세 페이지 `/seller/products/[id]` + `GET /api/seller/products/[id]` 확장 (코드목록+통계) + 상품 카드 클릭 연결 |
 | 55 | 셀러 코드 편집/삭제 — `PATCH /api/seller/codes/[id]` + `DELETE /api/seller/codes/[id]` + 편집 다이얼로그 + 삭제 버튼 |
+| 56 | 셀러 상품 활성/비활성 토글 — `POST /api/seller/products/[id]/toggle` + `?status` 필터 + 목록/상세 토글 버튼 |
 
 ---
 
-## Task 56 — 셀러 상품 활성/비활성 토글 + 비활성 상품 목록 표시
+## Task 57 — 셀러 코드 목록 상태 필터 + 검색
 
 ### 배경
 
-현재 셀러 상품 관리에 아래 문제가 있다:
+현재 셀러 코드 관리에서 일관성 부재 및 UX 문제가 있다:
 
-1. **비활성화된 상품 재활성화 불가**: 상품 목록 API(`GET /api/seller/products`)가 `isActive: true`만 반환 → 비활성화 후 목록에서 사라지면 재활성화 방법 없음
-2. **상품 상세 페이지에 토글 없음**: 코드 상세(`/seller/codes/[id]`)에는 활성/비활성 토글이 있지만, 상품 상세(`/seller/products/[id]`)에는 수정 버튼만 있고 토글 버튼이 없음
-3. **삭제 = 영구 삭제처럼 동작**: `DELETE /api/seller/products/[id]`는 soft-delete(isActive=false)이지만, 목록에서 사라지므로 셀러 입장에서는 복구 불가
-
-코드 toggle 패턴(`POST /api/seller/codes/[id]/toggle`)을 상품에도 적용하는 것이 일관성 있는 UX.
+1. **상품 목록과 불일치**: 상품 목록(`/seller/products`)은 Task 56에서 `?status` 필터가 추가되었으나, 코드 목록(`/seller/codes`)은 전체를 한 번에 반환 (isActive/만료/소진 구분 없음)
+2. **검색 불가**: 코드가 많아지면 특정 코드를 찾기 어려움. 상품명 또는 코드키로 검색 기능 없음
+3. **만료 코드 방치**: 만료된 코드들이 목록에 섞여 있어 활성 코드 파악이 어려움
 
 ### 목표
 
-- 상품 목록에서 상태 필터(활성/비활성/전체)로 비활성 상품도 확인 가능
-- 상품 목록 각 카드에서 바로 활성화/중지 전환 가능
-- 상품 상세 페이지에서도 "판매 중지" / "판매 재개" 버튼으로 토글 가능
+- 코드 목록에 상태 필터(활성/만료/중지/전체) 탭 추가
+- 코드키 또는 상품명으로 검색 기능 추가
+- `GET /api/seller/codes`에 `?status` + `?q` 파라미터 지원
+
+### 상태 구분 기준
+
+```
+active   = isActive: true AND expiresAt > now AND (maxQty=0 OR usedQty < maxQty)
+expired  = expiresAt <= now  (isActive 무관)
+inactive = isActive: false AND expiresAt > now
+all      = 필터 없음
+```
+
+> 참고: "소진" (maxQty>0 && usedQty>=maxQty) 상태는 `active` 필터에서 제외 (별도 탭 없음 — 소진은 "만료"와 유사한 비활성 상태로 처리)
 
 ### 레이아웃 변경
 
 ```
-/seller/products
+/seller/codes
 ┌──────────────────────────────────────────────┐
-│ 내 상품  [+ 상품 등록]                          │
-│ [활성] [비활성] [전체]   ← 신규 필터 탭          │
+│ 내 코드  [+ 코드 발급]                         │
+│ [🔍 검색창 (코드키/상품명)]                     │
+│ [활성] [만료] [중지] [전체]  ← 신규 필터 탭     │
 ├──────────────────────────────────────────────┤
-│ [상품카드] [상품카드] [상품카드]                  │
-│           각 카드에 [수정] [중지/활성화] 버튼     │
-└──────────────────────────────────────────────┘
-
-/seller/products/[id]
-┌──────────────────────────────────────────────┐
-│ ← 상품 목록  상품명  [판매중 배지]              │
-│             [판매 중지/재개] [수정] ← 토글 버튼  │
-├──────────────────────────────────────────────┤
-│ (기존) 상품정보 카드 / 통계 / 코드 테이블         │
+│ (기존 테이블 그대로)                             │
 └──────────────────────────────────────────────┘
 ```
 
 ### 서브태스크
 
-#### 56A: `POST /api/seller/products/[id]/toggle`
+#### 57A: `GET /api/seller/codes` — `?status` + `?q` 파라미터 지원
 
-**신규 파일:** `app/api/seller/products/[id]/toggle/route.ts`
+**수정 파일:** `app/api/seller/codes/route.ts`
 
-코드 toggle과 동일한 패턴:
-- 본인 상품 여부 확인 (`sellerId: session.user.id`)
-- isActive 반전 후 반환 (`{ isActive: boolean }`)
+```typescript
+// status 파라미터 처리
+const status = searchParams.get('status') ?? 'all'
+const q = searchParams.get('q')?.trim() ?? ''
+const now = new Date()
 
-#### 56B: `GET /api/seller/products` — `?status` 필터
+// status에 따른 where 조건
+// active: isActive=true, expiresAt > now, (maxQty=0 OR usedQty < maxQty)
+// expired: expiresAt <= now
+// inactive: isActive=false, expiresAt > now
+// all: 필터 없음
 
-**수정 파일:** `app/api/seller/products/route.ts`
+const statusFilter =
+  status === 'active'   ? { isActive: true, expiresAt: { gt: now }, OR: [{ maxQty: 0 }, { usedQty: { lt: prisma.code.fields.maxQty } }] } :
+  status === 'expired'  ? { expiresAt: { lte: now } } :
+  status === 'inactive' ? { isActive: false, expiresAt: { gt: now } } :
+  {}
 
+// 검색 필터
+const searchFilter = q ? {
+  OR: [
+    { codeKey: { contains: q, mode: 'insensitive' } },
+    { product: { name: { contains: q, mode: 'insensitive' } } },
+  ]
+} : {}
+
+const where = {
+  product: { sellerId: session.user.id },
+  ...statusFilter,
+  ...searchFilter,
+}
 ```
-?status=active   (기본) → isActive: true
-?status=inactive         → isActive: false
-?status=all              → 필터 없음 (전체)
+
+**주의사항:**
+- `active` 상태의 `usedQty < maxQty` 조건은 Prisma에서 필드 비교가 복잡하므로, `maxQty: 0` (무제한) 또는 Raw SQL 사용
+- 실제 구현에서는 `active` 필터를 단순화: `isActive: true, expiresAt: { gt: now }` (소진 여부는 프론트에서 뱃지로 표시)
+- `mode: 'insensitive'` — Prisma PostgreSQL 검색 대소문자 무시
+
+**완료 조건:**
+- [ ] `?status=active` → isActive=true + expiresAt > now 코드만
+- [ ] `?status=expired` → expiresAt <= now 코드만
+- [ ] `?status=inactive` → isActive=false + expiresAt > now 코드만
+- [ ] `?status=all` (또는 기본) → 전체
+- [ ] `?q=검색어` → codeKey 또는 상품명 포함 코드 필터
+- [ ] 기존 페이지네이션 동작 유지
+
+---
+
+#### 57B: `/seller/codes` 목록 페이지 — 상태 필터 탭 + 검색창 추가
+
+**수정 파일:** `app/seller/codes/page.tsx`
+
+**추가 상태:**
+```typescript
+const [statusFilter, setStatusFilter] = useState<'active' | 'expired' | 'inactive' | 'all'>('active')
+const [search, setSearch] = useState('')
+const [searchInput, setSearchInput] = useState('')
 ```
 
-기존 `isActive: true` 하드코딩 제거, status 파라미터로 분기.
+**검색 디바운스 (300ms):**
+```typescript
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setSearch(searchInput)
+    setPage(1)
+  }, 300)
+  return () => clearTimeout(timer)
+}, [searchInput])
+```
 
-#### 56C: `/seller/products` 목록 — 필터 탭 + 토글 버튼
+**fetch URL 수정:**
+```typescript
+fetch(`/api/seller/codes?page=${page}&status=${statusFilter}&q=${encodeURIComponent(search)}`)
+```
 
-**수정 파일:** `app/seller/products/page.tsx`
+**필터 탭 + 검색창 UI (테이블 위에 추가):**
+```tsx
+{/* 검색창 */}
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  <Input
+    placeholder="코드 또는 상품명 검색..."
+    className="pl-9"
+    value={searchInput}
+    onChange={(e) => setSearchInput(e.target.value)}
+  />
+</div>
 
-- `statusFilter` 상태 추가 (기본: `'active'`)
-- 필터 탭 버튼 3개 (활성/비활성/전체)
-- `fetchProducts`에 `?status=${statusFilter}` 추가
-- 각 카드에 토글 버튼 추가 + 비활성 상품 opacity-60 처리
+{/* 상태 필터 탭 */}
+<div className="flex gap-2">
+  {(['active', 'expired', 'inactive', 'all'] as const).map((s) => (
+    <Button
+      key={s}
+      variant={statusFilter === s ? 'default' : 'outline'}
+      size="sm"
+      onClick={() => { setStatusFilter(s); setPage(1); }}
+    >
+      {s === 'active' ? '활성' : s === 'expired' ? '만료' : s === 'inactive' ? '중지' : '전체'}
+    </Button>
+  ))}
+</div>
+```
 
-#### 56D: `/seller/products/[id]` 상세 — 토글 버튼
+**빈 상태 메시지 (statusFilter + search 기준):**
+```tsx
+{codes.length === 0 && (
+  <TableRow>
+    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+      {search
+        ? `"${search}"에 해당하는 코드가 없습니다.`
+        : statusFilter === 'active'
+        ? '활성 코드가 없습니다.'
+        : statusFilter === 'expired'
+        ? '만료된 코드가 없습니다.'
+        : statusFilter === 'inactive'
+        ? '중지된 코드가 없습니다.'
+        : '발급된 코드가 없습니다.'}
+    </TableCell>
+  </TableRow>
+)}
+```
 
-**수정 파일:** `app/seller/products/[id]/page.tsx`
+**import 추가:**
+```typescript
+import { Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+```
+(Input은 이미 import돼 있을 수 있음 — 중복 확인)
 
-- 기존 useEffect fetch → `fetchProduct` useCallback으로 추출
-- 헤더에 "판매 중지" / "판매 재개" 버튼 (product.isActive 기준)
-- 토글 성공 시 fetchProduct 재호출
+**완료 조건:**
+- [ ] 검색창 — 코드키 또는 상품명으로 300ms 디바운스 검색
+- [ ] 상태 필터 탭 4개 (활성/만료/중지/전체) — 기본 '활성'
+- [ ] 탭/검색 변경 시 page=1로 리셋 + 목록 재조회
+- [ ] 빈 상태 메시지 (필터/검색에 맞는 메시지 표시)
+- [ ] 기존 테이블/페이지네이션 그대로 유지
+
+---
 
 ### 구현 순서
 
-56A (신규) → 56B (기존 파일 수정) → 56C → 56D
+57A (API 수정) → 57B (UI 수정)
+
+### 주의사항
+
+- 기존 코드 목록은 상태 필터 없이 전체를 반환하므로, **기존 동작 변경**: 기본값을 `'active'`로 설정
+  - 단, 기존에 코드 목록 페이지를 자주 보는 셀러가 있을 수 있으므로 'all' 탭도 명시적으로 제공
+- `?status=active` 기본으로 바꾸면 만료/중지 코드는 기본적으로 안 보임 → 사용자에게 탭 안내 중요
+- 57B에서 `Input`이 이미 import되어 있는지 확인 후 처리
+- 검색 `q` 파라미터는 빈 문자열이면 전송 안 해도 됨 (`q=` 생략 또는 `q=` 빈값 모두 처리)
 
 ---
 

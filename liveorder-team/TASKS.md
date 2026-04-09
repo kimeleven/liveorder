@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 55 완료 확인 + Task 56 스펙 수립: 셀러 상품 활성/비활성 토글 + 비활성 상품 목록)_
+_최종 업데이트: 2026-04-09 (Task 56 완료 확인 + Task 57 스펙 수립: 셀러 코드 목록 상태 필터 + 검색)_
 
 ---
 
@@ -47,7 +47,177 @@ _최종 업데이트: 2026-04-09 (Task 55 완료 확인 + Task 56 스펙 수립:
 
 ---
 
+## Dev1 현재 작업
+
+### Task 57: 셀러 코드 목록 상태 필터 + 검색
+
+**목표:** 상품 목록(`/seller/products`)과 동일한 패턴으로 코드 목록에도 상태 필터와 검색 기능 추가
+
+**배경:**
+- 현재 `/api/seller/codes`는 전체 코드(활성+만료+중지 혼합) 반환 — 상품 목록의 `?status` 필터 패턴과 불일치
+- `/seller/codes` 목록에 상태 필터 탭 없음 — 만료 코드가 활성 코드와 섞여 표시됨
+- 코드가 많아질수록 특정 코드를 찾기 어려움 — 코드키/상품명 검색 기능 없음
+
+---
+
+#### 57A: `GET /api/seller/codes` — `?status` + `?q` 파라미터 지원
+
+**수정 파일:** `app/api/seller/codes/route.ts`
+
+현재 `where = { product: { sellerId: session.user.id } }` 고정 → status + q 파라미터로 분기:
+
+```typescript
+const status = searchParams.get('status') ?? 'all'
+const q = searchParams.get('q')?.trim() ?? ''
+const now = new Date()
+
+const statusFilter =
+  status === 'active'   ? { isActive: true, expiresAt: { gt: now } } :
+  status === 'expired'  ? { expiresAt: { lte: now } } :
+  status === 'inactive' ? { isActive: false, expiresAt: { gt: now } } :
+  {}
+
+const searchFilter = q ? {
+  OR: [
+    { codeKey: { contains: q, mode: 'insensitive' as const } },
+    { product: { name: { contains: q, mode: 'insensitive' as const } } },
+  ]
+} : {}
+
+const where = {
+  product: { sellerId: session.user.id },
+  ...statusFilter,
+  ...searchFilter,
+}
+```
+
+**완료 조건:**
+- [ ] `?status=active` → isActive=true AND expiresAt > now 코드만
+- [ ] `?status=expired` → expiresAt <= now 코드만 (isActive 무관)
+- [ ] `?status=inactive` → isActive=false AND expiresAt > now 코드만
+- [ ] `?status=all` (또는 파라미터 없음) → 전체 코드
+- [ ] `?q=검색어` → codeKey 또는 product.name 포함 (대소문자 무시)
+- [ ] 기존 페이지네이션 (`parsePagination` + `buildPaginationResponse`) 동작 유지
+- [ ] `include: { product: { select: { name: true } } }` 유지
+
+---
+
+#### 57B: `/seller/codes` 목록 페이지 — 상태 필터 탭 + 검색창 추가
+
+**수정 파일:** `app/seller/codes/page.tsx`
+
+**추가 상태:**
+```typescript
+const [statusFilter, setStatusFilter] = useState<'active' | 'expired' | 'inactive' | 'all'>('active')
+const [searchInput, setSearchInput] = useState('')
+const [search, setSearch] = useState('')
+```
+
+**검색 디바운스 (300ms):**
+```typescript
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setSearch(searchInput)
+    setPage(1)
+  }, 300)
+  return () => clearTimeout(timer)
+}, [searchInput])
+```
+
+**fetch URL 수정:**
+```typescript
+// 기존: fetch(`/api/seller/codes?page=${page}`)
+// 변경:
+fetch(`/api/seller/codes?page=${page}&status=${statusFilter}&q=${encodeURIComponent(search)}`)
+```
+
+**useEffect 의존성 수정:**
+```typescript
+useEffect(() => {
+  // fetch 로직
+}, [page, statusFilter, search])
+```
+
+**검색창 + 필터 탭 UI (헤더 아래, 테이블 위에 추가):**
+```tsx
+{/* 검색창 */}
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  <Input
+    placeholder="코드 또는 상품명 검색..."
+    className="pl-9"
+    value={searchInput}
+    onChange={(e) => setSearchInput(e.target.value)}
+  />
+</div>
+
+{/* 상태 필터 탭 */}
+<div className="flex gap-2">
+  {(['active', 'expired', 'inactive', 'all'] as const).map((s) => (
+    <Button
+      key={s}
+      variant={statusFilter === s ? 'default' : 'outline'}
+      size="sm"
+      onClick={() => { setStatusFilter(s); setPage(1); }}
+    >
+      {s === 'active' ? '활성' : s === 'expired' ? '만료' : s === 'inactive' ? '중지' : '전체'}
+    </Button>
+  ))}
+</div>
+```
+
+**빈 상태 메시지 (TableBody 내):**
+```tsx
+{codes.length === 0 && (
+  <TableRow>
+    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+      {search
+        ? `"${search}"에 해당하는 코드가 없습니다.`
+        : statusFilter === 'active' ? '활성 코드가 없습니다.'
+        : statusFilter === 'expired' ? '만료된 코드가 없습니다.'
+        : statusFilter === 'inactive' ? '중지된 코드가 없습니다.'
+        : '발급된 코드가 없습니다.'}
+    </TableCell>
+  </TableRow>
+)}
+```
+
+**import 추가:**
+```typescript
+import { Search } from 'lucide-react'
+// Input은 현재 미사용이면 추가, 이미 import돼 있으면 생략
+import { Input } from '@/components/ui/input'
+```
+
+**완료 조건:**
+- [ ] 검색창 — 코드키 또는 상품명으로 300ms 디바운스 후 검색 실행
+- [ ] 상태 필터 탭 4개 (활성/만료/중지/전체) — 기본값 '활성'
+- [ ] 탭/검색 변경 시 page=1로 리셋 + 목록 재조회
+- [ ] 빈 상태 메시지 (상태 필터/검색어에 맞는 메시지)
+- [ ] 기존 테이블 컬럼 (코드/상품/주문수/만료일/수량/상태/버튼) 유지
+- [ ] 기존 toggleCode, copyCode, kakaoMessage 기능 동작 유지
+
+---
+
+**구현 순서:** 57A (API 수정) → 57B (UI 수정)
+
+**주의사항:**
+- 기존 코드 목록 기본값이 '전체'에서 '활성'으로 변경됨 — 셀러가 만료/중지 코드를 보려면 탭 전환 필요
+- 57B에서 `Input` 컴포넌트 이미 import 되어 있을 경우 중복 추가 금지
+- `Search` 아이콘은 lucide-react에서 import
+
+---
+
 ## ✅ 완료된 작업
+
+### Task 56: 셀러 상품 활성/비활성 토글 + 비활성 상품 목록 표시 ✅ (2026-04-09 완료)
+
+- [x] 56A: `POST /api/seller/products/[id]/toggle` — 상품 활성/비활성 토글 (소유 검증, isActive 반전)
+- [x] 56B: `GET /api/seller/products` — `?status=active|inactive|all` 필터 지원
+- [x] 56C: `/seller/products` 목록 — 상태 필터 탭 + 토글 버튼 + opacity-60 비활성 처리
+- [x] 56D: `/seller/products/[id]` 상세 — "판매 중지"/"판매 재개" 버튼 + fetchProduct useCallback
+
+---
 
 ### Task 55: 셀러 코드 편집 / 삭제 ✅ (2026-04-09 완료)
 
@@ -56,246 +226,6 @@ _최종 업데이트: 2026-04-09 (Task 55 완료 확인 + Task 56 스펙 수립:
 - [x] 55C: `/seller/codes/[id]` 편집 다이얼로그 + 삭제 버튼 (fetchData useCallback 분리, 저장 후 새로고침)
 
 ---
-
-## Dev1 현재 작업
-
-### Task 56: 셀러 상품 활성/비활성 토글 + 비활성 상품 목록 표시
-
-**목표:** 셀러가 상품을 일시 중지(비활성화)하고, 필요 시 다시 활성화할 수 있도록 구현
-
-**배경:**
-- 현재 상품 목록(`/seller/products`)은 `isActive: true`만 표시 → 비활성화된 상품 재활성화 불가
-- 상품 삭제(DELETE) API는 soft-delete(isActive=false)이나, 목록에서 사라지므로 실질적으로 영구 삭제처럼 동작
-- 상품 상세 페이지에 활성/비활성 토글 버튼이 없음 (코드 상세 페이지와 달리)
-- 코드(`/api/seller/codes/[id]/toggle`)와 동일한 패턴을 상품에도 적용
-
----
-
-#### 56A: `POST /api/seller/products/[id]/toggle` — 상품 활성/비활성 토글
-
-**신규 파일:** `app/api/seller/products/[id]/toggle/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth()
-  if (!session?.user?.id)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { id } = await params
-
-  const product = await prisma.product.findFirst({
-    where: { id, sellerId: session.user.id },
-  })
-  if (!product)
-    return NextResponse.json({ error: '상품을 찾을 수 없습니다.' }, { status: 404 })
-
-  const updated = await prisma.product.update({
-    where: { id },
-    data: { isActive: !product.isActive },
-  })
-
-  return NextResponse.json({ isActive: updated.isActive })
-}
-```
-
-**완료 조건:**
-- [ ] 본인 상품만 토글 가능 (타인 상품 → 404)
-- [ ] isActive 값이 반전되어 반환
-- [ ] `{ isActive: boolean }` 응답
-
----
-
-#### 56B: `GET /api/seller/products` — `?status` 필터 지원
-
-**수정 파일:** `app/api/seller/products/route.ts`
-
-현재 `isActive: true` 고정 → status 파라미터로 필터:
-
-```typescript
-// GET 핸들러 내 where 부분 수정
-const status = searchParams.get('status') ?? 'active'
-const isActiveFilter =
-  status === 'all' ? {} :
-  status === 'inactive' ? { isActive: false } :
-  { isActive: true }
-const where = { sellerId: session.user.id, ...isActiveFilter }
-```
-
-**완료 조건:**
-- [ ] `?status=active` (기본) → isActive=true 상품만
-- [ ] `?status=inactive` → isActive=false 상품만
-- [ ] `?status=all` → 전체 상품 (활성+비활성)
-- [ ] 기존 페이지네이션 동작 유지
-
----
-
-#### 56C: `/seller/products` 목록 페이지 — 상태 필터 탭 + 토글 버튼
-
-**수정 파일:** `app/seller/products/page.tsx`
-
-**추가할 상태:**
-```typescript
-const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
-const [toggling, setToggling] = useState<string | null>(null)
-```
-
-**fetch 수정:**
-```typescript
-// fetchProducts 함수의 fetch URL 수정
-fetch(`/api/seller/products?page=${currentPage}&status=${statusFilter}`)
-```
-
-**필터 탭 UI (카드 위에 추가):**
-```tsx
-<div className="flex gap-2 mb-4">
-  {(['active', 'inactive', 'all'] as const).map((s) => (
-    <Button
-      key={s}
-      variant={statusFilter === s ? 'default' : 'outline'}
-      size="sm"
-      onClick={() => { setStatusFilter(s); setPage(1) }}
-    >
-      {s === 'active' ? '활성' : s === 'inactive' ? '비활성' : '전체'}
-    </Button>
-  ))}
-</div>
-```
-
-**토글 핸들러:**
-```typescript
-async function handleToggle(product: Product) {
-  setToggling(product.id)
-  try {
-    const res = await fetch(`/api/seller/products/${product.id}/toggle`, { method: 'POST' })
-    if (!res.ok) { toast.error('상태 변경 실패'); return }
-    const { isActive } = await res.json()
-    toast.success(isActive ? '상품이 활성화되었습니다.' : '상품이 비활성화되었습니다.')
-    fetchProducts(page)
-  } catch {
-    toast.error('서버 오류가 발생했습니다.')
-  } finally {
-    setToggling(null)
-  }
-}
-```
-
-**카드에 토글 버튼 추가 (기존 연필/휴지통 버튼 영역):**
-```tsx
-<Button
-  variant="ghost"
-  size="sm"
-  onClick={(e) => { e.stopPropagation(); handleToggle(product) }}
-  disabled={toggling === product.id}
->
-  {toggling === product.id
-    ? <Loader2 className="h-4 w-4 animate-spin" />
-    : product.isActive ? '중지' : '활성화'}
-</Button>
-```
-
-**비활성 상품 카드 시각 처리:**
-```tsx
-// 카드 className에 조건부 추가
-className={`... ${!product.isActive ? 'opacity-60' : ''}`}
-```
-
-**import 추가:**
-```typescript
-import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
-```
-
-**완료 조건:**
-- [ ] 상태 필터 탭 (활성/비활성/전체) — 탭 전환 시 목록 즉시 갱신
-- [ ] 각 상품 카드에 "활성화" / "중지" 버튼 (현재 상태 반전)
-- [ ] 토글 성공 → toast + 목록 새로고침
-- [ ] 비활성 상품은 opacity-60으로 시각적 구분
-- [ ] 기본 필터는 'active' (기존 동작 유지)
-
----
-
-#### 56D: `/seller/products/[id]` 상세 페이지 — 토글 버튼 추가
-
-**수정 파일:** `app/seller/products/[id]/page.tsx`
-
-**추가 상태:**
-```typescript
-const [toggling, setToggling] = useState(false)
-const fetchProduct = useCallback(() => {
-  setLoading(true)
-  fetch(`/api/seller/products/${id}`)
-    .then((r) => { if (!r.ok) throw new Error(); return r.json() })
-    .then((res) => setProduct(res))
-    .catch(() => toast.error('상품 정보를 불러오지 못했습니다.'))
-    .finally(() => setLoading(false))
-}, [id])
-
-useEffect(() => { fetchProduct() }, [fetchProduct])
-```
-(기존 useEffect fetch 로직을 fetchProduct로 추출, useCallback import 추가)
-
-**토글 핸들러:**
-```typescript
-async function handleToggle() {
-  if (!product) return
-  setToggling(true)
-  try {
-    const res = await fetch(`/api/seller/products/${id}/toggle`, { method: 'POST' })
-    if (!res.ok) { toast.error('상태 변경 실패'); return }
-    const { isActive } = await res.json()
-    toast.success(isActive ? '상품이 활성화되었습니다.' : '상품이 비활성화되었습니다.')
-    fetchProduct()
-  } finally {
-    setToggling(false)
-  }
-}
-```
-
-**헤더 버튼 추가 (기존 "수정" 버튼 앞에):**
-```tsx
-<Button
-  variant="outline"
-  size="sm"
-  onClick={handleToggle}
-  disabled={toggling || !product}
->
-  {toggling
-    ? <Loader2 className="h-4 w-4 animate-spin" />
-    : product?.isActive ? '판매 중지' : '판매 재개'}
-</Button>
-```
-
-**import 추가:**
-```typescript
-import { useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
-```
-(Loader2가 이미 import돼 있으면 생략, useCallback은 기존 useState, useEffect 옆에 추가)
-
-**완료 조건:**
-- [ ] 헤더에 "판매 중지" / "판매 재개" 버튼 표시 (isActive에 따라 전환)
-- [ ] 토글 성공 → toast + 상품 데이터 새로고침 (fetchProduct 재호출)
-- [ ] loading 중이거나 product 없으면 버튼 disabled
-
----
-
-**구현 순서:** 56A (신규 파일) → 56B (기존 파일 수정) → 56C → 56D
-
-**주의사항:**
-- 56A는 코드 toggle(`app/api/seller/codes/[id]/toggle/route.ts`)과 동일한 패턴
-- 56C에서 `toast`가 기존에 import 안 돼 있으면 `import { toast } from 'sonner'` 추가
-- 56D에서 `useCallback` 미import 시 추가 필요
-
----
-
-## ✅ 완료된 작업
 
 ### Task 54: 셀러 상품 상세 페이지 ✅ (2026-04-09 완료)
 
