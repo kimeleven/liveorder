@@ -47,6 +47,16 @@ _최종 업데이트: 2026-04-09 (Task 54 완료 확인 + Task 55 스펙 수립:
 
 ---
 
+## ✅ 완료된 작업
+
+### Task 55: 셀러 코드 편집 / 삭제 ✅ (2026-04-09 완료)
+
+- [x] 55A: `PATCH /api/seller/codes/[id]` — 만료일/최대수량 수정 (소유 검증, 과거날짜/음수/usedQty 미만 400, 0=무제한)
+- [x] 55B: `DELETE /api/seller/codes/[id]` — 주문 없는 코드만 삭제 (주문 있으면 409)
+- [x] 55C: `/seller/codes/[id]` 편집 다이얼로그 + 삭제 버튼 (fetchData useCallback 분리, 저장 후 새로고침)
+
+---
+
 ## Dev1 현재 작업
 
 ### Task 55: 셀러 코드 편집 / 삭제

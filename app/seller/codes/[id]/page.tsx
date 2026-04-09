@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -17,7 +17,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Loader2, Pencil } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
@@ -73,8 +82,12 @@ export default function CodeDetailPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ expiresAt: "", maxQty: "" });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     setLoading(true);
     fetch(`/api/seller/codes/${id}?page=${page}`)
       .then((r) => {
@@ -85,6 +98,10 @@ export default function CodeDetailPage() {
       .catch(() => toast.error("코드 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, [id, page]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   async function handleToggle() {
     if (!data) return;
@@ -100,6 +117,56 @@ export default function CodeDetailPage() {
       toast.error("코드 상태 변경에 실패했습니다.");
     } finally {
       setToggling(false);
+    }
+  }
+
+  function openEdit() {
+    if (!data) return;
+    const d = new Date(data.code.expiresAt);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setEditForm({ expiresAt: local, maxQty: String(data.code.maxQty) });
+    setEditOpen(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/seller/codes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : undefined,
+          maxQty: editForm.maxQty !== "" ? Number(editForm.maxQty) : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? "저장 실패");
+        return;
+      }
+      toast.success("코드가 수정되었습니다.");
+      setEditOpen(false);
+      fetchData();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("이 코드를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/seller/codes/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? "삭제 실패");
+        return;
+      }
+      toast.success("코드가 삭제되었습니다.");
+      router.push("/seller/codes");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -142,6 +209,18 @@ export default function CodeDetailPage() {
           </Button>
           <h1 className="text-2xl font-bold font-mono">{code.codeKey}</h1>
           <Badge variant={codeStatus.variant}>{codeStatus.label}</Badge>
+          <Button variant="outline" size="sm" onClick={openEdit} disabled={!data}>
+            <Pencil className="h-4 w-4 mr-1" /> 편집
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={handleDelete}
+            disabled={deleting || !data}
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "삭제"}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -291,6 +370,45 @@ export default function CodeDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 편집 다이얼로그 */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>코드 편집</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>만료일</Label>
+              <Input
+                type="datetime-local"
+                value={editForm.expiresAt}
+                onChange={(e) => setEditForm((f) => ({ ...f, expiresAt: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                최대 주문 수량{" "}
+                <span className="text-muted-foreground text-xs">(0 = 무제한)</span>
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={editForm.maxQty}
+                onChange={(e) => setEditForm((f) => ({ ...f, maxQty: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+              취소
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SellerShell>
   );
 }
