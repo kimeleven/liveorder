@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 47 완료 확인, Task 48 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 48 완료 확인, Task 49 스펙 수립)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-09 (Task 47 완료 확인, Task 48 스펙 수립)_
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 48 작업 중) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 49 예정) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -41,31 +41,31 @@ _최종 업데이트: 2026-04-09 (Task 47 완료 확인, Task 48 스펙 수립)_
 | 45 | 셀러 설정 페이지 `/seller/settings` + GET/PATCH `/api/seller/me` + 비밀번호 변경 + 이용약관 동의 |
 | 46 | 셀러 주문 상세 페이지 `/seller/orders/[id]` + `GET /api/seller/orders/[id]` + 주문 검색 (`?q=`) |
 | 47 | 관리자 셀러 상세 페이지 `/admin/sellers/[id]` + `GET /api/admin/sellers/[id]` + `GET /api/admin/sellers/[id]/orders` + 목록 행 클릭 연결 |
+| 48 | 관리자 주문 상세 페이지 `/admin/orders/[id]` + `GET /api/admin/orders/[id]` + 목록 행 클릭 연결 |
 
 ---
 
-## Task 48 — 관리자 주문 상세 페이지
+## Task 49 — 관리자 정산 상세 페이지
 
 ### 배경
 
-현재 관리자(`/admin/orders`)는 주문 목록에서 행을 클릭해도 아무 동작 없음.
-인라인 환불 버튼만 존재. 주문의 구매자 정보, 배송지, 셀러 정보를 한 번에 볼 방법이 없음.
-Task 46(셀러 주문 상세)과 Task 47(관리자 셀러 상세) 동일 패턴으로 관리자용 주문 드릴다운 구현.
+현재 관리자 `/admin/settlements` 정산 목록 페이지는 셀러명, 금액, 수수료, 상태만 표시하고, 행 클릭 시 아무 동작 없음.
+운영자가 특정 정산 건에 어떤 주문들이 포함되어 있는지, 셀러 계좌 정보가 무엇인지 확인할 방법이 없음.
+Task 46(셀러 주문 상세), 47(관리자 셀러 상세), 48(관리자 주문 상세)과 동일한 드릴다운 패턴으로 관리자 정산 상세 구현.
 
 ### 목표
 
-- 관리자가 주문 행 클릭 → `/admin/orders/[id]` 상세 페이지
-- 주문정보 + 구매자/배송지 + 셀러정보 + 배송정보 + 환불 버튼
+- 관리자가 정산 행 클릭 → `/admin/settlements/[id]` 상세 페이지
+- 정산 요약 + 셀러 정보 (계좌 포함) + 포함 주문 목록 표시
+- 정산 완료 처리 버튼 (PENDING → COMPLETED 수동 전환)
 
 ### 서브태스크
 
 ---
 
-#### 48A: `GET /api/admin/orders/[id]` — 신규 파일 생성
+#### 49A: `GET /api/admin/settlements/[id]` — 신규 파일 생성
 
-**파일 신규 생성:** `app/api/admin/orders/[id]/route.ts`
-
-> ⚠️ 주의: 이 경로에 이미 `app/api/admin/orders/[id]/refund/route.ts`가 있음. `[id]` 폴더에 `route.ts`를 추가하는 것.
+**파일 신규 생성:** `app/api/admin/settlements/[id]/route.ts`
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
@@ -83,194 +83,193 @@ export async function GET(
 
   const { id } = await params
 
-  const order = await prisma.order.findUnique({
+  const settlement = await prisma.settlement.findUnique({
     where: { id },
     select: {
       id: true,
-      buyerName: true,
-      buyerPhone: true,
-      address: true,
-      addressDetail: true,
-      memo: true,
-      quantity: true,
       amount: true,
+      fee: true,
+      pgFee: true,
+      netAmount: true,
       status: true,
-      pgTid: true,
-      trackingNo: true,
-      carrier: true,
-      source: true,
+      scheduledAt: true,
+      settledAt: true,
       createdAt: true,
-      code: {
+      seller: {
         select: {
-          codeKey: true,
-          product: {
+          id: true,
+          name: true,
+          businessNo: true,
+          email: true,
+          phone: true,
+          bankName: true,
+          bankAccount: true,
+        },
+      },
+      orders: {
+        select: {
+          id: true,
+          buyerName: true,
+          buyerPhone: true,
+          quantity: true,
+          amount: true,
+          status: true,
+          source: true,
+          createdAt: true,
+          code: {
             select: {
-              name: true,
-              price: true,
-              seller: {
-                select: { id: true, name: true, email: true, phone: true },
-              },
+              codeKey: true,
+              product: { select: { name: true } },
             },
           },
         },
+        orderBy: { createdAt: 'desc' },
       },
     },
   })
 
-  if (!order) {
-    return NextResponse.json({ error: '주문을 찾을 수 없습니다.' }, { status: 404 })
+  if (!settlement) {
+    return NextResponse.json({ error: '정산 건을 찾을 수 없습니다.' }, { status: 404 })
   }
 
-  return NextResponse.json(order)
+  return NextResponse.json(settlement)
+}
+
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session || session.user.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+
+  const settlement = await prisma.settlement.findUnique({ where: { id } })
+  if (!settlement) {
+    return NextResponse.json({ error: '정산 건을 찾을 수 없습니다.' }, { status: 404 })
+  }
+  if (settlement.status !== 'PENDING') {
+    return NextResponse.json({ error: '대기 중인 정산만 완료 처리할 수 있습니다.' }, { status: 400 })
+  }
+
+  const updated = await prisma.settlement.update({
+    where: { id },
+    data: {
+      status: 'COMPLETED',
+      settledAt: new Date(),
+    },
+  })
+
+  return NextResponse.json(updated)
 }
 ```
 
 **완료 조건:**
 - [ ] 관리자 세션 없으면 401
 - [ ] 없는 ID → 404
-- [ ] seller.id, seller.name, seller.email, seller.phone 포함 반환
-- [ ] 구매자 정보 전체 (buyerName, buyerPhone, address, addressDetail, memo) 반환
+- [ ] seller 정보 (id, name, businessNo, email, phone, bankName, bankAccount) 포함 반환
+- [ ] 포함 주문 목록 (id, buyerName, quantity, amount, status, source, createdAt, code.codeKey, product.name) 반환
+- [ ] PATCH: PENDING → COMPLETED 전환 (settledAt = now)
+- [ ] PATCH: 이미 COMPLETED면 400
 
 ---
 
-#### 48B: `/admin/orders/[id]` 페이지 신규 생성
+#### 49B: `/admin/settlements/[id]` 페이지 신규 생성
 
-**파일 신규 생성:** `app/admin/orders/[id]/page.tsx`
+**파일 신규 생성:** `app/admin/settlements/[id]/page.tsx`
 
-**레이아웃 (4섹션):**
+**레이아웃 (3카드 + 1테이블):**
 ```
-┌─────────────────────────────────────────────────────┐
-│ ← 주문 목록  |  주문 #XXXXXXXX  [상태배지]  [환불버튼] │
-├─────────────────┬───────────────────────────────────┤
-│ 주문 정보        │ 구매자 / 배송지                     │
-│ 상품명           │ 구매자명                            │
-│ 코드키           │ 연락처                              │
-│ 수량             │ 주소 / 상세주소                     │
-│ 결제금액         │ 메모 (있을 때만)                    │
-│ 결제일시         │                                    │
-│ PG 거래ID        │                                    │
-│ 채널 (web/kakao) │                                    │
-├─────────────────┼───────────────────────────────────┤
-│ 셀러 정보        │ 배송 정보 (trackingNo 있을 때만)    │
-│ 상호명 (링크)    │ 택배사                              │
-│ 이메일           │ 운송장번호                          │
-│ 연락처           │ 배송 추적 →                         │
-└─────────────────┴───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ ← 정산 목록  |  정산 #XXXXXXXX  [상태배지]  [완료처리버튼(PENDING시)]│
+├──────────────────────┬──────────────────────────────────────────┤
+│ 정산 요약             │ 셀러 정보                                  │
+│ 거래금액              │ 상호명 (셀러 상세 링크)                     │
+│ 플랫폼 수수료 (2.5%)  │ 사업자번호                                  │
+│ PG 수수료             │ 이메일                                      │
+│ 실지급액              │ 연락처                                      │
+│ 정산예정일            │ 정산 계좌 (은행명 + 계좌번호)               │
+│ 정산완료일 (있을 때)  │                                            │
+├──────────────────────┴──────────────────────────────────────────┤
+│ 포함 주문 목록 (N건)                                              │
+│ 주문번호 | 상품명 | 코드키 | 구매자 | 수량 | 금액 | 채널 | 주문일  │
+│ [행 클릭 → /admin/orders/[id]]                                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **구현 포인트:**
 1. `'use client'` + `useParams<{ id: string }>()`으로 ID 추출
-2. `useEffect`로 `GET /api/admin/orders/${id}` 호출
-3. 로딩 중: `로딩 중...` 텍스트, 에러 시 에러 메시지
-4. 환불 버튼:
-   - 조건: `['PAID', 'SHIPPING', 'DELIVERED'].includes(order.status)`
-   - 기존 `RefundDialog` 컴포넌트 재사용 (`@/components/admin/RefundDialog`)
-   - 환불 성공 후 `fetchOrder()` 재호출 → 상태 즉시 갱신
-5. 셀러 상호명: `<Link href={'/admin/sellers/' + seller.id}>` 로 셀러 상세 링크
-6. 배송 추적 URL: seller orders 상세 페이지와 동일한 `CARRIER_URLS` 매핑 사용
-7. 채널 배지: `source === 'kakao'` 이면 `<Badge variant="secondary">카카오</Badge>` 추가
-8. `AdminShell` 래핑 필수
-9. 카드 레이아웃: `grid grid-cols-1 md:grid-cols-2 gap-4`
-
-**CARRIER_URLS 매핑 (seller orders 상세와 동일):**
-```typescript
-const CARRIER_URLS: Record<string, string> = {
-  'CJ대한통운': 'https://trace.cjlogistics.com/next/tracking.html?wblNo={trackingNo}',
-  '로젠택배': 'https://www.logenpost.com/tracking/tracking.do?invoice={trackingNo}',
-  '한진택배': 'https://www.hanjin.co.kr/kor/CMS/DeliveryMgr/WaybillSch.do?mCode=MN038&schLang=KR&wblnumText2={trackingNo}',
-  '롯데택배': 'https://www.lotteglogis.com/mobile/reservation/tracking/linkView?InvNo={trackingNo}',
-  '우체국택배': 'https://service.epost.go.kr/trace.RetrieveEmsRigiTraceList.comm?sid1={trackingNo}',
-}
-```
+2. `useEffect`로 `GET /api/admin/settlements/${id}` 호출, 에러/로딩 상태 처리
+3. 정산 완료 처리 버튼:
+   - 조건: `settlement.status === 'PENDING'`
+   - 클릭 시 `PATCH /api/admin/settlements/${id}` 호출
+   - 성공 후 `fetchSettlement()` 재호출 → 상태 즉시 갱신
+   - 버튼 텍스트: "정산 완료 처리"
+4. 셀러 상호명: `<Link href={'/admin/sellers/' + seller.id}>` 링크
+5. 정산 계좌: `bankName ? ${bankName} ${bankAccount} : '미등록'`
+6. 포함 주문 테이블 행 클릭: `router.push('/admin/orders/' + order.id)`
+7. 상태 배지 매핑:
+   ```typescript
+   const STATUS_BADGE = {
+     PENDING: { label: '대기중', variant: 'secondary' },
+     COMPLETED: { label: '완료', variant: 'default' },
+     FAILED: { label: '실패', variant: 'destructive' },
+   }
+   ```
+8. 채널 배지: `source === 'kakao'` → `<Badge variant="secondary">카카오</Badge>`
+9. `AdminShell` 래핑 필수
+10. 카드 레이아웃: `grid grid-cols-1 md:grid-cols-2 gap-4`
 
 **완료 조건:**
-- [ ] 주문 정보 전체 표시 (상품명, 코드, 수량, 금액, 결제일시, PG TID, 채널)
-- [ ] 구매자/배송지 정보 전체 표시
-- [ ] 셀러 정보 표시 + 셀러 상세 링크 동작
-- [ ] 배송 정보 표시 (trackingNo 있을 때만)
-- [ ] 환불 버튼 → RefundDialog 정상 동작 + 환불 후 상태 즉시 갱신
-- [ ] `AdminShell` 래핑
+- [ ] 정산 요약 전체 표시 (거래금액, 수수료, PG수수료, 실지급액, 예정일, 완료일)
+- [ ] 셀러 정보 표시 (상호명 링크 포함, 정산 계좌)
+- [ ] 포함 주문 목록 테이블 + 행 클릭 → `/admin/orders/[id]`
+- [ ] PENDING 상태에서만 "정산 완료 처리" 버튼 표시
+- [ ] 완료 처리 후 상태 즉시 갱신 (재조회)
+- [ ] `AdminShell` 래핑 적용
 
 ---
 
-#### 48C: `/admin/orders` 목록 행 클릭 연결
+#### 49C: `/admin/settlements` 목록 행 클릭 연결
 
-**수정 파일:** `app/admin/orders/page.tsx`
+**수정 파일:** `app/admin/settlements/page.tsx`
 
 **변경 내용:**
 1. `import { useRouter } from 'next/navigation'` 추가
 2. 컴포넌트 내 `const router = useRouter()` 추가
-3. `TableRow`에 클릭 핸들러 추가 + 환불 버튼 클릭 시 행 이동 방지:
+3. `TableRow`에 클릭 핸들러 + 커서 스타일 추가:
 
 ```tsx
 <TableRow
-  key={order.id}
+  key={s.id}
   className="cursor-pointer hover:bg-muted/50"
-  onClick={() => router.push(`/admin/orders/${order.id}`)}
+  onClick={() => router.push(`/admin/settlements/${s.id}`)}
 >
-  {/* ... */}
-  <TableCell onClick={(e) => e.stopPropagation()}>
-    {canRefund && (
-      <Button
-        variant="outline"
-        size="sm"
-        className="text-red-600 border-red-300 hover:bg-red-50"
-        onClick={() => setRefundTarget({ ... })}
-      >
-        환불
-      </Button>
-    )}
-  </TableCell>
+  {/* 기존 컬럼들 */}
 </TableRow>
 ```
 
-> ⚠️ 핵심: 환불 버튼이 있는 `TableCell`에 `onClick={(e) => e.stopPropagation()}` 추가 필수.
-> 환불 버튼 클릭 시 상세 페이지로 이동하면 안 됨.
+4. "정산 배치 실행" `Button`의 `onClick`이 있으므로 행 클릭과 충돌 없음 (버튼은 TableRow 밖)
 
 **완료 조건:**
-- [ ] 주문 행 클릭 시 `/admin/orders/[id]`로 이동
-- [ ] 환불 버튼 클릭 시 RefundDialog만 열리고 페이지 이동 없음
+- [ ] 정산 행 클릭 시 `/admin/settlements/[id]`로 이동
 - [ ] 마우스 커서가 pointer로 변경
 
 ---
 
-## 남은 작업 (Task 48 이후)
+## Task 50 예고 — 관리자 대시보드 개선
 
-| 우선순위 | 작업 | 비고 |
-|----------|------|------|
-| LOW | 택배사 API 실시간 배송 추적 | 외부 API 연동 필요 |
-| LOW | CS 티켓 관리 시스템 | Phase 3 이후 |
-| LOW | 구매자 주문 이력 (선택적 회원가입) | Phase 4 |
-| - | Vercel 배포 | 환경변수 설정만 필요 |
+현재 관리자 대시보드는 숫자 통계 카드 4개만 존재. 셀러 대시보드처럼 매출 추이 차트 + 빠른 링크 추가 예정.
+
+### 구현 예정 내용
+
+1. **일별 매출 차트 (7일)** — `recharts` LineChart, `GET /api/admin/dashboard`에 `dailySales` 추가
+2. **승인 대기 셀러 목록** — 최근 5건, 클릭 → `/admin/sellers/[id]`
+3. **최근 주문 목록** — 최근 5건, 클릭 → `/admin/orders/[id]`
+4. **통계 카드 개선** — 오늘 매출 / 이번 달 매출 분리
 
 ---
 
-## 현재 파일 구조
-
-```
-app/
-├── (buyer)/          # 구매자 플로우
-├── admin/
-│   ├── sellers/
-│   │   ├── page.tsx         ✅ (47D 완료 — 행 클릭 연결)
-│   │   └── [id]/page.tsx    ✅ (Task 47 완료)
-│   ├── orders/
-│   │   ├── page.tsx         ✅ → 48C 행 클릭 추가 예정
-│   │   └── [id]/page.tsx    ⬜ (Task 48B 신규)
-│   └── settlements/page.tsx ✅
-├── seller/
-│   ├── dashboard/page.tsx   ✅
-│   ├── orders/
-│   │   ├── page.tsx         ✅ (검색+자동갱신+상태필터)
-│   │   └── [id]/page.tsx    ✅ (Task 46)
-│   ├── settings/page.tsx    ✅ (Task 45)
-│   └── ...
-└── api/
-    ├── admin/
-    │   ├── sellers/[id]/route.ts                ✅ (GET+PATCH)
-    │   ├── sellers/[id]/orders/route.ts         ✅ (Task 47B)
-    │   ├── orders/route.ts                      ✅
-    │   ├── orders/[id]/route.ts                 ⬜ (Task 48A 신규)
-    │   └── orders/[id]/refund/route.ts          ✅
-    └── seller/orders/[id]/route.ts              ✅ (Task 46)
-```
+*최종 업데이트: 2026-04-09 (Planner)*

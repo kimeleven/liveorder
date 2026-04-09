@@ -1,5 +1,5 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v2.7
+## Claude Code 개발 기획서 v2.8
 > 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-09 | v2.8 | Task 47+48 완료 (관리자 셀러 상세 `/admin/sellers/[id]`, 관리자 주문 상세 `/admin/orders/[id]`). Task 49 스펙 수립: 관리자 정산 상세 페이지 `/admin/settlements/[id]`, `GET /api/admin/settlements/[id]` (정산 요약 + 셀러 정보 + 포함 주문 목록), `PATCH /api/admin/settlements/[id]` (PENDING→COMPLETED 수동 완료 처리), 정산 목록 행 클릭 연결. |
 | 2026-04-09 | v2.7 | Task 46 완료 (셀러 주문 상세 페이지 `/seller/orders/[id]`, `GET /api/seller/orders/[id]`, 주문 검색 `?q=`). Task 47 스펙 수립: 관리자 셀러 상세 페이지 `/admin/sellers/[id]`, `GET /api/admin/sellers/[id]` (기본정보+통계), `GET /api/admin/sellers/[id]/orders` (주문목록), 셀러 목록 행 클릭 연결. |
 | 2026-04-09 | v2.6 | Task 45 완료 (셀러 설정 페이지, GET/PATCH /api/seller/me, 비밀번호 변경 API, 이용약관 동의 체크박스). Task 46 스펙 수립: 셀러 주문 상세 페이지 `/seller/orders/[id]`, 주문 상세 API, 주문 검색 (구매자명/전화번호). |
 | 2026-04-09 | v2.5 | Task 44 완료 (셀러 주문 30초 자동갱신, PAID 배지, 주별/월별 차트). Task 45 스펙 수립: 셀러 설정 페이지 `/seller/settings` (404 해소), PATCH/비밀번호 변경 API, 이용약관 동의 체크박스. |
@@ -662,10 +663,13 @@ async function validateCode(codeKey: string): Promise<ValidationResult> {
 | GET | /api/admin/sellers | 셀러 목록 | ✅ |
 | GET | /api/admin/sellers/[id] | 셀러 상세 (기본정보 + 통계) | ⬜ (Task 47A) |
 | PUT | /api/admin/sellers/[id] | 셀러 상태 변경 (승인/거부/정지) | ✅ |
-| GET | /api/admin/sellers/[id]/orders | 셀러의 주문 목록 (페이지네이션) | ⬜ (Task 47B) |
+| GET | /api/admin/sellers/[id]/orders | 셀러의 주문 목록 (페이지네이션) | ✅ |
 | GET | /api/admin/orders | 주문 목록 | ✅ |
+| GET | /api/admin/orders/[id] | 주문 상세 (구매자/배송지/셀러 정보) | ✅ |
 | POST | /api/admin/orders/[id]/refund | 환불 처리 | ✅ |
 | GET | /api/admin/settlements | 정산 목록 | ✅ |
+| GET | /api/admin/settlements/[id] | 정산 상세 (셀러 계좌 + 포함 주문 목록) | 🔧 Task 49 |
+| PATCH | /api/admin/settlements/[id] | 정산 완료 처리 (PENDING→COMPLETED) | 🔧 Task 49 |
 
 ### 10.4 시스템 API
 
