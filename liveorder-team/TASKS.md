@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-10 (Task 62 완료 확인 + Task 63 스펙 수립: 셀러 이용약관 전자서명 동의 완성)_
+_최종 업데이트: 2026-04-10 (Task 63 완료 확인 + Task 64 스펙 수립: 이상 거래 모니터링 시스템)_
 
 ---
 
@@ -48,6 +48,233 @@ _최종 업데이트: 2026-04-10 (Task 62 완료 확인 + Task 63 스펙 수립:
 ---
 
 ## Dev1 현재 작업
+
+### 🔧 Task 64: 이상 거래 모니터링 시스템
+
+**목표:** 결제 시 구매자 IP를 주문에 기록하고, 코드 검증 API에 IP 기반 rate limiting을 추가하며, 관리자가 의심 주문 패턴(동일 IP 다수 주문, 단시간 고액거래)을 한눈에 볼 수 있는 모니터링 페이지를 구축한다.
+
+**배경:**
+- 기획서 3.3절 "이상 거래 모니터링" 명시 — 동일 IP 다수 주문, 단시간 고액거래 감지
+- QA_REPORT 권고사항: 코드 검증 API에 IP rate limiting 추가 검토
+- 현재 Order 모델에 구매자 IP 필드 없음. 이상 패턴 감지 불가
+- 라이브 방송 특성상 단시간 대량 주문 → 봇/어뷰징 취약
+
+---
+
+#### 64A: Prisma 스키마 변경 + Migration
+
+**수정 파일:** `prisma/schema.prisma`
+
+`Order` 모델에 `buyerIp` 추가:
+
+```prisma
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  codeId        String      @map("code_id") @db.Uuid
+  settlementId  String?     @map("settlement_id") @db.Uuid
+  buyerName     String      @map("buyer_name") @db.VarChar(50)
+  buyerPhone    String      @map("buyer_phone") @db.VarChar(20)
+  address       String
+  addressDetail String?     @map("address_detail")
+  memo          String?
+  quantity      Int         @default(1)
+  amount        Int
+  status        OrderStatus @default(PAID)
+  source        String      @default("web") @map("source") @db.VarChar(10)
+  pgTid         String?     @unique @map("pg_tid") @db.VarChar(100)
+  trackingNo    String?     @map("tracking_no") @db.VarChar(50)
+  carrier       String?     @db.VarChar(30)
+  buyerIp       String?     @map("buyer_ip") @db.VarChar(45)  // ← 추가
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  ...
+}
+```
+
+Migration 실행:
+```bash
+npx prisma migrate dev --name add_buyer_ip_to_orders
+```
+
+**완료 조건:**
+- [ ] `prisma/schema.prisma`에 `buyerIp String? @map("buyer_ip") @db.VarChar(45)` 추가됨
+- [ ] migration 파일 생성 완료
+- [ ] `npx prisma generate` 실행 완료
+
+---
+
+#### 64B: 결제 확인 API — IP 저장
+
+**수정 파일:** `app/api/payments/confirm/route.ts`
+
+결제 완료 시 구매자 IP를 Order에 저장:
+
+```typescript
+export async function POST(req: NextRequest) {
+  // IP 추출 (Vercel: x-forwarded-for 헤더 사용)
+  const buyerIp =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    null;
+
+  // ... 기존 코드 유지 ...
+
+  // prisma order create 시 buyerIp 추가
+  await prisma.$transaction(async (tx) => {
+    // ... 기존 트랜잭션 로직 유지 ...
+    await tx.order.create({
+      data: {
+        // ... 기존 필드 유지 ...
+        buyerIp,  // ← 추가
+      },
+    })
+  })
+}
+```
+
+**완료 조건:**
+- [ ] `x-forwarded-for` 헤더에서 첫 번째 IP 추출
+- [ ] `prisma.order.create` 의 `data` 에 `buyerIp` 포함
+- [ ] 빌드 오류 없음
+
+---
+
+#### 64C: 코드 검증 API — IP rate limiting
+
+**수정 파일:** `app/api/codes/[code]/route.ts`
+
+동일 IP에서 1분 내 10회 이상 코드 검증 시 429 응답:
+
+```typescript
+// 파일 상단 (모듈 수준, 서버리스 warm instance 내 유지)
+const codeCheckRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+// GET 핸들러 내 최상단 (params 파싱 직후)
+const clientIp =
+  req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+  req.headers.get("x-real-ip") ||
+  "unknown";
+
+const now = Date.now();
+const windowMs = 60_000; // 1분
+const maxAttempts = 10;
+
+const rl = codeCheckRateLimit.get(clientIp) ?? { count: 0, resetAt: now + windowMs };
+if (now > rl.resetAt) {
+  rl.count = 0;
+  rl.resetAt = now + windowMs;
+}
+rl.count++;
+codeCheckRateLimit.set(clientIp, rl);
+
+if (rl.count > maxAttempts) {
+  return NextResponse.json(
+    { valid: false, reason: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." },
+    { status: 429 }
+  );
+}
+```
+
+**완료 조건:**
+- [ ] 1분 / 10회 초과 시 HTTP 429 반환
+- [ ] 정상 요청은 기존 로직 그대로 동작
+
+---
+
+#### 64D: 관리자 이상 거래 모니터링 페이지
+
+**신규 파일:** `app/api/admin/fraud/route.ts`
+**신규 파일:** `app/admin/fraud/page.tsx`
+**수정 파일:** `app/admin/layout.tsx` (사이드바 메뉴 추가)
+
+**API: `GET /api/admin/fraud`**
+
+두 가지 이상 패턴을 반환:
+
+```typescript
+// Pattern A: 동일 IP에서 1시간 내 5건 이상 주문
+// (buyerIp IS NOT NULL 조건으로 IP 있는 주문만 집계)
+const suspiciousIps = await prisma.$queryRaw<...>`
+  SELECT buyer_ip, COUNT(*)::int AS order_count,
+         MIN(created_at) AS first_at, MAX(created_at) AS last_at,
+         array_agg(id) AS order_ids
+  FROM orders
+  WHERE buyer_ip IS NOT NULL
+    AND created_at >= NOW() - INTERVAL '1 hour'
+  GROUP BY buyer_ip
+  HAVING COUNT(*) >= 5
+  ORDER BY order_count DESC
+  LIMIT 50
+`;
+
+// Pattern B: 동일 전화번호에서 30분 내 3건 이상 + 합계 금액 300,000원 이상
+const suspiciousPhones = await prisma.$queryRaw<...>`
+  SELECT buyer_phone, COUNT(*)::int AS order_count,
+         SUM(amount)::int AS total_amount,
+         MIN(created_at) AS first_at, MAX(created_at) AS last_at,
+         array_agg(id) AS order_ids
+  FROM orders
+  WHERE created_at >= NOW() - INTERVAL '30 minutes'
+  GROUP BY buyer_phone
+  HAVING COUNT(*) >= 3 AND SUM(amount) >= 300000
+  ORDER BY total_amount DESC
+  LIMIT 50
+`;
+
+return NextResponse.json({ suspiciousIps, suspiciousPhones });
+```
+
+인증: `lib/auth.ts`의 admin 세션 체크 (기존 admin API 패턴 동일).
+
+**페이지 레이아웃: `/admin/fraud`**
+
+```
+/admin/fraud
+┌──────────────────────────────────────────────────────────┐
+│ 이상 거래 모니터링                        [새로고침]       │
+│                                                           │
+│ ⚠️ 동일 IP 다수 주문 (최근 1시간, 5건 이상)               │
+│ ┌─────────────────────────────────────────────────────┐  │
+│ │ IP            주문수  첫 주문     마지막 주문         │  │
+│ │ 1.2.3.4       8건    14:20:01  14:22:33  [주문 보기] │  │
+│ │ 5.6.7.8       6건    13:55:00  14:01:22  [주문 보기] │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│ ⚠️ 단시간 고액 주문 (최근 30분, 3건↑ + 30만원↑)          │
+│ ┌─────────────────────────────────────────────────────┐  │
+│ │ 전화번호        주문수  총 금액    [주문 보기]         │  │
+│ │ 010-****-1234  4건    580,000원  [주문 보기]          │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│ 의심 건 없으면: "현재 이상 거래 패턴이 감지되지 않았습니다."│
+└──────────────────────────────────────────────────────────┘
+```
+
+- "[주문 보기]" 버튼 클릭 → `/admin/orders?q={IP 또는 전화번호}` 로 이동 (기존 검색 활용)
+- 전화번호는 뒤 4자리만 노출 (`010-****-1234` 마스킹)
+- 페이지 자동 새로고침 없음 — 수동 [새로고침] 버튼만
+- 사이드바에 🚨 아이콘으로 "이상 거래" 메뉴 추가
+
+**사이드바 메뉴 추가: `app/admin/layout.tsx`**
+
+```typescript
+// 기존 settlements 메뉴 뒤에 추가
+{ href: '/admin/fraud', label: '🚨 이상 거래', icon: ShieldAlert }
+```
+
+**완료 조건:**
+- [ ] `GET /api/admin/fraud` — 두 패턴 쿼리 정상 반환 (admin 세션 인증 필수)
+- [ ] `/admin/fraud` 페이지 — 두 섹션 렌더링 + 빈 상태 메시지
+- [ ] "[주문 보기]" 클릭 → 올바른 admin/orders 검색 URL로 이동
+- [ ] 사이드바에 "이상 거래" 메뉴 추가됨
+
+---
+
+**전체 완료 조건 요약:**
+1. `buyerIp` DB 컬럼 추가 + 결제 시 IP 저장
+2. 코드 검증 1분/10회 rate limiting
+3. 관리자 이상 거래 모니터링 페이지 동작
+
+---
 
 ### ✅ Task 63: 셀러 이용약관 전자서명 동의 완성 (완료 — Dev1, commit 382643d)
 

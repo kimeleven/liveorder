@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-10 (Task 62 완료 확인, Task 63 스펙 수립: 셀러 이용약관 전자서명 동의 완성)_
+_최종 업데이트: 2026-04-10 (Task 63 완료 확인, Task 64 스펙 수립: 이상 거래 모니터링 시스템)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-10 (Task 62 완료 확인, Task 63 스펙 수립: 
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 63 진행) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 64 진행) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -56,6 +56,99 @@ _최종 업데이트: 2026-04-10 (Task 62 완료 확인, Task 63 스펙 수립: 
 | 60 | 관리자 정산 페이지 개선 — `GET /api/admin/settlements` 페이지네이션 + 날짜/상태/셀러 필터 + CSV 내보내기 + UI |
 | 61 | 관리자 셀러 목록 고도화 — `GET /api/admin/sellers` 서버사이드 페이지네이션 + 검색(이름/이메일/사업자번호) + `GET /api/admin/sellers/export` CSV 내보내기 |
 | 62 | 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기 — `GET /api/admin/orders` `?q=`, `?from=`, `?to=` + `GET /api/admin/orders/export` + UI |
+| 63 | 셀러 이용약관 전자서명 동의 완성 — `Seller.termsAgreedAt` DB 추가 + 회원가입 API 저장 + `/seller-terms` 판매자 약관 페이지 + 관리자 셀러 상세 약관 동의 날짜 표시 |
+
+---
+
+## Task 64 — 이상 거래 모니터링 시스템
+
+### 배경
+
+기획서 3.3절 "이상 거래 모니터링"에 명시된 보안 기능. 라이브 방송 특성상 단시간에 대량 주문이 몰리며 봇/어뷰징에 취약하다. 현재 세 가지 공백:
+
+1. **IP 미기록**: Order 모델에 `buyerIp` 필드 없음. 동일 IP 다수 주문 감지 불가.
+2. **코드 검증 무제한**: `GET /api/codes/[code]` 에 rate limiting 없음. 봇이 무한 코드 스캐닝 가능.
+3. **모니터링 UI 없음**: 관리자가 의심 주문 패턴을 실시간으로 확인할 방법 없음. QA_REPORT 권고사항이기도 함.
+
+### 목표
+
+- `Order` DB에 구매자 IP 저장 (Prisma migration)
+- 결제 확인 API에서 IP 추출 + 저장
+- 코드 검증 API에 IP 기반 1분/10회 rate limiting
+- 관리자 `/admin/fraud` 이상 거래 모니터링 페이지
+
+### 구현 파일
+
+| 서브태스크 | 파일 | 작업 |
+|-----------|------|------|
+| 64A | `prisma/schema.prisma` + migration | `Order`에 `buyerIp String?` 추가 |
+| 64B | `app/api/payments/confirm/route.ts` | 결제 시 `x-forwarded-for` → `buyerIp` 저장 |
+| 64C | `app/api/codes/[code]/route.ts` | 모듈 수준 in-memory Map으로 IP rate limiting |
+| 64D | `app/api/admin/fraud/route.ts` | 신규: 동일IP 5건↑ + 동일전화 고액 3건↑ 집계 |
+| 64D | `app/admin/fraud/page.tsx` | 신규: 이상 거래 모니터링 페이지 |
+| 64D | `app/admin/layout.tsx` | 사이드바에 "🚨 이상 거래" 메뉴 추가 |
+
+### 레이아웃
+
+#### `/admin/fraud`
+```
+┌──────────────────────────────────────────────────────────┐
+│ 이상 거래 모니터링                        [새로고침]       │
+│                                                           │
+│ ⚠️ 동일 IP 다수 주문 (최근 1시간, 5건 이상)               │
+│ ┌─────────────────────────────────────────────────────┐  │
+│ │ IP            주문수  첫 주문     마지막 주문         │  │
+│ │ 1.2.3.4       8건    14:20:01  14:22:33  [주문 보기] │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│ ⚠️ 단시간 고액 주문 (최근 30분, 3건↑ + 합계 30만원↑)     │
+│ ┌─────────────────────────────────────────────────────┐  │
+│ │ 전화번호        주문수  총 금액    [주문 보기]         │  │
+│ │ 010-****-1234  4건    580,000원  [주문 보기]          │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│ 의심 건 없으면: "현재 이상 거래 패턴이 감지되지 않았습니다."│
+└──────────────────────────────────────────────────────────┘
+```
+
+### API 명세
+
+**`GET /api/admin/fraud`** — admin 세션 필수
+
+응답:
+```json
+{
+  "suspiciousIps": [
+    {
+      "buyerIp": "1.2.3.4",
+      "orderCount": 8,
+      "firstAt": "2026-04-10T14:20:01Z",
+      "lastAt": "2026-04-10T14:22:33Z",
+      "orderIds": ["uuid1", "uuid2", ...]
+    }
+  ],
+  "suspiciousPhones": [
+    {
+      "buyerPhone": "010-1234-5678",
+      "orderCount": 4,
+      "totalAmount": 580000,
+      "firstAt": "...",
+      "lastAt": "...",
+      "orderIds": [...]
+    }
+  ]
+}
+```
+
+### 주의사항
+
+- 64A migration: `nullable`이므로 기존 주문 데이터 영향 없음 (기존 주문은 `buyerIp = null`)
+- 64B: Vercel 환경에서 실제 IP는 `x-forwarded-for` 첫 번째 값. `req.ip`는 Vercel Edge Runtime에서만 동작
+- 64C: in-memory Map은 Vercel cold start 시 초기화됨 → MVP 수준 보호 (Redis 없이). 데이터-삭제 API 동일 패턴
+- 64D: `buyerIp`가 null인 기존 주문은 동일 IP 집계에서 제외됨 (`WHERE buyer_ip IS NOT NULL`)
+- 64D: `$queryRaw` 결과 BigInt → number 변환 필요 (`COUNT(*)::int` 캐스팅으로 해결)
+- 64D: 전화번호 마스킹은 프론트에서 처리 (`phone.replace(/(\d{3})-\d{4}-(\d{4})/, '$1-****-$2')`)
+- "[주문 보기]" 링크: IP 패턴은 `/admin/orders?q={ip}`, 전화번호는 `/admin/orders?q={phone}`
 
 ---
 
