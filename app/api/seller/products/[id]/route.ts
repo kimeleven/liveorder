@@ -18,12 +18,43 @@ export async function GET(
   }
 
   const { id } = await params;
-  const product = await getSellerProduct(session.user.id, id);
+  const product = await prisma.product.findFirst({
+    where: { id, sellerId: session.user.id },
+    include: {
+      codes: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          codeKey: true,
+          isActive: true,
+          expiresAt: true,
+          maxQty: true,
+          usedQty: true,
+          createdAt: true,
+          _count: { select: { orders: true } },
+        },
+      },
+    },
+  });
+
   if (!product) {
     return NextResponse.json({ error: "상품을 찾을 수 없습니다." }, { status: 404 });
   }
 
-  return NextResponse.json(product);
+  const statsAgg = await prisma.order.aggregate({
+    where: { code: { productId: id }, status: { not: "REFUNDED" } },
+    _sum: { amount: true },
+    _count: { id: true },
+  });
+
+  return NextResponse.json({
+    ...product,
+    stats: {
+      totalOrders: statsAgg._count.id,
+      totalRevenue: statsAgg._sum.amount ?? 0,
+      activeCodeCount: product.codes.filter((c) => c.isActive).length,
+    },
+  });
 }
 
 export async function PUT(

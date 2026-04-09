@@ -96,7 +96,11 @@ export default function ProductsPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {products.map((product) => (
-              <Card key={product.id} className="hover:shadow-md transition-shadow">
+              <Card
+                key={product.id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => router.push(`/seller/products/${product.id}`)}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{product.name}</CardTitle>
@@ -120,7 +124,7 @@ export default function ProductsPage() {
                       size="sm"
                       variant="outline"
                       className="flex-1"
-                      onClick={() => router.push(`/seller/products/${product.id}/edit`)}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/seller/products/${product.id}/edit`); }}
                     >
                       <Pencil className="mr-1 h-3 w-3" />
                       수정
@@ -129,7 +133,7 @@ export default function ProductsPage() {
                       size="sm"
                       variant="outline"
                       className="flex-1 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteTarget(product)}
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(product); }}
                     >
                       <Trash2 className="mr-1 h-3 w-3" />
                       삭제
