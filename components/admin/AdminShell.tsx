@@ -10,6 +10,7 @@ import {
   Users,
   Wallet,
   ShoppingCart,
+  Package,
   LogOut,
   Menu,
   X,
@@ -19,6 +20,7 @@ import { useState } from "react";
 const navItems = [
   { href: "/admin/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/admin/sellers", label: "셀러 관리", icon: Users },
+  { href: "/admin/products", label: "상품 관리", icon: Package },
   { href: "/admin/orders", label: "주문 관리", icon: ShoppingCart },
   { href: "/admin/settlements", label: "정산 관리", icon: Wallet },
 ];
