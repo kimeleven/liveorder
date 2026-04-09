@@ -12,6 +12,8 @@ export default function SellerRegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [sellerTermsAgreed, setSellerTermsAgreed] = useState(false);
   const [bizRegImageUrl, setBizRegImageUrl] = useState<string>("");
   const [bizRegUploading, setBizRegUploading] = useState(false);
   const [bizRegFileName, setBizRegFileName] = useState<string>("");
@@ -214,9 +216,41 @@ export default function SellerRegisterPage() {
               </div>
             </div>
 
+            <div className="rounded-md border p-4 space-y-2 bg-muted/40">
+              <p className="text-sm font-medium text-foreground">이용 약관 동의</p>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termsAgreed}
+                  onChange={(e) => setTermsAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span className="text-sm">
+                  <a href="/terms" target="_blank" className="underline text-primary">이용약관</a>에 동의합니다{" "}
+                  <span className="text-destructive">(필수)</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sellerTermsAgreed}
+                  onChange={(e) => setSellerTermsAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span className="text-sm">
+                  <a href="/seller-terms" target="_blank" className="underline text-primary">판매자 이용약관</a>에 동의합니다{" "}
+                  <span className="text-destructive">(필수)</span>
+                </span>
+              </label>
+            </div>
+
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || !termsAgreed || !sellerTermsAgreed}
+            >
               {loading ? "등록 중..." : "셀러 등록 신청"}
             </Button>
           </form>
