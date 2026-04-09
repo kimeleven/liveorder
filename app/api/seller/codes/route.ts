@@ -12,7 +12,29 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const { page, limit, skip } = parsePagination(searchParams);
-  const where = { product: { sellerId: session.user.id } };
+
+  const status = searchParams.get('status') ?? 'all'
+  const q = searchParams.get('q')?.trim() ?? ''
+  const now = new Date()
+
+  const statusFilter =
+    status === 'active'   ? { isActive: true, expiresAt: { gt: now } } :
+    status === 'expired'  ? { expiresAt: { lte: now } } :
+    status === 'inactive' ? { isActive: false, expiresAt: { gt: now } } :
+    {}
+
+  const searchFilter = q ? {
+    OR: [
+      { codeKey: { contains: q, mode: 'insensitive' as const } },
+      { product: { name: { contains: q, mode: 'insensitive' as const } } },
+    ]
+  } : {}
+
+  const where = {
+    product: { sellerId: session.user.id },
+    ...statusFilter,
+    ...searchFilter,
+  };
 
   const [codes, total] = await prisma.$transaction([
     prisma.code.findMany({
