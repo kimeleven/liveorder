@@ -265,7 +265,7 @@ export default function SellerDashboardPage() {
                     tick={{ fontSize: 11 }}
                   />
                   <Tooltip
-                    formatter={(v: number) => [`₩${v.toLocaleString()}`, '매출']}
+                    formatter={(v) => [`₩${Number(v ?? 0).toLocaleString()}`, '매출']}
                   />
                   <Line
                     type="monotone"

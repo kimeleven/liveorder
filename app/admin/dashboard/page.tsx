@@ -156,7 +156,7 @@ export default function AdminDashboardPage() {
                     tickFormatter={(v: number) => v >= 10000 ? `${(v / 10000).toFixed(0)}만` : `${v}`}
                     tick={{ fontSize: 11 }}
                   />
-                  <Tooltip formatter={(v: number) => [`₩${v.toLocaleString()}`, '매출']} />
+                  <Tooltip formatter={(v) => [`₩${Number(v ?? 0).toLocaleString()}`, '매출']} />
                   <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

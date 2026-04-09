@@ -6,7 +6,12 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const adapter = new PrismaNeonHTTP(process.env.DATABASE_URL!, {});
+  const dbUrl = process.env.DATABASE_URL ?? "";
+  // 로컬 PostgreSQL이면 어댑터 없이 직접 연결
+  if (dbUrl.startsWith("postgresql://") && (dbUrl.includes("localhost") || dbUrl.includes("127.0.0.1"))) {
+    return new PrismaClient();
+  }
+  const adapter = new PrismaNeonHTTP(dbUrl, {});
   return new PrismaClient({ adapter });
 }
 

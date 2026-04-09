@@ -68,8 +68,7 @@ export async function GET(req: NextRequest) {
         status: true,
         source: true,
         createdAt: true,
-        code: { select: { product: { select: { name: true } } } },
-        seller: { select: { name: true } },
+        code: { select: { product: { select: { name: true, seller: { select: { name: true } } } } } },
       },
     }),
     prisma.seller.findMany({

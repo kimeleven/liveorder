@@ -1,9 +1,16 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend() {
+  if (!_resend && process.env.RESEND_API_KEY) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) return; // 환경변수 없으면 무시
+  const resend = getResend();
+  if (!resend) return; // 환경변수 없으면 무시
   try {
     await resend.emails.send({
       from: 'LiveOrder <noreply@liveorder.app>',

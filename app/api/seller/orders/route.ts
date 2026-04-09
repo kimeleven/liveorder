@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { OrderStatus } from "@prisma/client";
 import { parsePagination, buildPaginationResponse } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
@@ -12,9 +13,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const { page, limit, skip } = parsePagination(searchParams);
   const statusParam = searchParams.get('status');
-  const validStatuses = ['PAID', 'SHIPPING', 'DELIVERED', 'REFUNDED', 'SETTLED'];
-  const statusFilter = statusParam && validStatuses.includes(statusParam)
-    ? { status: statusParam }
+  const statusFilter = statusParam && Object.values(OrderStatus).includes(statusParam as OrderStatus)
+    ? { status: statusParam as OrderStatus }
     : {};
   const q = searchParams.get('q')?.trim() || '';
   const where = {

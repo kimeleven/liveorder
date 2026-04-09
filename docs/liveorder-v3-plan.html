@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>LiveOrder v3 기획서</title>
+<style>
+  body { font-family: 'Apple SD Gothic Neo', -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; color: #1a1a1a; line-height: 1.7; }
+  h1 { font-size: 28px; border-bottom: 3px solid #2563eb; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { font-size: 20px; color: #2563eb; margin-top: 40px; border-left: 4px solid #2563eb; padding-left: 12px; }
+  h3 { font-size: 16px; color: #374151; margin-top: 24px; }
+  .meta { color: #6b7280; font-size: 13px; margin-bottom: 30px; }
+  .highlight { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  .warn { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  .flow { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 16px 0; font-family: monospace; font-size: 13px; white-space: pre-line; line-height: 1.8; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: #fff; }
+  .badge-blue { background: #2563eb; }
+  .badge-green { background: #16a34a; }
+  .badge-yellow { background: #ca8a04; color: #fff; }
+  .badge-red { background: #dc2626; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  .page-break { page-break-before: always; }
+  @media print { body { padding: 15px; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+
+<h1>LiveOrder v3 기획서</h1>
+<p class="meta">카카오톡 챗봇 기반 주문 시스템 | 작성: Eddy PM | 2026-04-09</p>
+
+<div class="highlight">
+<strong>핵심 컨셉:</strong> 고객이 카카오톡에서 채팅으로 상품을 주문하고, 봇이 주문 접수부터 배송 조회까지 관리하는 시스템.
+</div>
+
+<h2>1. 프로젝트 개요</h2>
+
+<table>
+<tr><th width="120">항목</th><th>내용</th></tr>
+<tr><td>프로젝트명</td><td>LiveOrder v3</td></tr>
+<tr><td>버전 히스토리</td><td>v1: 웹 기반 e-커머스 (종료) → v2: DROP → <strong>v3: 카카오톡 챗봇</strong></td></tr>
+<tr><td>핵심 기술</td><td>카카오 오픈빌더 + Node.js 스킬 서버 + Ollama/Gemma4 + PostgreSQL</td></tr>
+<tr><td>결제</td><td>PortOne (카카오페이 포함)</td></tr>
+<tr><td>호스팅</td><td>Coolify (자체 서버)</td></tr>
+</table>
+
+<h2>2. 이해관계자</h2>
+
+<table>
+<tr><th>역할</th><th>설명</th><th>할 일</th></tr>
+<tr><td><span class="badge badge-blue">플랫폼 (우리)</span></td><td>시스템 개발/운영</td><td>오픈빌더 봇 관리, 스킬 서버, DB, 인프라 전체</td></tr>
+<tr><td><span class="badge badge-green">판매자</span></td><td>상품 등록/주문 관리</td><td>관리자 페이지에서 상품 등록, 주문 확인, 배송 처리</td></tr>
+<tr><td><span class="badge badge-yellow">고객</span></td><td>상품 구매</td><td>카카오톡에서 채팅으로 주문</td></tr>
+</table>
+
+<h2>3. 시스템 아키텍처</h2>
+
+<div class="flow">
+고객 (카카오톡)
+    │ liveorder 채널 친구추가
+    ▼
+카카오 봇 엔진 (오픈빌더)
+    │ HTTP POST (스킬 요청)
+    ▼
+┌─────────────────────────────────────┐
+│        스킬 서버 (Node.js)          │
+│                                     │
+│  1. 즉시 응답 (useCallback: true)   │
+│  2. 비동기 처리:                    │
+│     ├─ 판매자/상품 DB 조회          │
+│     ├─ LLM 대화 처리 (Gemma4)      │
+│     └─ 주문/결제 관리               │
+│  3. callbackUrl로 최종 답변 전송    │
+└─────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  PostgreSQL     │  Ollama/Gemma4   │
+│  (판매자/상품/  │  (대화 AI)       │
+│   주문/배송)    │  localhost:11434  │
+└─────────────────────────────────────┘
+</div>
+
+<div class="warn">
+<strong>카카오 오픈빌더 제약:</strong> 봇은 자기 채널에만 연결 가능. 판매자 채널에 우리 봇을 넣을 수 없음.<br>
+→ <strong>우리 채널(liveorder) 1개</strong>에서 판매자를 선택하는 구조로 운영.
+</div>
+
+<h2>4. 고객 주문 플로우</h2>
+
+<table>
+<tr><th>단계</th><th>고객 행동</th><th>봇 응답</th><th>UI 타입</th></tr>
+<tr><td>1</td><td>liveorder 채널 친구추가</td><td>환영 메시지 + 안내</td><td>simpleText</td></tr>
+<tr><td>2</td><td>"주문하기" 입력</td><td>판매자 목록 표시</td><td>listCard</td></tr>
+<tr><td>3</td><td>판매자 선택</td><td>해당 판매자 상품 목록</td><td>carousel (commerceCard)</td></tr>
+<tr><td>4</td><td>상품 선택</td><td>옵션 선택 (사이즈/색상 등)</td><td>quickReplies</td></tr>
+<tr><td>5</td><td>옵션 확정</td><td>수량 확인</td><td>quickReplies</td></tr>
+<tr><td>6</td><td>수량 입력</td><td>배송지 입력 요청</td><td>simpleText</td></tr>
+<tr><td>7</td><td>배송지 입력 (대화)</td><td>주문 요약 + 결제 버튼</td><td>basicCard + webLink 버튼</td></tr>
+<tr><td>8</td><td>결제 버튼 클릭</td><td>외부 결제 페이지 (PortOne)</td><td>webLinkUrl</td></tr>
+<tr><td>9</td><td>결제 완료</td><td>주문 확인 알림톡</td><td>알림톡</td></tr>
+<tr><td>10</td><td>"배송 조회" 입력</td><td>택배 배송 상태</td><td>simpleText</td></tr>
+</table>
+
+<h2 class="page-break">5. 판매자 관리 기능</h2>
+
+<h3>5-1. 판매자 온보딩</h3>
+<ul>
+<li>관리자 페이지에서 판매자 등록 (사업자명, 연락처, 카테고리)</li>
+<li>상품 등록 (이름, 가격, 옵션, 이미지, 재고)</li>
+<li>판매자별 정산 정보 설정</li>
+</ul>
+
+<h3>5-2. 판매자 관리자 페이지</h3>
+<table>
+<tr><th>기능</th><th>설명</th></tr>
+<tr><td>상품 관리</td><td>상품 등록/수정/삭제, 옵션 관리, 재고 관리</td></tr>
+<tr><td>주문 관리</td><td>주문 목록 확인, 상태 변경 (접수→배송준비→배송중→완료)</td></tr>
+<tr><td>배송 관리</td><td>운송장 등록, 배송 상태 업데이트</td></tr>
+<tr><td>매출 현황</td><td>일별/월별 매출, 주문 통계</td></tr>
+</table>
+
+<h2>6. DB 스키마 (핵심 테이블)</h2>
+
+<table>
+<tr><th>테이블</th><th>주요 필드</th><th>설명</th></tr>
+<tr><td>sellers</td><td>id, name, biz_no, category, status</td><td>판매자 정보</td></tr>
+<tr><td>products</td><td>id, seller_id, name, price, image_url, status</td><td>상품</td></tr>
+<tr><td>product_options</td><td>id, product_id, name, values[], price_diff</td><td>상품 옵션 (사이즈/색상)</td></tr>
+<tr><td>orders</td><td>id, seller_id, customer_kakao_id, status, total</td><td>주문</td></tr>
+<tr><td>order_items</td><td>id, order_id, product_id, options, qty, price</td><td>주문 상품</td></tr>
+<tr><td>shipping</td><td>id, order_id, address, tracking_no, carrier, status</td><td>배송</td></tr>
+<tr><td>payments</td><td>id, order_id, amount, method, status, paid_at</td><td>결제</td></tr>
+<tr><td>chat_sessions</td><td>id, kakao_user_id, seller_id, state, context</td><td>대화 세션 (LLM 히스토리)</td></tr>
+</table>
+
+<h2>7. 기술 제약사항</h2>
+
+<table>
+<tr><th>항목</th><th>제약</th><th>대응</th></tr>
+<tr><td>스킬 응답</td><td><span class="badge badge-red">5초</span> 타임아웃</td><td><code>useCallback: true</code>로 즉시 반환</td></tr>
+<tr><td>콜백 유효</td><td><span class="badge badge-yellow">60초</span></td><td>Gemma4 프롬프트 최적화, 문서 청크 분할</td></tr>
+<tr><td>메시지 길이</td><td>1000자</td><td>긴 응답은 분할 전송</td></tr>
+<tr><td>카카오톡 결제</td><td>내장 불가</td><td>webLink 버튼 → 외부 결제 페이지</td></tr>
+<tr><td>대화 히스토리</td><td>카카오 미관리</td><td>chat_sessions 테이블에 별도 저장</td></tr>
+<tr><td>봇 배포</td><td>채널 소유자만</td><td>우리 채널 1개에서 판매자 선택 구조</td></tr>
+</table>
+
+<h2>8. 개발 로드맵</h2>
+
+<table>
+<tr><th>Phase</th><th>내용</th><th>산출물</th></tr>
+<tr><td><span class="badge badge-blue">Phase 1</span></td><td>스킬 서버 기반 구축</td><td>Express 서버, POST /api/kakao/skill, 콜백 메커니즘, DB 스키마</td></tr>
+<tr><td><span class="badge badge-blue">Phase 2</span></td><td>판매자/상품 관리</td><td>판매자 CRUD, 상품 CRUD, 관리자 페이지</td></tr>
+<tr><td><span class="badge badge-blue">Phase 3</span></td><td>주문 플로우</td><td>대화형 주문 수집, 장바구니, 주문 생성</td></tr>
+<tr><td><span class="badge badge-green">Phase 4</span></td><td>결제 연동</td><td>PortOne 결제 페이지, 결제 확인, 알림톡</td></tr>
+<tr><td><span class="badge badge-green">Phase 5</span></td><td>LLM 대화 강화</td><td>Gemma4 자연어 주문, 상품 추천, FAQ 응답</td></tr>
+<tr><td><span class="badge badge-yellow">Phase 6</span></td><td>배송/운영</td><td>운송장 등록, 배송 조회, 매출 통계</td></tr>
+</table>
+
+<h2>9. 카카오 오픈빌더 설정</h2>
+
+<table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>봇 이름</td><td>liveorder</td></tr>
+<tr><td>봇 ID</td><td>69d6729b9fac321ddc6b5d64</td></tr>
+<tr><td>채널</td><td>미정 (개발 완료 후 연결)</td></tr>
+<tr><td>스킬 서버 URL</td><td>https://{coolify-domain}/api/kakao/skill</td></tr>
+<tr><td>콜백 사용</td><td>활성화 (useCallback: true)</td></tr>
+</table>
+
+<h2>10. 팀 구성</h2>
+
+<table>
+<tr><th>역할</th><th>담당</th><th>주기</th></tr>
+<tr><td>Planner</td><td>기획, 대화 흐름 설계, DB 스키마</td><td>1시간</td></tr>
+<tr><td>Dev1</td><td>스킬 서버, API, DB, 결제</td><td>1시간</td></tr>
+<tr><td>QA</td><td>변경분 코드 리뷰, API 테스트</td><td>1시간</td></tr>
+</table>
+
+<p style="text-align: center; color: #6b7280; margin-top: 40px; font-size: 12px;">
+LiveOrder v3 기획서 — Eddy PM | 2026-04-09
+</p>
+
+</body>
+</html>

@@ -265,7 +265,7 @@ export default function OrdersPage() {
             <Select
               value={statusFilter || 'ALL'}
               onValueChange={(v) => {
-                setStatusFilter(v === 'ALL' ? '' : v);
+                setStatusFilter(v === 'ALL' || !v ? '' : v);
                 setPage(1);
               }}
             >

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { OrderStatus } from '@prisma/client'
 
 export async function GET(
   req: NextRequest,
@@ -15,7 +16,10 @@ export async function GET(
   const { searchParams } = req.nextUrl
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
   const limit = 20
-  const status = searchParams.get('status') || undefined
+  const statusParam = searchParams.get('status') || undefined
+  const status = statusParam && Object.values(OrderStatus).includes(statusParam as OrderStatus)
+    ? (statusParam as OrderStatus)
+    : undefined
 
   const where = {
     code: { product: { sellerId: id } },
