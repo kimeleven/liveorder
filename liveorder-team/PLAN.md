@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 56 완료 확인, Task 57 스펙 수립: 셀러 코드 목록 상태 필터 + 검색)_
+_최종 업데이트: 2026-04-09 (Task 57 완료 확인, Task 58 스펙 수립: 셀러 코드 상세 QR 표시 + 코드별 주문 CSV 다운로드)_
 
 ---
 
@@ -50,6 +50,81 @@ _최종 업데이트: 2026-04-09 (Task 56 완료 확인, Task 57 스펙 수립: 
 | 54 | 셀러 상품 상세 페이지 `/seller/products/[id]` + `GET /api/seller/products/[id]` 확장 (코드목록+통계) + 상품 카드 클릭 연결 |
 | 55 | 셀러 코드 편집/삭제 — `PATCH /api/seller/codes/[id]` + `DELETE /api/seller/codes/[id]` + 편집 다이얼로그 + 삭제 버튼 |
 | 56 | 셀러 상품 활성/비활성 토글 — `POST /api/seller/products/[id]/toggle` + `?status` 필터 + 목록/상세 토글 버튼 |
+| 57 | 셀러 코드 목록 상태 필터 + 검색 — `GET /api/seller/codes` `?status` + `?q` 파라미터 + 필터 탭 + 검색창 |
+
+---
+
+## Task 58 — 셀러 코드 상세 QR 코드 + 코드별 주문 CSV 다운로드
+
+### 배경
+
+현재 셀러 코드 상세 페이지(`/seller/codes/[id]`)의 두 가지 기능 공백:
+
+1. **QR 코드 재조회 불가**: QR은 코드 생성 직후(`/seller/codes/new`)에만 표시됨. 이후 다시 QR이 필요하면 재조회 방법 없음. 라이브 방송 시작 직전 방송 화면에 QR을 띄우려면 상세 페이지에서 바로 저장할 수 있어야 함.
+2. **코드별 배송지 다운로드 불가**: 현재 `/api/seller/orders/export`는 셀러 전체 주문 일괄 다운로드만 지원. 방송 회차별(코드별)로 배송지 추출이 필요한 셀러는 전체 CSV에서 수동 필터링해야 하는 불편함.
+
+### 목표
+
+- 코드 상세 페이지에서 QR 코드 이미지를 표시하고 PNG로 다운로드
+- 해당 코드의 주문만 CSV로 다운로드하는 API + 버튼 추가
+
+### 레이아웃 변경
+
+```
+/seller/codes/[id]
+┌──────────────────────────────────────────────────────────┐
+│ 코드 정보 카드                                              │
+│   codeKey: K9A-2503-X7YZ                                 │
+│   상품: 제품명                                             │
+│   [QR 코드 이미지 256×256]  ← 신규                        │
+│   [⬇ QR 저장]              ← 신규                        │
+├──────────────────────────────────────────────────────────┤
+│ 주문 목록 (N건)  [⬇ 주문 다운로드]  ← 신규 버튼            │
+│ (기존 주문 테이블 그대로)                                    │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 서브태스크
+
+#### 58A: `/seller/codes/[id]` — QR 코드 섹션 추가
+
+**수정 파일:** `app/seller/codes/[id]/page.tsx`
+
+- `import QRCode from 'qrcode'` — 기존 `/seller/codes/new/page.tsx`에서 사용 중인 패키지
+- `import { Download } from 'lucide-react'` — 58C에서도 동일 사용
+- `useState<string>('')` 로 qrDataUrl 관리
+- `useEffect(() => { QRCode.toDataURL(orderUrl, { width: 256, margin: 2 }).then(setQrDataUrl) }, [data])`
+- orderUrl: `${window.location.origin}/order/${data.code.codeKey}`
+- 코드 정보 카드 내 codeKey 표시 아래에 QR 이미지 + "QR 저장" 링크 추가
+
+#### 58B: `GET /api/seller/codes/[id]/orders/export` 신규 API
+
+**신규 파일:** `app/api/seller/codes/[id]/orders/export/route.ts`
+
+- 소유 검증: code의 product.sellerId === session.user.id
+- 해당 codeId 주문만 조회 (take: 10000)
+- UTF-8 BOM + CSV 생성
+- 파일명: `orders_{codeKey}_{YYYY-MM-DD}.csv`
+- 컬럼: 주문ID, 주문일시, 수령인, 연락처, 주소, 상세주소, 배송메모, 수량, 금액, 상태, 운송장, 주문경로
+
+#### 58C: `/seller/codes/[id]` — "주문 다운로드" 버튼 추가
+
+**수정 파일:** `app/seller/codes/[id]/page.tsx`
+
+- 주문 테이블 CardTitle 옆에 "주문 다운로드" 버튼
+- `exporting` 상태로 로딩 스피너 처리
+- 주문 0건이면 disabled
+- 성공/실패 toast
+
+### 구현 순서
+
+58B (API 신규) → 58A (QR 추가) → 58C (다운로드 버튼)
+
+### 주의사항
+
+- `qrcode` 패키지 이미 설치돼 있음 (`/seller/codes/new/page.tsx`에서 사용 중)
+- `Download` 아이콘을 58A + 58C 양쪽에서 사용 — import 한 번만
+- 신규 API 경로: `app/api/seller/codes/[id]/orders/export/route.ts` (기존 `app/api/seller/codes/[id]/route.ts`와 충돌 없음)
 
 ---
 

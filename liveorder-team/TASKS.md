@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 56 완료 확인 + Task 57 스펙 수립: 셀러 코드 목록 상태 필터 + 검색)_
+_최종 업데이트: 2026-04-09 (Task 57 완료 확인 + Task 58 스펙 수립: 셀러 코드 상세 QR 코드 + 코드별 주문 CSV 다운로드)_
 
 ---
 
@@ -49,7 +49,209 @@ _최종 업데이트: 2026-04-09 (Task 56 완료 확인 + Task 57 스펙 수립:
 
 ## Dev1 현재 작업
 
-### Task 57: 셀러 코드 목록 상태 필터 + 검색
+### Task 58: 셀러 코드 상세 QR 코드 표시 + 코드별 주문 CSV 다운로드
+
+**목표:** 셀러가 `/seller/codes/[id]` 상세 페이지에서 QR 코드를 확인/다운로드하고, 해당 코드에 달린 주문만 CSV로 내려받을 수 있도록 한다.
+
+**배경:**
+- 현재 QR 코드는 코드 **생성 직후** 화면(`/seller/codes/new`)에서만 볼 수 있음 — 나중에 다시 조회 불가
+- 라이브 방송 시작 전 QR 이미지가 필요한 경우, 코드 상세 페이지에서 즉시 저장할 수 없음
+- 현재 CSV 내보내기(`/api/seller/orders/export`)는 셀러 전체 주문 다운로드만 지원 — 특정 코드(방송 회차)별 배송지 추출 불가
+
+---
+
+#### 58A: `/seller/codes/[id]` — QR 코드 섹션 추가
+
+**수정 파일:** `app/seller/codes/[id]/page.tsx`
+
+**import 추가:**
+```typescript
+import QRCode from 'qrcode'
+import { Download } from 'lucide-react'
+```
+
+**상태 추가:**
+```typescript
+const [qrDataUrl, setQrDataUrl] = useState('')
+```
+
+**QR 생성 (fetchData 완료 후 data가 세팅될 때 useEffect 추가):**
+```typescript
+useEffect(() => {
+  if (!data) return
+  const orderUrl = `${window.location.origin}/order/${data.code.codeKey}`
+  QRCode.toDataURL(orderUrl, { width: 256, margin: 2 }).then(setQrDataUrl)
+}, [data])
+```
+
+**코드 정보 카드 내 QR 섹션 추가 (기존 카드 내부, codeKey 표시 아래):**
+```tsx
+{qrDataUrl && (
+  <div className="flex flex-col items-center gap-2 pt-2">
+    <img src={qrDataUrl} alt="QR Code" className="w-32 h-32 rounded border" />
+    <a
+      href={qrDataUrl}
+      download={`qr-${data.code.codeKey}.png`}
+      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+    >
+      <Download className="h-3 w-3" />
+      QR 저장
+    </a>
+  </div>
+)}
+```
+
+**완료 조건:**
+- [ ] 코드 상세 페이지에 QR 코드 이미지가 표시됨 (256×256)
+- [ ] "QR 저장" 링크 클릭 시 `qr-{codeKey}.png` 파일로 다운로드
+- [ ] data가 null(로딩 중)일 때는 QR 표시 안 함 (깜빡임 없음)
+- [ ] `/order/{codeKey}` URL로 QR 생성 (기존 `/seller/codes/new` 패턴과 동일)
+
+---
+
+#### 58B: `GET /api/seller/codes/[id]/orders/export` — 코드별 주문 CSV 다운로드
+
+**신규 파일:** `app/api/seller/codes/[id]/orders/export/route.ts`
+
+```typescript
+import { NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session?.user?.id)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+
+  // 소유 검증
+  const code = await prisma.code.findFirst({
+    where: { id, product: { sellerId: session.user.id } },
+    select: { codeKey: true },
+  })
+  if (!code)
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const orders = await prisma.order.findMany({
+    where: { codeId: id },
+    orderBy: { createdAt: 'desc' },
+    take: 10000,
+  })
+
+  const header = '주문ID,주문일시,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n'
+  const rows = orders
+    .map((o) =>
+      [
+        o.id,
+        new Date(o.createdAt).toLocaleString('ko-KR'),
+        o.buyerName,
+        o.buyerPhone,
+        o.address,
+        o.addressDetail ?? '',
+        o.memo ?? '',
+        o.quantity,
+        o.amount,
+        o.status,
+        o.trackingNo ?? '',
+        o.source === 'kakao' ? '카카오' : '웹',
+      ]
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    .join('\n')
+
+  const bom = '\uFEFF'
+  const csv = bom + header + rows
+  const filename = `orders_${code.codeKey}_${new Date().toISOString().slice(0, 10)}.csv`
+
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+```
+
+**완료 조건:**
+- [ ] `GET /api/seller/codes/[id]/orders/export` — 해당 코드 소유 셀러만 접근 가능
+- [ ] 해당 codeId 주문만 포함 (다른 코드 주문 포함 안 됨)
+- [ ] 파일명: `orders_{codeKey}_{날짜}.csv` (예: `orders_K9A-2503-X7YZ_2026-04-09.csv`)
+- [ ] UTF-8 BOM 포함, 컬럼: 주문ID/주문일시/수령인/연락처/주소/상세주소/배송메모/수량/금액/상태/운송장/주문경로
+- [ ] 소유 검증 실패 시 404 반환
+
+---
+
+#### 58C: `/seller/codes/[id]` — "주문 다운로드" 버튼 추가
+
+**수정 파일:** `app/seller/codes/[id]/page.tsx`
+
+**상태 추가:**
+```typescript
+const [exporting, setExporting] = useState(false)
+```
+
+**다운로드 핸들러:**
+```typescript
+async function handleExport() {
+  setExporting(true)
+  try {
+    const res = await fetch(`/api/seller/codes/${id}/orders/export`)
+    if (!res.ok) throw new Error()
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `orders_${data?.code.codeKey ?? id}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('주문 내역을 다운로드했습니다.')
+  } catch {
+    toast.error('다운로드에 실패했습니다.')
+  } finally {
+    setExporting(false)
+  }
+}
+```
+
+**주문 테이블 헤더 옆에 버튼 추가:**
+```tsx
+<div className="flex items-center justify-between">
+  <CardTitle>주문 목록 ({data.stats.totalOrders}건)</CardTitle>
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={handleExport}
+    disabled={exporting || data.stats.totalOrders === 0}
+  >
+    {exporting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+    주문 다운로드
+  </Button>
+</div>
+```
+
+**완료 조건:**
+- [ ] "주문 다운로드" 버튼 — 주문 0건이면 disabled
+- [ ] 클릭 시 로딩 스피너 표시, 완료 시 CSV 파일 즉시 다운로드
+- [ ] 성공/실패 토스트 알림
+- [ ] `Download` 아이콘 — lucide-react import (58A에서 이미 추가됨)
+
+---
+
+**구현 순서:** 58B (API 신규) → 58A (QR 추가) → 58C (다운로드 버튼)
+
+**주의사항:**
+- `qrcode` 패키지는 `/seller/codes/new/page.tsx`에서 이미 사용 중 — `import QRCode from 'qrcode'` 그대로 사용 가능
+- `Download` 아이콘을 58A/58C에서 동시에 추가하므로 import 중복 금지
+- `/api/seller/codes/[id]/orders/export`는 `app/api/seller/codes/[id]/` 하위 신규 디렉터리 `orders/export/route.ts`로 생성
+
+---
+
+## ✅ Task 57: 셀러 코드 목록 상태 필터 + 검색 (2026-04-09 완료)
 
 **목표:** 상품 목록(`/seller/products`)과 동일한 패턴으로 코드 목록에도 상태 필터와 검색 기능 추가
 
@@ -92,13 +294,13 @@ const where = {
 ```
 
 **완료 조건:**
-- [ ] `?status=active` → isActive=true AND expiresAt > now 코드만
-- [ ] `?status=expired` → expiresAt <= now 코드만 (isActive 무관)
-- [ ] `?status=inactive` → isActive=false AND expiresAt > now 코드만
-- [ ] `?status=all` (또는 파라미터 없음) → 전체 코드
-- [ ] `?q=검색어` → codeKey 또는 product.name 포함 (대소문자 무시)
-- [ ] 기존 페이지네이션 (`parsePagination` + `buildPaginationResponse`) 동작 유지
-- [ ] `include: { product: { select: { name: true } } }` 유지
+- [x] `?status=active` → isActive=true AND expiresAt > now 코드만
+- [x] `?status=expired` → expiresAt <= now 코드만 (isActive 무관)
+- [x] `?status=inactive` → isActive=false AND expiresAt > now 코드만
+- [x] `?status=all` (또는 파라미터 없음) → 전체 코드
+- [x] `?q=검색어` → codeKey 또는 product.name 포함 (대소문자 무시)
+- [x] 기존 페이지네이션 (`parsePagination` + `buildPaginationResponse`) 동작 유지
+- [x] `include: { product: { select: { name: true } } }` 유지
 
 ---
 
@@ -190,12 +392,12 @@ import { Input } from '@/components/ui/input'
 ```
 
 **완료 조건:**
-- [ ] 검색창 — 코드키 또는 상품명으로 300ms 디바운스 후 검색 실행
-- [ ] 상태 필터 탭 4개 (활성/만료/중지/전체) — 기본값 '활성'
-- [ ] 탭/검색 변경 시 page=1로 리셋 + 목록 재조회
-- [ ] 빈 상태 메시지 (상태 필터/검색어에 맞는 메시지)
-- [ ] 기존 테이블 컬럼 (코드/상품/주문수/만료일/수량/상태/버튼) 유지
-- [ ] 기존 toggleCode, copyCode, kakaoMessage 기능 동작 유지
+- [x] 검색창 — 코드키 또는 상품명으로 300ms 디바운스 후 검색 실행
+- [x] 상태 필터 탭 4개 (활성/만료/중지/전체) — 기본값 '활성'
+- [x] 탭/검색 변경 시 page=1로 리셋 + 목록 재조회
+- [x] 빈 상태 메시지 (상태 필터/검색어에 맞는 메시지)
+- [x] 기존 테이블 컬럼 (코드/상품/주문수/만료일/수량/상태/버튼) 유지
+- [x] 기존 toggleCode, copyCode, kakaoMessage 기능 동작 유지
 
 ---
 

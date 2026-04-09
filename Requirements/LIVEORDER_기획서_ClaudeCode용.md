@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-10 | v3.4 | Task 57 완료 (셀러 코드 목록 상태 필터 + 검색). Task 58 스펙 수립: 셀러 코드 상세 페이지 QR 코드 표시/다운로드 + `GET /api/seller/codes/[id]/orders/export` 코드별 주문 CSV 다운로드. |
 | 2026-04-09 | v3.3 | Task 56 완료 (셀러 상품 활성/비활성 토글 + 목록 상태 필터). Task 57 스펙 수립: 셀러 코드 목록 상태 필터(`?status=active\|expired\|inactive\|all`) + 검색(`?q=`) 기능 추가. |
 | 2026-04-09 | v3.2 | Task 54+55 완료 (셀러 상품 상세 페이지, 셀러 코드 편집/삭제). Task 56 스펙 수립: 셀러 상품 활성/비활성 토글 (`POST /api/seller/products/[id]/toggle`) + 상품 목록 `?status` 필터 + 상품 목록/상세 토글 버튼 UI. |
 | 2026-04-09 | v3.1 | Task 53 완료 (셀러 코드 상세 페이지 `/seller/codes/[id]`). Task 54 스펙 수립: 셀러 상품 상세 페이지 `/seller/products/[id]` (상품정보+코드목록+주문통계) + `GET /api/seller/products/[id]` 확장 (codes+stats 포함) + 상품 목록 카드 클릭 연결. |
