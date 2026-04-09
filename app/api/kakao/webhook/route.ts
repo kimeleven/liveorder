@@ -88,8 +88,7 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err) {
-    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
-    console.error('[kakao-webhook] Error:', msg)
-    return simpleTextResponse(`[DEBUG] ${msg}`)
+    console.error('[kakao-webhook] Error:', err)
+    return simpleTextResponse('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
   }
 }
