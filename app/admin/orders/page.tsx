@@ -9,6 +9,8 @@ import Pagination from "@/components/ui/Pagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search, Download } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,6 +30,7 @@ import {
 interface OrderItem {
   id: string;
   buyerName: string;
+  buyerPhone: string;
   amount: number;
   status: string;
   createdAt: string;
@@ -64,6 +67,10 @@ export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [refundTarget, setRefundTarget] = useState<{
     id: string;
     amount: number;
@@ -71,11 +78,23 @@ export default function AdminOrdersPage() {
     productName: string;
   } | null>(null);
 
+  // 검색 디바운스 (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const fetchOrders = useCallback(async () => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page) });
       if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (search) params.set("q", search);
+      if (fromDate) params.set("from", fromDate);
+      if (toDate) params.set("to", toDate);
       const res = await fetch(`/api/admin/orders?${params}`);
       if (!res.ok) return;
       const data = await res.json();
@@ -85,7 +104,7 @@ export default function AdminOrdersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, page]);
+  }, [statusFilter, page, search, fromDate, toDate]);
 
   useEffect(() => {
     fetchOrders();
@@ -96,27 +115,81 @@ export default function AdminOrdersPage() {
     setPage(1);
   }
 
+  function handleExport() {
+    const params = new URLSearchParams();
+    if (statusFilter !== "ALL") params.set("status", statusFilter);
+    if (search) params.set("q", search);
+    if (fromDate) params.set("from", fromDate);
+    if (toDate) params.set("to", toDate);
+    window.location.href = `/api/admin/orders/export?${params}`;
+  }
+
   return (
     <AdminShell>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">주문 관리</h1>
-          <span className="text-sm text-muted-foreground">총 {total}건</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">총 {total}건</span>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-1" />
+              CSV 내보내기
+            </Button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Select value={statusFilter} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="상태 필터" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-3">
+          {/* 검색창 */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="구매자명 또는 전화번호 검색..."
+              className="pl-9"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
+
+          {/* 날짜 필터 + 상태 필터 */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                className="border rounded px-2 py-1 text-sm"
+                value={fromDate}
+                onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+              />
+              <span className="text-muted-foreground text-sm">~</span>
+              <input
+                type="date"
+                className="border rounded px-2 py-1 text-sm"
+                value={toDate}
+                onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+              />
+              {(fromDate || toDate) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFromDate(""); setToDate(""); setPage(1); }}
+                >
+                  초기화
+                </Button>
+              )}
+            </div>
+
+            <Select value={statusFilter} onValueChange={handleStatusChange}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="상태 필터" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {isLoading ? (
