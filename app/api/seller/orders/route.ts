@@ -17,9 +17,26 @@ export async function GET(req: NextRequest) {
     ? { status: statusParam as OrderStatus }
     : {};
   const q = searchParams.get('q')?.trim() || '';
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const productId = searchParams.get('productId');
+
+  const dateFilter = (from || to) ? {
+    createdAt: {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+    }
+  } : {};
+
   const where = {
-    code: { product: { sellerId: session.user.id } },
+    code: {
+      product: {
+        sellerId: session.user.id,
+        ...(productId ? { id: productId } : {}),
+      },
+    },
     ...statusFilter,
+    ...dateFilter,
     ...(q ? {
       OR: [
         { buyerName: { contains: q, mode: 'insensitive' as const } },

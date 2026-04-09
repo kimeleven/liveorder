@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download, Truck, Upload } from "lucide-react";
+import { Download, Truck, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Pagination from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +54,11 @@ interface OrderItem {
   createdAt: string;
   source: string;
   code: { codeKey: string; product: { name: string } };
+}
+
+interface ProductOption {
+  id: string;
+  name: string;
 }
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -87,15 +92,39 @@ export default function OrdersPage() {
   const [bulkError, setBulkError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [productId, setProductId] = useState('');
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const router = useRouter();
 
-  async function fetchOrders(currentPage = page, currentStatus = statusFilter, currentQuery = searchQuery) {
+  // 상품 목록 로드 (비활성 상품 포함)
+  useEffect(() => {
+    fetch('/api/seller/products?status=all&limit=100')
+      .then(r => r.json())
+      .then(res => {
+        if (res.data) setProducts(res.data.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function fetchOrders(
+    currentPage = page,
+    currentStatus = statusFilter,
+    currentQuery = searchQuery,
+    currentFrom = fromDate,
+    currentTo = toDate,
+    currentProductId = productId,
+  ) {
     setIsLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(currentPage), limit: '20' });
       if (currentStatus) params.set('status', currentStatus);
       if (currentQuery) params.set('q', currentQuery);
+      if (currentFrom) params.set('from', currentFrom);
+      if (currentTo) params.set('to', currentTo);
+      if (currentProductId) params.set('productId', currentProductId);
       const r = await fetch(`/api/seller/orders?${params.toString()}`);
       const res = await r.json();
       if (res.data) {
@@ -112,18 +141,18 @@ export default function OrdersPage() {
   }
 
   useEffect(() => {
-    fetchOrders(page, statusFilter, searchQuery);
+    fetchOrders(page, statusFilter, searchQuery, fromDate, toDate, productId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusFilter, searchQuery]);
+  }, [page, statusFilter, searchQuery, fromDate, toDate, productId]);
 
   // 30초마다 자동 갱신
   useEffect(() => {
     const timer = setInterval(() => {
-      fetchOrders(page, statusFilter, searchQuery)
-    }, 30000)
-    return () => clearInterval(timer)
+      fetchOrders(page, statusFilter, searchQuery, fromDate, toDate, productId);
+    }, 30000);
+    return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, statusFilter, searchQuery]);
+  }, [page, statusFilter, searchQuery, fromDate, toDate, productId]);
 
   function openTrackingDialog(orderId: string) {
     setTrackingDialog({ open: true, orderId });
@@ -224,13 +253,35 @@ export default function OrdersPage() {
     }
   }
 
+  const hasDateOrProductFilter = !!(fromDate || toDate || productId);
+
+  function clearDateProductFilters() {
+    setFromDate('');
+    setToDate('');
+    setProductId('');
+    setPage(1);
+  }
+
   async function downloadExcel() {
-    const res = await fetch("/api/seller/orders/export");
+    const params = new URLSearchParams();
+    if (statusFilter) params.set('status', statusFilter);
+    if (searchQuery) params.set('q', searchQuery);
+    if (fromDate) params.set('from', fromDate);
+    if (toDate) params.set('to', toDate);
+    if (productId) params.set('productId', productId);
+
+    const res = await fetch(`/api/seller/orders/export?${params.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+    // 파일명은 서버 Content-Disposition에서 오지만 브라우저 기본값 사용
+    const today = new Date().toISOString().slice(0, 10);
+    if (fromDate && toDate) {
+      a.download = `orders_${fromDate}_${toDate}_${today}.csv`;
+    } else {
+      a.download = `orders_${today}.csv`;
+    }
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -282,7 +333,8 @@ export default function OrdersPage() {
             </Select>
             {orders.length > 0 && (
               <Button variant="outline" onClick={downloadExcel}>
-                <Download className="mr-2 h-4 w-4" /> 배송지 다운로드
+                <Download className="mr-2 h-4 w-4" />
+                {hasDateOrProductFilter ? '필터 조건으로 CSV 내보내기' : '배송지 다운로드'}
               </Button>
             )}
             <Button
@@ -297,6 +349,47 @@ export default function OrdersPage() {
               <Upload className="mr-2 h-4 w-4" /> 일괄 운송장 등록
             </Button>
           </div>
+        </div>
+
+        {/* 날짜 범위 + 상품 필터 */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex items-center gap-1.5">
+            <Label className="text-sm text-muted-foreground whitespace-nowrap">시작일</Label>
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={e => { setFromDate(e.target.value); setPage(1); }}
+              className="h-8 w-36"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Label className="text-sm text-muted-foreground whitespace-nowrap">종료일</Label>
+            <Input
+              type="date"
+              value={toDate}
+              onChange={e => { setToDate(e.target.value); setPage(1); }}
+              className="h-8 w-36"
+            />
+          </div>
+          <Select
+            value={productId || 'ALL'}
+            onValueChange={(v) => { setProductId(v === 'ALL' ? '' : v); setPage(1); }}
+          >
+            <SelectTrigger className="w-44 h-8">
+              <SelectValue placeholder="전체 상품" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">전체 상품</SelectItem>
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasDateOrProductFilter && (
+            <Button variant="ghost" size="sm" onClick={clearDateProductFilters} className="h-8 gap-1">
+              <X className="h-3 w-3" /> 필터 초기화
+            </Button>
+          )}
         </div>
 
         {error && (

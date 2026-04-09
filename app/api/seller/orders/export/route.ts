@@ -1,15 +1,50 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { OrderStatus } from "@prisma/client";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const statusParam = searchParams.get('status');
+  const statusFilter = statusParam && Object.values(OrderStatus).includes(statusParam as OrderStatus)
+    ? { status: statusParam as OrderStatus }
+    : {};
+  const q = searchParams.get('q')?.trim() || '';
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const productId = searchParams.get('productId');
+
+  const dateFilter = (from || to) ? {
+    createdAt: {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+    }
+  } : {};
+
+  const where = {
+    code: {
+      product: {
+        sellerId: session.user.id,
+        ...(productId ? { id: productId } : {}),
+      },
+    },
+    ...statusFilter,
+    ...dateFilter,
+    ...(q ? {
+      OR: [
+        { buyerName: { contains: q, mode: 'insensitive' as const } },
+        { buyerPhone: { contains: q } },
+      ]
+    } : {}),
+  };
+
   const orders = await prisma.order.findMany({
-    where: { code: { product: { sellerId: session.user.id } } },
+    where,
     include: {
       code: { select: { codeKey: true, product: { select: { name: true } } } },
     },
@@ -44,10 +79,23 @@ export async function GET() {
   const bom = "\uFEFF";
   const csv = bom + header + rows;
 
+  // 파일명: 날짜 범위 반영
+  const today = new Date().toISOString().slice(0, 10);
+  let filename: string;
+  if (from && to) {
+    filename = `orders_${from}_${to}_${today}.csv`;
+  } else if (from) {
+    filename = `orders_${from}_${today}.csv`;
+  } else if (to) {
+    filename = `orders_to_${to}_${today}.csv`;
+  } else {
+    filename = `orders_${today}.csv`;
+  }
+
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="orders_${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
 }
