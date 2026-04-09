@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Search, Download } from "lucide-react";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -15,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface SellerItem {
   id: string;
@@ -41,20 +43,66 @@ const statusLabel: Record<string, string> = {
   SUSPENDED: "정지",
 };
 
+const LIMIT = 20;
+
 export default function AdminSellersPage() {
   const router = useRouter();
   const [sellers, setSellers] = useState<SellerItem[]>([]);
   const [tab, setTab] = useState("ALL");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [submitting, setSubmitting] = useState<Set<string>>(new Set());
 
+  // 검색어 디바운스 300ms
   useEffect(() => {
-    fetch("/api/admin/sellers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setSellers(data);
-      })
-      .catch(() => {});
-  }, []);
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  async function fetchSellers(
+    currentPage = page,
+    currentTab = tab,
+    currentSearch = search
+  ) {
+    const params = new URLSearchParams({
+      page: String(currentPage),
+      limit: String(LIMIT),
+    });
+    if (currentTab !== "ALL") params.set("status", currentTab);
+    if (currentSearch) params.set("q", currentSearch);
+
+    const res = await fetch(`/api/admin/sellers?${params}`);
+    const data = await res.json();
+    if (data.data) {
+      setSellers(data.data);
+      setTotalPages(data.pagination?.totalPages ?? 1);
+      setTotal(data.pagination?.total ?? 0);
+    }
+  }
+
+  // 탭·검색어·페이지 변경 시 재조회
+  useEffect(() => {
+    fetchSellers(page, tab, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, tab, search]);
+
+  function handleTabChange(newTab: string) {
+    setTab(newTab);
+    setPage(1);
+  }
+
+  function handleExport() {
+    const params = new URLSearchParams();
+    if (tab !== "ALL") params.set("status", tab);
+    if (search) params.set("q", search);
+    window.location.href = `/api/admin/sellers/export?${params}`;
+  }
 
   async function updateStatus(id: string, status: string, sellerName: string) {
     const isDestructive = status === "SUSPENDED";
@@ -96,15 +144,30 @@ export default function AdminSellersPage() {
     }
   }
 
-  const filtered =
-    tab === "ALL" ? sellers : sellers.filter((s) => s.status === tab);
-
   return (
     <AdminShell>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">셀러 관리</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">셀러 관리</h1>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-1" />
+            CSV 내보내기
+          </Button>
+        </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        {/* 검색창 */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="이름, 이메일, 사업자번호 검색..."
+            className="pl-9"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+
+        {/* 상태 탭 */}
+        <Tabs value={tab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="ALL">전체</TabsTrigger>
             <TabsTrigger value="PENDING">승인대기</TabsTrigger>
@@ -128,14 +191,17 @@ export default function AdminSellersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {sellers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell
+                    colSpan={8}
+                    className="text-center text-muted-foreground py-8"
+                  >
                     셀러가 없습니다.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((seller) => {
+                sellers.map((seller) => {
                   const isLoading = submitting.has(seller.id);
                   return (
                     <TableRow
@@ -143,7 +209,9 @@ export default function AdminSellersPage() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => router.push(`/admin/sellers/${seller.id}`)}
                     >
-                      <TableCell className="font-medium">{seller.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {seller.name}
+                      </TableCell>
                       <TableCell>{seller.repName}</TableCell>
                       <TableCell className="font-mono text-sm">
                         {seller.businessNo}
@@ -161,7 +229,9 @@ export default function AdminSellersPage() {
                             보기
                           </a>
                         ) : (
-                          <span className="text-xs text-muted-foreground">미첨부</span>
+                          <span className="text-xs text-muted-foreground">
+                            미첨부
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -180,7 +250,11 @@ export default function AdminSellersPage() {
                                 size="sm"
                                 disabled={isLoading}
                                 onClick={() =>
-                                  updateStatus(seller.id, "APPROVED", seller.name)
+                                  updateStatus(
+                                    seller.id,
+                                    "APPROVED",
+                                    seller.name
+                                  )
                                 }
                               >
                                 {isLoading ? "처리 중..." : "승인"}
@@ -190,7 +264,11 @@ export default function AdminSellersPage() {
                                 variant="destructive"
                                 disabled={isLoading}
                                 onClick={() =>
-                                  updateStatus(seller.id, "SUSPENDED", seller.name)
+                                  updateStatus(
+                                    seller.id,
+                                    "SUSPENDED",
+                                    seller.name
+                                  )
                                 }
                               >
                                 거부
@@ -203,7 +281,11 @@ export default function AdminSellersPage() {
                               variant="destructive"
                               disabled={isLoading}
                               onClick={() =>
-                                updateStatus(seller.id, "SUSPENDED", seller.name)
+                                updateStatus(
+                                  seller.id,
+                                  "SUSPENDED",
+                                  seller.name
+                                )
                               }
                             >
                               {isLoading ? "처리 중..." : "정지"}
@@ -215,7 +297,11 @@ export default function AdminSellersPage() {
                               variant="outline"
                               disabled={isLoading}
                               onClick={() =>
-                                updateStatus(seller.id, "APPROVED", seller.name)
+                                updateStatus(
+                                  seller.id,
+                                  "APPROVED",
+                                  seller.name
+                                )
                               }
                             >
                               {isLoading ? "처리 중..." : "복구"}
@@ -229,6 +315,34 @@ export default function AdminSellersPage() {
               )}
             </TableBody>
           </Table>
+
+          {/* 페이지네이션 */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-muted-foreground">총 {total}건</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  이전
+                </Button>
+                <span className="text-sm">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  다음
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </AdminShell>
