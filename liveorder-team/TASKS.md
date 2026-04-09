@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-10 (Task 61 완료 확인 + Task 62 스펙 수립: 관리자 주문 검색 + 날짜 필터 + CSV 내보내기)_
+_최종 업데이트: 2026-04-10 (Task 62 완료 확인 + Task 63 스펙 수립: 셀러 이용약관 전자서명 동의 완성)_
 
 ---
 
@@ -48,6 +48,264 @@ _최종 업데이트: 2026-04-10 (Task 61 완료 확인 + Task 62 스펙 수립:
 ---
 
 ## Dev1 현재 작업
+
+### Task 63: 셀러 이용약관 전자서명 동의 완성
+
+**목표:** 셀러 회원가입 시 이용약관 동의 여부를 DB에 기록하고, 판매자 이용약관 페이지를 생성하며, 관리자가 셀러 약관 동의 날짜를 확인할 수 있도록 한다.
+
+**배경:**
+- 회원가입 폼에 약관 동의 체크박스는 있지만, API가 동의 여부를 DB에 저장하지 않음
+- 체크박스가 링크하는 `/seller-terms` 페이지가 없어 404 발생
+- 기획서 3.1.1절 "셀러 이용약관 전자서명 동의" 미완성 상태
+
+---
+
+#### 63A: Prisma 스키마 변경 + Migration
+
+**수정 파일:** `prisma/schema.prisma`
+
+`Seller` 모델에 `termsAgreedAt` 추가:
+
+```prisma
+model Seller {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(100)
+  password     String   @db.VarChar(255)
+  businessNo   String   @unique @map("business_no") @db.VarChar(12)
+  name         String   @db.VarChar(100)
+  repName      String   @map("rep_name") @db.VarChar(50)
+  address      String
+  phone        String   @db.VarChar(20)
+  bankAccount  String?  @map("bank_account") @db.VarChar(30)
+  bankName     String?  @map("bank_name") @db.VarChar(20)
+  tradeRegNo         String?  @map("trade_reg_no") @db.VarChar(50)
+  bizRegImageUrl     String?  @map("biz_reg_image_url")
+  termsAgreedAt      DateTime? @map("terms_agreed_at") @db.Timestamptz  // ← 추가
+  emailVerified      Boolean  @default(false) @map("email_verified")
+  emailVerifyToken          String?   @map("email_verify_token") @db.VarChar(100)
+  emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
+  status       SellerStatus @default(PENDING)
+  plan         SellerPlan   @default(FREE)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  ...
+}
+```
+
+Migration 실행:
+```bash
+npx prisma migrate dev --name add_terms_agreed_at_to_sellers
+```
+
+**완료 조건:**
+- [ ] `prisma/schema.prisma`에 `termsAgreedAt DateTime? @map("terms_agreed_at") @db.Timestamptz` 추가
+- [ ] migration 파일 생성 완료 (`prisma/migrations/...add_terms_agreed_at_to_sellers/`)
+- [ ] `npx prisma generate` 실행 완료
+
+---
+
+#### 63B: `POST /api/sellers/register` — termsAgreedAt 저장
+
+**수정 파일:** `app/api/sellers/register/route.ts`
+
+현재 API는 `termsAgreed` 파라미터를 무시함. 서버 측 검증 + DB 저장 추가:
+
+```typescript
+// body 파싱 부분에 termsAgreed 추가
+const {
+  email, password, businessNo, name, repName,
+  address, phone, bankAccount, bankName, tradeRegNo,
+  bizRegImageUrl,
+  termsAgreed,   // ← 추가
+} = await req.json()
+
+// 서버 측 검증 (기존 검증 블록 이후)
+if (!termsAgreed) {
+  return NextResponse.json(
+    { error: '이용약관 동의가 필요합니다.' },
+    { status: 400 }
+  )
+}
+
+// prisma.seller.create 데이터에 추가
+await prisma.seller.create({
+  data: {
+    email,
+    password: hashed,
+    businessNo,
+    name,
+    repName,
+    address,
+    phone,
+    bankAccount: bankAccount || null,
+    bankName: bankName || null,
+    tradeRegNo: tradeRegNo || null,
+    bizRegImageUrl: bizRegImageUrl || null,
+    termsAgreedAt: new Date(),   // ← 추가
+    emailVerifyToken: token,
+    emailVerifyTokenExpiresAt: expiresAt,
+  },
+})
+```
+
+**완료 조건:**
+- [ ] `termsAgreed`가 `false` 또는 누락 시 400 반환
+- [ ] `termsAgreed: true` 시 `termsAgreedAt: new Date()` DB 저장
+- [ ] 기존 이메일/사업자번호 중복 검증, 이메일 발송 로직 영향 없음
+
+---
+
+#### 63C: `/seller-terms` 판매자 이용약관 페이지 신규
+
+**신규 파일:** `app/seller-terms/page.tsx`
+
+정적 서버 컴포넌트. 판매자 이용약관 내용 포함:
+
+```typescript
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: '판매자 이용약관 — LiveOrder',
+}
+
+export default function SellerTermsPage() {
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-12">
+      <h1 className="text-2xl font-bold mb-8">LiveOrder 판매자 이용약관</h1>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제1조 (목적)</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          본 약관은 LiveOrder(이하 "회사")가 제공하는 라이브 커머스 주문 중개 서비스(이하 "서비스")를
+          이용하는 판매자 회원(이하 "판매자")과 회사 간의 권리·의무 및 책임사항을 규정함을 목적으로 합니다.
+        </p>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제2조 (서비스 정의)</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          회사는 판매자가 라이브 방송 중 구매자에게 주문 코드를 제공하고, 구매자가 해당 코드로 상품을
+          주문·결제할 수 있는 중개 플랫폼을 운영합니다. 회사는 통신판매중개업자로서 판매자와 구매자 간
+          거래에 직접 개입하지 않습니다.
+        </p>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제3조 (판매자 의무)</h2>
+        <ul className="text-sm text-muted-foreground leading-relaxed space-y-1 list-disc list-inside">
+          <li>판매자는 사실에 근거한 상품 정보를 등록해야 합니다.</li>
+          <li>판매자는 주문 접수 후 합리적인 기간 내 배송을 처리해야 합니다.</li>
+          <li>판매자는 구매자의 정당한 청약 철회 요청에 응해야 합니다.</li>
+          <li>판매자는 관련 법령(전자상거래법, 소비자보호법 등)을 준수해야 합니다.</li>
+          <li>불법·허위 상품 등록 시 서비스 이용이 즉시 정지될 수 있습니다.</li>
+        </ul>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제4조 (수수료 및 정산)</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          회사는 결제 완료된 주문 금액에서 플랫폼 이용 수수료를 공제한 후 주문일로부터 3영업일 이내에
+          판매자가 등록한 계좌로 정산합니다. 수수료율은 서비스 내 정책 페이지에서 확인할 수 있으며,
+          변경 시 7일 전 판매자에게 이메일로 공지합니다.
+        </p>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제5조 (금지 행위)</h2>
+        <ul className="text-sm text-muted-foreground leading-relaxed space-y-1 list-disc list-inside">
+          <li>허위 또는 과장 광고</li>
+          <li>미성년자 대상 유해 상품 판매</li>
+          <li>위조·불량 상품 판매</li>
+          <li>개인정보 무단 수집 또는 남용</li>
+          <li>시스템 해킹, 크롤링 등 정상 운영 방해 행위</li>
+        </ul>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제6조 (계약 해지)</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          판매자는 언제든지 회사에 탈퇴를 요청할 수 있습니다. 단, 진행 중인 주문·정산이 완료된 후
+          탈퇴가 처리됩니다. 회사는 제5조 위반 또는 서비스 약관 위반 시 별도 고지 없이 계정을
+          정지하거나 해지할 수 있습니다.
+        </p>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">제7조 (면책조항)</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          회사는 통신판매중개업자로서 판매자와 구매자 간의 거래에서 발생하는 분쟁에 대해 직접적인
+          책임을 지지 않습니다. 단, 회사의 귀책사유로 인한 손해는 관련 법령에 따라 처리합니다.
+        </p>
+      </section>
+
+      <p className="text-xs text-muted-foreground mt-8 border-t pt-4">
+        시행일: 2026년 4월 10일
+      </p>
+    </div>
+  )
+}
+```
+
+**완료 조건:**
+- [ ] `/seller-terms` 접속 시 404 없이 정상 렌더링
+- [ ] 이용약관 7개 조항 포함
+- [ ] `metadata.title` 설정
+- [ ] `'use client'` 없음 (서버 컴포넌트)
+
+---
+
+#### 63D: 관리자 셀러 상세 페이지 — 약관 동의 날짜 표시
+
+**수정 파일:** `app/admin/sellers/[id]/page.tsx`
+
+현재 셀러 상세 페이지의 "기본 정보" 섹션에 약관 동의 날짜 항목 추가:
+
+```tsx
+{/* 기본 정보 테이블 내 기존 필드들 아래에 추가 */}
+<tr>
+  <td className="font-medium text-muted-foreground pr-4 py-1 whitespace-nowrap">약관 동의</td>
+  <td className="py-1">
+    {seller.termsAgreedAt ? (
+      new Date(seller.termsAgreedAt).toLocaleString('ko-KR')
+    ) : (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+        미동의
+      </span>
+    )}
+  </td>
+</tr>
+```
+
+**`GET /api/admin/sellers/[id]` 응답에 `termsAgreedAt` 포함 확인:**
+
+```typescript
+// app/api/admin/sellers/[id]/route.ts
+// select 또는 findUnique에 termsAgreedAt 추가 (없으면 추가)
+const seller = await prisma.seller.findUnique({
+  where: { id },
+  select: {
+    ...
+    termsAgreedAt: true,  // ← 확인 후 없으면 추가
+    ...
+  },
+})
+```
+
+**완료 조건:**
+- [ ] `termsAgreedAt` 있으면 날짜+시각 표시
+- [ ] `termsAgreedAt` 없으면 "미동의" 오렌지 배지 표시
+- [ ] API 응답에 `termsAgreedAt` 포함
+
+---
+
+**구현 순서:** 63A (migration) → 63B (API 저장) → 63C (약관 페이지) → 63D (관리자 표시)
+
+**주의사항:**
+- 63A: `nullable` 필드이므로 기존 셀러 데이터에 영향 없음 (기존 셀러는 `termsAgreedAt: null`)
+- 63B: registration API의 기존 로직(이메일 중복, 사업자번호 중복, 이메일 발송) 영향 없게 `termsAgreed` 검증만 추가
+- 63C: 기존 회원가입 폼의 체크박스 링크 `href="/seller-terms"` 가 이미 설정되어 있음 — 페이지만 생성하면 됨
+- 63D: API route의 select에 `termsAgreedAt`이 없으면 반드시 추가 (prisma select 누락 시 undefined 반환)
+
+---
 
 ### ✅ Task 62: 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기 (완료 — Dev1)
 

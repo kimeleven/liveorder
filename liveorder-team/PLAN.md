@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-10 (Task 61 완료 확인, Task 62 스펙 수립: 관리자 주문 검색 + 날짜 필터 + CSV 내보내기)_
+_최종 업데이트: 2026-04-10 (Task 62 완료 확인, Task 63 스펙 수립: 셀러 이용약관 전자서명 동의 완성)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-10 (Task 61 완료 확인, Task 62 스펙 수립: 
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 62 진행) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 63 진행) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -55,10 +55,111 @@ _최종 업데이트: 2026-04-10 (Task 61 완료 확인, Task 62 스펙 수립: 
 | 59 | 셀러 주문 날짜 범위/상품 필터 — `?from=`, `?to=`, `?productId=` 파라미터 + CSV 필터링 + 날짜/상품 UI |
 | 60 | 관리자 정산 페이지 개선 — `GET /api/admin/settlements` 페이지네이션 + 날짜/상태/셀러 필터 + CSV 내보내기 + UI |
 | 61 | 관리자 셀러 목록 고도화 — `GET /api/admin/sellers` 서버사이드 페이지네이션 + 검색(이름/이메일/사업자번호) + `GET /api/admin/sellers/export` CSV 내보내기 |
+| 62 | 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기 — `GET /api/admin/orders` `?q=`, `?from=`, `?to=` + `GET /api/admin/orders/export` + UI |
 
 ---
 
-## Task 62 — 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기
+## Task 63 — 셀러 이용약관 전자서명 동의 완성
+
+### 배경
+
+현재 셀러 회원가입 페이지(`/seller/auth/register`)에 이용약관 동의 체크박스가 있지만, **동의 여부가 DB에 저장되지 않는다**. 세 가지 문제:
+
+1. **동의 기록 없음**: 분쟁 발생 시 "언제 어떤 약관에 동의했는지" 증명 불가. 전자상거래법·개인정보보호법상 서비스 제공자는 동의 일자를 보관할 의무가 있음.
+2. **약관 페이지 부재**: 체크박스가 링크하는 `/seller-terms` 페이지가 없어 404. 구매자 약관(`/terms`)은 있지만 판매자 약관 페이지는 미구현.
+3. **관리자 확인 불가**: 관리자가 셀러 상세 페이지에서 약관 동의 날짜를 볼 수 없음.
+
+기획서 3.1.1절에 "셀러 이용약관 전자서명 동의"가 명시되어 있으며, QA_REPORT에서도 미구현으로 기록됨.
+
+### 목표
+
+- Prisma migration: `Seller`에 `termsAgreedAt DateTime?` 추가
+- 회원가입 API: 약관 동의 시 `termsAgreedAt` = 현재 시각 저장
+- `/seller-terms` 판매자 이용약관 페이지 신규 생성
+- 관리자 셀러 상세 페이지: 약관 동의 날짜 표시
+
+### 구현 파일
+
+| 서브태스크 | 파일 | 작업 |
+|-----------|------|------|
+| 63A | `prisma/schema.prisma` + migration | `Seller`에 `termsAgreedAt DateTime?` 추가 |
+| 63B | `app/api/sellers/register/route.ts` | 요청 body에서 `termsAgreed` 확인 + `termsAgreedAt: new Date()` 저장 |
+| 63C | `app/seller-terms/page.tsx` | 판매자 이용약관 페이지 신규 (정적 콘텐츠) |
+| 63D | `app/admin/sellers/[id]/page.tsx` | 약관 동의 날짜 표시 (없으면 "미동의" 배지) |
+
+### 레이아웃
+
+#### 회원가입 API (63B)
+
+```typescript
+// app/api/sellers/register/route.ts 수정
+// body에 termsAgreed: boolean 추가 검증
+
+const { ..., termsAgreed } = await req.json()
+if (!termsAgreed) {
+  return NextResponse.json({ error: '이용약관 동의가 필요합니다.' }, { status: 400 })
+}
+
+await prisma.seller.create({
+  data: {
+    ...,
+    termsAgreedAt: new Date(),
+  },
+})
+```
+
+#### 판매자 이용약관 페이지 (63C)
+
+```
+/seller-terms
+┌──────────────────────────────────────────────────────────┐
+│ LiveOrder 판매자 이용약관                                  │
+│                                                           │
+│ 제1조 (목적)                                              │
+│ 제2조 (서비스 정의)                                        │
+│ 제3조 (판매자 의무)                                        │
+│ 제4조 (수수료 및 정산)                                     │
+│ 제5조 (금지 행위)                                          │
+│ 제6조 (계약 해지)                                          │
+│ 제7조 (면책조항)                                           │
+│                                                           │
+│ 시행일: 2026-04-10                                        │
+└──────────────────────────────────────────────────────────┘
+```
+
+#### 관리자 셀러 상세 (63D)
+
+```
+기본 정보 섹션에 추가:
+약관 동의: 2026-04-10 14:23  (또는 "미동의" 오렌지 배지)
+```
+
+### Prisma Schema 변경 (63A)
+
+```prisma
+model Seller {
+  ...
+  termsAgreedAt      DateTime? @map("terms_agreed_at") @db.Timestamptz
+  ...
+}
+```
+
+Migration 명령:
+```bash
+npx prisma migrate dev --name add_terms_agreed_at_to_sellers
+```
+
+### 주의사항
+
+- 63A migration은 `nullable`이므로 기존 셀러 데이터에 영향 없음
+- 63B: `termsAgreed: true`가 body에 없거나 false면 400 반환 (서버 측 검증 필수)
+- 63C: 정적 페이지 — app router, no `'use client'` 필요. SEO를 위해 metadata 설정
+- 63D: `GET /api/admin/sellers/[id]` 응답에 `termsAgreedAt` 포함되어 있는지 확인 후 표시
+- 기존 회원가입 폼 체크박스(`/seller/auth/register/page.tsx`)는 이미 `disabled={loading || !termsAgreed || !sellerTermsAgreed}` 로 UI 검증됨 — API 측 검증 추가가 핵심
+
+---
+
+## Task 62 — 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기 ✅ 완료
 
 ### 배경
 
