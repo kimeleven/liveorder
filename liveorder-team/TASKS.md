@@ -391,13 +391,13 @@ onClick={e => {
 
 ---
 
-### Task 46 전체 완료 조건
+### Task 46 전체 완료 조건 ✅ (2026-04-09 완료, commit 67cae8b)
 
-- [ ] `app/api/seller/orders/[id]/route.ts` — GET 주문 상세 API 신규 (46A)
-- [ ] `app/seller/orders/[id]/page.tsx` — 주문 상세 페이지 신규 (46B)
-- [ ] `app/api/seller/orders/route.ts` — `q` 검색 파라미터 추가 (46C)
-- [ ] `app/seller/orders/page.tsx` — 검색 UI + 행 클릭 → 상세 이동 (46C+46D)
-- [ ] git commit + push
+- [x] `app/api/seller/orders/[id]/route.ts` — GET 주문 상세 API 신규 (46A)
+- [x] `app/seller/orders/[id]/page.tsx` — 주문 상세 페이지 신규 (46B)
+- [x] `app/api/seller/orders/route.ts` — `q` 검색 파라미터 추가 (46C)
+- [x] `app/seller/orders/page.tsx` — 검색 UI + 행 클릭 → 상세 이동 (46C+46D)
+- [x] git commit + push
 
 ---
 
@@ -851,7 +851,7 @@ disabled={loading || !termsAgreed || !sellerTermsAgreed}
 
 | Task | 내용 | 완료일 |
 |------|------|--------|
-| Task 46 | 셀러 주문 상세 페이지 (/seller/orders/[id]), 주문 상세 API, 주문 검색 (구매자명/전화번호), 목록 행 클릭 → 상세 이동 | (예정) |
+| Task 46 | 셀러 주문 상세 페이지 (/seller/orders/[id]), 주문 상세 API, 주문 검색 (구매자명/전화번호), 목록 행 클릭 → 상세 이동 | 2026-04-09 |
 | Task 45 | 셀러 설정 페이지 (/seller/settings), 비밀번호 변경 API, GET/PATCH /api/seller/me 확장, 회원가입 이용약관 체크박스 + /seller-terms 약관 페이지 | 2026-04-09 |
 | Task 44 | 셀러 주문 30초 자동갱신, PAID 배지 API+SellerShell 폴링, 대시보드 주별/월별 차트 | 2026-04-09 |
 | Task 43 | 운송장 일괄 CSV 업로드 (export 주문ID, bulk API, UI 다이얼로그) | 2026-04-09 |
