@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-10 (Task 58 완료 확인, Task 59 스펙 수립: 셀러 주문 날짜 범위 + 상품 필터 + CSV 필터링)_
+_최종 업데이트: 2026-04-10 (Task 59 완료 확인, Task 60 스펙 수립: 관리자 정산 필터 + 페이지네이션 + CSV 내보내기)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-10 (Task 58 완료 확인, Task 59 스펙 수립: 
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 59 진행) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 60 진행) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -52,6 +52,57 @@ _최종 업데이트: 2026-04-10 (Task 58 완료 확인, Task 59 스펙 수립: 
 | 56 | 셀러 상품 활성/비활성 토글 — `POST /api/seller/products/[id]/toggle` + `?status` 필터 + 목록/상세 토글 버튼 |
 | 57 | 셀러 코드 목록 상태 필터 + 검색 — `GET /api/seller/codes` `?status` + `?q` 파라미터 + 필터 탭 + 검색창 |
 | 58 | 셀러 코드 상세 QR 코드 표시/다운로드 + `GET /api/seller/codes/[id]/orders/export` 코드별 주문 CSV 다운로드 |
+| 59 | 셀러 주문 날짜 범위/상품 필터 — `?from=`, `?to=`, `?productId=` 파라미터 + CSV 필터링 + 날짜/상품 UI |
+
+---
+
+## Task 60 — 관리자 정산 페이지 개선: 필터 + 페이지네이션 + CSV 내보내기
+
+### 배경
+
+현재 관리자 정산 페이지(`/admin/settlements`)의 세 가지 공백:
+
+1. **데이터 전체 로드**: `GET /api/admin/settlements`가 페이지네이션 없이 전체 정산을 반환. 정산이 쌓일수록 성능 저하.
+2. **날짜 필터 없음**: 상태 탭(대기/완료/실패)만 있고, 특정 기간 정산 조회 불가.
+3. **CSV 내보내기 없음**: 회계/세금 처리를 위해 정산 내역을 엑셀로 추출해야 하지만 기능 없음. 수동 복사해야 함.
+
+### 목표
+
+- `GET /api/admin/settlements`에 페이지네이션 + 날짜/셀러 필터 추가
+- `GET /api/admin/settlements/export` 신규 CSV 다운로드 API
+- `/admin/settlements` 페이지에 날짜 필터 + 페이지네이션 + CSV 버튼 추가
+
+### 구현 파일
+
+| 서브태스크 | 파일 | 작업 |
+|-----------|------|------|
+| 60A | `app/api/admin/settlements/route.ts` | GET 수정: 페이지네이션 + 날짜/상태/셀러 필터 |
+| 60B | `app/api/admin/settlements/export/route.ts` | 신규: CSV 내보내기 API |
+| 60C | `app/admin/settlements/page.tsx` | 날짜 필터 UI + 페이지네이션 + CSV 버튼 |
+
+### 레이아웃
+
+```
+/admin/settlements
+┌──────────────────────────────────────────────────────────┐
+│ 정산 관리              [정산 배치 실행]  [CSV 내보내기 ▼] │
+│                                                           │
+│ [시작일: ____-__-__]  [종료일: ____-__-__]  [초기화]     │
+│ [전체] [대기] [완료] [실패]                               │
+│                                                           │
+│ (정산 테이블)                                             │
+│                                                           │
+│ ← 이전   1 / 3 페이지  (총 52건)  다음 →                 │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 주의사항
+
+- `parsePagination` / `buildPaginationResponse`는 `lib/pagination.ts` 기존 구현 사용
+- 60A API 응답 형식 `[]` → `{ data, total, page, limit, totalPages }` 변경 — 60C 동시 수정 필수
+- `POST /api/admin/settlements` (배치 실행)는 같은 파일에 있으므로 그대로 유지
+- 날짜 필터 기준: `scheduledAt` (정산 예정일)
+- export 파일명: `settlements_{from}_{to}_{날짜}.csv`
 
 ---
 
