@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
 import RefundDialog from "@/components/admin/RefundDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,6 +57,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function AdminOrdersPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -150,7 +152,11 @@ export default function AdminOrdersPage() {
                   const badge = STATUS_BADGE[order.status] ?? { label: order.status, variant: "secondary" as const };
                   const canRefund = ["PAID", "SHIPPING", "DELIVERED"].includes(order.status);
                   return (
-                    <TableRow key={order.id}>
+                    <TableRow
+                      key={order.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/admin/orders/${order.id}`)}
+                    >
                       <TableCell className="font-mono text-xs">
                         {order.id.slice(0, 8).toUpperCase()}
                       </TableCell>
@@ -164,7 +170,7 @@ export default function AdminOrdersPage() {
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(order.createdAt).toLocaleDateString("ko-KR")}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {canRefund && (
                           <Button
                             variant="outline"
