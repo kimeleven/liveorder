@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import SellerShell from "@/components/seller/SellerShell";
@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -57,8 +57,9 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const [product, setProduct] = useState<ProductDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
-  useEffect(() => {
+  const fetchProduct = useCallback(() => {
     setLoading(true);
     fetch(`/api/seller/products/${id}`)
       .then((r) => {
@@ -69,6 +70,22 @@ export default function ProductDetailPage() {
       .catch(() => toast.error("상품 정보를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => { fetchProduct(); }, [fetchProduct]);
+
+  async function handleToggle() {
+    if (!product) return;
+    setToggling(true);
+    try {
+      const res = await fetch(`/api/seller/products/${id}/toggle`, { method: "POST" });
+      if (!res.ok) { toast.error("상태 변경 실패"); return; }
+      const { isActive } = await res.json();
+      toast.success(isActive ? "상품이 활성화되었습니다." : "상품이 비활성화되었습니다.");
+      fetchProduct();
+    } finally {
+      setToggling(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -108,6 +125,16 @@ export default function ProductDetailPage() {
           <Badge variant={product.isActive ? "default" : "secondary"}>
             {product.isActive ? "판매중" : "중지"}
           </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggle}
+            disabled={toggling || !product}
+          >
+            {toggling
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : product?.isActive ? "판매 중지" : "판매 재개"}
+          </Button>
           <Button
             size="sm"
             variant="outline"

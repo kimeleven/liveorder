@@ -14,8 +14,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
+import { toast } from "sonner";
 
 interface Product {
   id: string;
@@ -34,9 +35,11 @@ export default function ProductsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
+  const [toggling, setToggling] = useState<string | null>(null);
 
-  function fetchProducts(currentPage = page) {
-    fetch(`/api/seller/products?page=${currentPage}`)
+  function fetchProducts(currentPage = page, currentStatus = statusFilter) {
+    fetch(`/api/seller/products?page=${currentPage}&status=${currentStatus}`)
       .then((r) => r.json())
       .then((res) => {
         if (res.data) {
@@ -48,8 +51,9 @@ export default function ProductsPage() {
   }
 
   useEffect(() => {
-    fetchProducts(page);
-  }, [page]);
+    fetchProducts(page, statusFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, statusFilter]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -60,10 +64,25 @@ export default function ProductsPage() {
       });
       if (res.ok) {
         setDeleteTarget(null);
-        fetchProducts(page);
+        fetchProducts(page, statusFilter);
       }
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleToggle(product: Product) {
+    setToggling(product.id);
+    try {
+      const res = await fetch(`/api/seller/products/${product.id}/toggle`, { method: "POST" });
+      if (!res.ok) { toast.error("상태 변경 실패"); return; }
+      const { isActive } = await res.json();
+      toast.success(isActive ? "상품이 활성화되었습니다." : "상품이 비활성화되었습니다.");
+      fetchProducts(page, statusFilter);
+    } catch {
+      toast.error("서버 오류가 발생했습니다.");
+    } finally {
+      setToggling(null);
     }
   }
 
@@ -82,15 +101,33 @@ export default function ProductsPage() {
           </Link>
         </div>
 
+        {/* 상태 필터 탭 */}
+        <div className="flex gap-2">
+          {(["active", "inactive", "all"] as const).map((s) => (
+            <Button
+              key={s}
+              variant={statusFilter === s ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+            >
+              {s === "active" ? "활성" : s === "inactive" ? "비활성" : "전체"}
+            </Button>
+          ))}
+        </div>
+
         {products.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">
-                등록된 상품이 없습니다. 상품을 등록하여 판매를 시작하세요.
+                {statusFilter === "inactive"
+                  ? "비활성화된 상품이 없습니다."
+                  : "등록된 상품이 없습니다. 상품을 등록하여 판매를 시작하세요."}
               </p>
-              <Link href="/seller/products/new">
-                <Button className="mt-4">상품 등록하기</Button>
-              </Link>
+              {statusFilter === "active" && (
+                <Link href="/seller/products/new">
+                  <Button className="mt-4">상품 등록하기</Button>
+                </Link>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -98,7 +135,7 @@ export default function ProductsPage() {
             {products.map((product) => (
               <Card
                 key={product.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
+                className={`hover:shadow-md transition-shadow cursor-pointer ${!product.isActive ? "opacity-60" : ""}`}
                 onClick={() => router.push(`/seller/products/${product.id}`)}
               >
                 <CardHeader className="pb-2">
@@ -120,6 +157,16 @@ export default function ProductsPage() {
                     재고: {product.stock}개
                   </p>
                   <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); handleToggle(product); }}
+                      disabled={toggling === product.id}
+                    >
+                      {toggling === product.id
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : product.isActive ? "중지" : "활성화"}
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"

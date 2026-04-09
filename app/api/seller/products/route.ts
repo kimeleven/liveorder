@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const { page, limit, skip } = parsePagination(searchParams);
-  const where = { sellerId: session.user.id, isActive: true };
+  const status = searchParams.get("status") ?? "active";
+  const isActiveFilter =
+    status === "all" ? {} :
+    status === "inactive" ? { isActive: false } :
+    { isActive: true };
+  const where = { sellerId: session.user.id, ...isActiveFilter };
 
   const [products, total] = await prisma.$transaction([
     prisma.product.findMany({
