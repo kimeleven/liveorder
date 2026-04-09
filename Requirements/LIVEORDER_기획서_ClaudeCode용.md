@@ -1,5 +1,5 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v2.4
+## Claude Code 개발 기획서 v2.7
 > 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-09 | v2.7 | Task 46 완료 (셀러 주문 상세 페이지 `/seller/orders/[id]`, `GET /api/seller/orders/[id]`, 주문 검색 `?q=`). Task 47 스펙 수립: 관리자 셀러 상세 페이지 `/admin/sellers/[id]`, `GET /api/admin/sellers/[id]` (기본정보+통계), `GET /api/admin/sellers/[id]/orders` (주문목록), 셀러 목록 행 클릭 연결. |
 | 2026-04-09 | v2.6 | Task 45 완료 (셀러 설정 페이지, GET/PATCH /api/seller/me, 비밀번호 변경 API, 이용약관 동의 체크박스). Task 46 스펙 수립: 셀러 주문 상세 페이지 `/seller/orders/[id]`, 주문 상세 API, 주문 검색 (구매자명/전화번호). |
 | 2026-04-09 | v2.5 | Task 44 완료 (셀러 주문 30초 자동갱신, PAID 배지, 주별/월별 차트). Task 45 스펙 수립: 셀러 설정 페이지 `/seller/settings` (404 해소), PATCH/비밀번호 변경 API, 이용약관 동의 체크박스. |
 | 2026-04-09 | v2.4 | Task 37 완료 (seller.id 버그 수정). Phase 4 핵심 플로우 완전 구현. Task 38 스펙: `docs/kakao-openbuilder-setup.md` + 셀러 코드 페이지 카카오 공지 복사 버튼 + 셀러 대시보드 카카오 채널 안내 카드. |
@@ -292,8 +293,8 @@ function generateCode(sellerId: string): string {
 | 미처리(PAID) 주문 배지 (헤더) | ✅ (Task 44) |
 | 셀러 설정 페이지 (마이페이지) | ✅ (Task 45) |
 | 이용약관 + 판매자 약관 동의 (회원가입) | ✅ (Task 45D) |
-| 주문 상세 페이지 `/seller/orders/[id]` | ⬜ (Task 46 예정) |
-| 주문 검색 (구매자명/전화번호) | ⬜ (Task 46 예정) |
+| 주문 상세 페이지 `/seller/orders/[id]` | ✅ (Task 46) |
+| 주문 검색 (구매자명/전화번호) | ✅ (Task 46) |
 | CS 접수 현황 및 처리 내역 | ⬜ |
 
 ### 3.2 구매자 기능
@@ -358,6 +359,7 @@ function generateCode(sellerId: string): string {
 | 셀러 사업자등록증 확인 | ✅ |
 | 주문 목록 조회 + 환불 UI (RefundDialog) | ✅ |
 | 정산 조회 + 배치 실행 버튼 (CRON_SECRET 인증) | ✅ |
+| 셀러 상세 페이지 `/admin/sellers/[id]` (기본정보 + 통계 + 주문목록) | ⬜ (Task 47 예정) |
 | 불법 상품 신고 접수 및 코드 즉시 비활성화 | ⬜ |
 | 분쟁 조정 시스템 | ⬜ |
 | 이상 거래 모니터링 알림 | ⬜ |
@@ -643,7 +645,8 @@ async function validateCode(codeKey: string): Promise<ValidationResult> {
 | POST | /api/seller/codes | 코드 발급 | ✅ |
 | GET | /api/seller/codes | 코드 목록 | ✅ |
 | PUT | /api/seller/codes/[id]/toggle | 코드 활성화/비활성화 | ✅ |
-| GET | /api/seller/orders | 주문 목록 (페이지네이션 + 상태 필터) | ✅ |
+| GET | /api/seller/orders | 주문 목록 (페이지네이션 + 상태 필터 + 검색 `?q=`) | ✅ |
+| GET | /api/seller/orders/[id] | 주문 상세 (셀러 소유 검증) | ✅ |
 | GET | /api/seller/orders/export | 배송지 CSV 다운로드 | ✅ |
 | POST | /api/seller/orders/[id]/tracking | 운송장 등록 | ✅ |
 | GET | /api/seller/settlements | 정산 내역 | ✅ |
@@ -657,7 +660,9 @@ async function validateCode(codeKey: string): Promise<ValidationResult> {
 |--------|----------|------|-----------|
 | GET | /api/admin/dashboard | 관리자 대시보드 | ✅ |
 | GET | /api/admin/sellers | 셀러 목록 | ✅ |
+| GET | /api/admin/sellers/[id] | 셀러 상세 (기본정보 + 통계) | ⬜ (Task 47A) |
 | PUT | /api/admin/sellers/[id] | 셀러 상태 변경 (승인/거부/정지) | ✅ |
+| GET | /api/admin/sellers/[id]/orders | 셀러의 주문 목록 (페이지네이션) | ⬜ (Task 47B) |
 | GET | /api/admin/orders | 주문 목록 | ✅ |
 | POST | /api/admin/orders/[id]/refund | 환불 처리 | ✅ |
 | GET | /api/admin/settlements | 정산 목록 | ✅ |
