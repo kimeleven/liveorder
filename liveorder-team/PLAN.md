@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 57 완료 확인, Task 58 스펙 수립: 셀러 코드 상세 QR 표시 + 코드별 주문 CSV 다운로드)_
+_최종 업데이트: 2026-04-10 (Task 58 완료 확인, Task 59 스펙 수립: 셀러 주문 날짜 범위 + 상품 필터 + CSV 필터링)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-09 (Task 57 완료 확인, Task 58 스펙 수립: 
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 57 진행) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 59 진행) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -51,6 +51,81 @@ _최종 업데이트: 2026-04-09 (Task 57 완료 확인, Task 58 스펙 수립: 
 | 55 | 셀러 코드 편집/삭제 — `PATCH /api/seller/codes/[id]` + `DELETE /api/seller/codes/[id]` + 편집 다이얼로그 + 삭제 버튼 |
 | 56 | 셀러 상품 활성/비활성 토글 — `POST /api/seller/products/[id]/toggle` + `?status` 필터 + 목록/상세 토글 버튼 |
 | 57 | 셀러 코드 목록 상태 필터 + 검색 — `GET /api/seller/codes` `?status` + `?q` 파라미터 + 필터 탭 + 검색창 |
+| 58 | 셀러 코드 상세 QR 코드 표시/다운로드 + `GET /api/seller/codes/[id]/orders/export` 코드별 주문 CSV 다운로드 |
+
+---
+
+## Task 59 — 셀러 주문 날짜 범위 필터 + 상품 필터 + CSV 필터링
+
+### 배경
+
+현재 셀러 주문 목록(`/seller/orders`)에서 필터 기능의 두 가지 공백:
+
+1. **날짜 범위 필터 없음**: 셀러가 특정 날짜의 라이브 방송 주문만 추려 배송지를 준비하고 싶을 때 방법 없음. 상태/검색 필터만 있고 날짜 기준 조회 불가.
+2. **상품별 필터 없음**: 여러 상품을 운영하는 셀러가 특정 상품의 주문만 볼 수 없음.
+3. **전체 CSV 내보내기가 필터를 무시**: 현재 주문 목록에 상태/검색 필터를 적용해도 "CSV 다운로드" 버튼은 항상 전체 주문을 내려받음. 필터 조건 그대로 내보내기 불가.
+
+### 목표
+
+- `GET /api/seller/orders`에 `?from=`, `?to=`, `?productId=` 파라미터 추가
+- `GET /api/seller/orders/export`도 동일 파라미터 지원 + 파일명에 날짜 범위 반영
+- `/seller/orders` 페이지에 날짜 범위 입력 + 상품 드롭다운 추가
+- CSV 다운로드 버튼이 현재 필터 상태를 그대로 export URL에 전달
+
+### 레이아웃 변경
+
+```
+/seller/orders
+┌──────────────────────────────────────────────────────────┐
+│ 주문 관리                        [CSV ▼][운송장 일괄 업로드] │
+│                                                           │
+│ [시작일: ____-__-__]  [종료일: ____-__-__]  [전체 상품 ▼] │  ← 신규
+│ [검색창]  [PAID] [배송중] [배송완료] ...                   │
+│                                                           │
+│ (기존 주문 테이블)                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 서브태스크
+
+#### 59A: `GET /api/seller/orders` — `?from=`, `?to=`, `?productId=` 추가
+
+**수정 파일:** `app/api/seller/orders/route.ts`
+
+날짜 범위와 상품 ID 필터를 기존 `where` 구성에 병합. productId는 `code.product.id`로 조건 추가.
+
+#### 59B: `GET /api/seller/orders/export` — 동일 필터 파라미터 지원
+
+**수정 파일:** `app/api/seller/orders/export/route.ts`
+
+`GET()` → `GET(req: NextRequest)` 변경 후 59A와 동일한 필터 로직 적용. 파일명에 날짜 범위 반영.
+
+#### 59C: `/seller/orders` — 날짜 범위 입력 + 상품 드롭다운 추가
+
+**수정 파일:** `app/seller/orders/page.tsx`
+
+- 마운트 시 상품 목록 로드 (`/api/seller/products?status=all&limit=100`)
+- `fromDate`, `toDate`, `productId` 상태 추가
+- `fetchOrders` 파라미터 확장 (하위 호환 유지)
+- 날짜 입력 + 상품 Select + "필터 초기화" 버튼 UI 추가
+- 30초 자동갱신 useEffect도 의존성에 날짜/상품 추가
+
+#### 59D: CSV 다운로드 버튼 → 현재 필터 반영
+
+**수정 파일:** `app/seller/orders/page.tsx`
+
+`handleExport` (또는 기존 다운로드 로직)에서 현재 필터를 URL 파라미터로 전달. 필터 있을 때 버튼 텍스트 "필터 조건으로 CSV 내보내기"로 변경.
+
+### 구현 순서
+
+59A → 59B → 59C → 59D
+
+### 주의사항
+
+- `products` 드롭다운에 `status=all` 사용 — 비활성 상품 주문도 조회 가능해야 함
+- 날짜 input은 네이티브 `<input type="date">` 사용 — 추가 패키지 불필요
+- `fromDate`/`toDate`가 30초 자동갱신 useEffect 의존성에도 포함되어야 함
+- `fetchOrders` 시그니처 확장 시 기존 호출부(3개 인자)와 하위 호환 필요
 
 ---
 

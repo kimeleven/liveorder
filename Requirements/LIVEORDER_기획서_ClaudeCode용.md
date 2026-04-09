@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-10 | v3.5 | Task 58 완료 (셀러 코드 상세 QR 코드 표시/다운로드 + 코드별 주문 CSV 다운로드). Task 59 스펙 수립: 셀러 주문 날짜 범위 필터(`?from=`, `?to=`) + 상품 필터(`?productId=`) + `GET /api/seller/orders/export` 필터 지원. |
 | 2026-04-10 | v3.4 | Task 57 완료 (셀러 코드 목록 상태 필터 + 검색). Task 58 스펙 수립: 셀러 코드 상세 페이지 QR 코드 표시/다운로드 + `GET /api/seller/codes/[id]/orders/export` 코드별 주문 CSV 다운로드. |
 | 2026-04-09 | v3.3 | Task 56 완료 (셀러 상품 활성/비활성 토글 + 목록 상태 필터). Task 57 스펙 수립: 셀러 코드 목록 상태 필터(`?status=active\|expired\|inactive\|all`) + 검색(`?q=`) 기능 추가. |
 | 2026-04-09 | v3.2 | Task 54+55 완료 (셀러 상품 상세 페이지, 셀러 코드 편집/삭제). Task 56 스펙 수립: 셀러 상품 활성/비활성 토글 (`POST /api/seller/products/[id]/toggle`) + 상품 목록 `?status` 필터 + 상품 목록/상세 토글 버튼 UI. |
@@ -309,7 +310,11 @@ function generateCode(sellerId: string): string {
 | 코드 편집(만료일/수량) + 삭제 — `/seller/codes/[id]` 다이얼로그 | ✅ (Task 55) |
 | 상품 활성/비활성 토글 (`POST /api/seller/products/[id]/toggle`) | ✅ (Task 56) |
 | 상품 목록 상태 필터 (활성/비활성/전체) | ✅ (Task 56) |
-| 코드 목록 상태 필터 (활성/만료/중지/전체) + 검색 | 🔧 (Task 57 진행 중) |
+| 코드 목록 상태 필터 (활성/만료/중지/전체) + 검색 | ✅ (Task 57) |
+| 코드 상세 페이지 QR 코드 표시/다운로드 | ✅ (Task 58) |
+| 코드별 주문 CSV 다운로드 (`GET /api/seller/codes/[id]/orders/export`) | ✅ (Task 58) |
+| 주문 목록 날짜 범위 필터 (`?from=`, `?to=`) + 상품 필터 (`?productId=`) | 🔧 (Task 59 진행 중) |
+| 주문 CSV 내보내기 날짜/상품/상태 필터 지원 | 🔧 (Task 59 진행 중) |
 | CS 접수 현황 및 처리 내역 | ⬜ |
 
 ### 3.2 구매자 기능
@@ -663,9 +668,10 @@ async function validateCode(codeKey: string): Promise<ValidationResult> {
 | POST | /api/seller/codes | 코드 발급 | ✅ |
 | GET | /api/seller/codes | 코드 목록 | ✅ |
 | PUT | /api/seller/codes/[id]/toggle | 코드 활성화/비활성화 | ✅ |
-| GET | /api/seller/orders | 주문 목록 (페이지네이션 + 상태 필터 + 검색 `?q=`) | ✅ |
+| GET | /api/seller/orders | 주문 목록 (페이지네이션 + `?status` + `?q=` + `?from=` + `?to=` + `?productId=`) | 🔧 (Task 59) |
 | GET | /api/seller/orders/[id] | 주문 상세 (셀러 소유 검증) | ✅ |
-| GET | /api/seller/orders/export | 배송지 CSV 다운로드 | ✅ |
+| GET | /api/seller/orders/export | 배송지 CSV 다운로드 (필터 파라미터 지원 예정) | 🔧 (Task 59) |
+| GET | /api/seller/codes/[id]/orders/export | 코드별 주문 CSV 다운로드 | ✅ (Task 58) |
 | POST | /api/seller/orders/[id]/tracking | 운송장 등록 | ✅ |
 | GET | /api/seller/settlements | 정산 내역 | ✅ |
 | GET | /api/seller/settlements/[id] | 정산 상세 | ✅ |

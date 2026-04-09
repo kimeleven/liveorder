@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 57 완료 확인 + Task 58 스펙 수립: 셀러 코드 상세 QR 코드 + 코드별 주문 CSV 다운로드)_
+_최종 업데이트: 2026-04-10 (Task 58 완료 확인 + Task 59 스펙 수립: 셀러 주문 날짜 범위 필터 + 상품 필터 + 전체 CSV 필터링)_
 
 ---
 
@@ -49,7 +49,327 @@ _최종 업데이트: 2026-04-09 (Task 57 완료 확인 + Task 58 스펙 수립:
 
 ## Dev1 현재 작업
 
-### Task 58: 셀러 코드 상세 QR 코드 표시 + 코드별 주문 CSV 다운로드
+### Task 59: 셀러 주문 목록 날짜 범위 필터 + 상품 필터 + 전체 CSV 필터링
+
+**목표:** 셀러가 주문 목록에서 날짜 범위(방송 날짜)와 상품으로 필터링하고, 해당 조건 그대로 CSV를 내보낼 수 있도록 한다.
+
+**배경:**
+- 셀러가 특정 날짜에 진행한 라이브 방송의 주문만 추려 배송지를 준비하고 싶을 때 현재 방법 없음
+- 여러 상품을 판매하는 셀러가 특정 상품 주문만 볼 수 없음
+- 현재 `GET /api/seller/orders/export`는 전체 주문 내보내기만 지원 — 현재 필터 조건 반영 안 됨
+- 현재 `GET /api/seller/orders/export`는 상태 필터, 날짜 필터, 상품 필터 미지원
+
+---
+
+#### 59A: `GET /api/seller/orders` — `?from=`, `?to=`, `?productId=` 파라미터 추가
+
+**수정 파일:** `app/api/seller/orders/route.ts`
+
+현재 `where` 구성에 날짜/상품 필터 추가:
+
+```typescript
+const from = searchParams.get('from')       // "2026-04-01" 형식
+const to = searchParams.get('to')           // "2026-04-10" 형식
+const productId = searchParams.get('productId')
+
+const dateFilter = (from || to) ? {
+  createdAt: {
+    ...(from ? { gte: new Date(from) } : {}),
+    ...(to   ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+  }
+} : {}
+
+// 기존 where의 code.product 조건에 productId 병합
+const where = {
+  code: {
+    product: {
+      sellerId: session.user.id,
+      ...(productId ? { id: productId } : {}),
+    },
+  },
+  ...statusFilter,
+  ...dateFilter,
+  ...(q ? {
+    OR: [
+      { buyerName: { contains: q, mode: 'insensitive' as const } },
+      { buyerPhone: { contains: q } },
+    ]
+  } : {}),
+}
+```
+
+**완료 조건:**
+- [x] `?from=2026-04-01` → 해당 날짜 00:00:00 이후 주문만 반환
+- [x] `?to=2026-04-10` → 해당 날짜 23:59:59 이전 주문만 반환
+- [x] `?from=&?to=` 동시 사용 가능 (날짜 범위)
+- [x] `?productId={uuid}` → 해당 상품 코드로 접수된 주문만 반환
+- [x] `?productId=` 미설정 시 기존 동작 유지 (전체 상품)
+- [x] 기존 `?status=`, `?q=` 파라미터 동작 유지
+- [x] 셀러 소유 검증 유지 (다른 셀러 상품 주문 노출 불가)
+
+---
+
+#### 59B: `GET /api/seller/orders/export` — 날짜/상품/상태/검색 필터 지원
+
+**수정 파일:** `app/api/seller/orders/export/route.ts`
+
+현재 `GET()` → `GET(req: NextRequest)`로 변경 후 59A와 동일한 필터 로직 적용:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { OrderStatus } from '@prisma/client'
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const statusParam = searchParams.get('status')
+  const statusFilter = statusParam && Object.values(OrderStatus).includes(statusParam as OrderStatus)
+    ? { status: statusParam as OrderStatus }
+    : {}
+  const q = searchParams.get('q')?.trim() ?? ''
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+  const productId = searchParams.get('productId')
+
+  const dateFilter = (from || to) ? {
+    createdAt: {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to   ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+    }
+  } : {}
+
+  const where = {
+    code: {
+      product: {
+        sellerId: session.user.id,
+        ...(productId ? { id: productId } : {}),
+      },
+    },
+    ...statusFilter,
+    ...dateFilter,
+    ...(q ? {
+      OR: [
+        { buyerName: { contains: q, mode: 'insensitive' as const } },
+        { buyerPhone: { contains: q } },
+      ]
+    } : {}),
+  }
+
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      code: { select: { codeKey: true, product: { select: { name: true } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10000,
+  })
+
+  const header = '주문ID,주문일시,상품명,코드,수령인,연락처,주소,상세주소,배송메모,수량,금액,상태,운송장,주문경로\n'
+  const rows = orders
+    .map((o) =>
+      [
+        o.id,
+        new Date(o.createdAt).toLocaleString('ko-KR'),
+        o.code.product.name,
+        o.code.codeKey,
+        o.buyerName,
+        o.buyerPhone,
+        o.address,
+        o.addressDetail ?? '',
+        o.memo ?? '',
+        o.quantity,
+        o.amount,
+        o.status,
+        o.trackingNo ?? '',
+        o.source === 'kakao' ? '카카오' : '웹',
+      ]
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    .join('\n')
+
+  const bom = '\uFEFF'
+  const csv = bom + header + rows
+  // 파일명에 날짜 범위 반영
+  const suffix = from && to ? `_${from}_${to}` : from ? `_from_${from}` : to ? `_to_${to}` : ''
+  const filename = `orders${suffix}_${new Date().toISOString().slice(0, 10)}.csv`
+
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+```
+
+**완료 조건:**
+- [x] 59A와 동일한 필터 파라미터(`?from=`, `?to=`, `?productId=`, `?status=`, `?q=`) 지원
+- [x] 파일명에 날짜 범위 반영 — 예: `orders_2026-04-01_2026-04-10_2026-04-10.csv`
+- [x] 필터 없으면 기존과 동일 (`orders_2026-04-10.csv`)
+- [x] UTF-8 BOM 유지, take:10000 상한 유지
+
+---
+
+#### 59C: `/seller/orders` — 날짜 범위 입력 + 상품 선택 드롭다운 추가
+
+**수정 파일:** `app/seller/orders/page.tsx`
+
+**추가 상태:**
+```typescript
+const [fromDate, setFromDate] = useState('')   // "YYYY-MM-DD" 형식
+const [toDate, setToDate] = useState('')
+const [productId, setProductId] = useState('')
+const [products, setProducts] = useState<{ id: string; name: string }[]>([])
+```
+
+**상품 목록 로드 (마운트 시 1회):**
+```typescript
+useEffect(() => {
+  fetch('/api/seller/products?status=all&limit=100')
+    .then(r => r.json())
+    .then(res => { if (res.data) setProducts(res.data) })
+    .catch(() => {})
+}, [])
+```
+
+**fetchOrders 시그니처 확장:**
+```typescript
+async function fetchOrders(
+  currentPage = page,
+  currentStatus = statusFilter,
+  currentQuery = searchQuery,
+  currentFrom = fromDate,
+  currentTo = toDate,
+  currentProductId = productId,
+) {
+  const params = new URLSearchParams({ page: String(currentPage), limit: '20' })
+  if (currentStatus) params.set('status', currentStatus)
+  if (currentQuery) params.set('q', currentQuery)
+  if (currentFrom) params.set('from', currentFrom)
+  if (currentTo) params.set('to', currentTo)
+  if (currentProductId) params.set('productId', currentProductId)
+  // ... 기존 fetch 로직
+}
+```
+
+**useEffect 의존성 추가:**
+```typescript
+useEffect(() => {
+  fetchOrders(page, statusFilter, searchQuery, fromDate, toDate, productId)
+}, [page, statusFilter, searchQuery, fromDate, toDate, productId])
+```
+
+**UI — 기존 검색창 + 상태 필터 위에 날짜/상품 필터 행 추가:**
+```tsx
+{/* 날짜 범위 + 상품 필터 */}
+<div className="flex flex-wrap gap-2 items-center">
+  <div className="flex items-center gap-1">
+    <Label className="text-xs text-muted-foreground whitespace-nowrap">시작일</Label>
+    <input
+      type="date"
+      className="border rounded px-2 py-1 text-sm"
+      value={fromDate}
+      max={toDate || undefined}
+      onChange={(e) => { setFromDate(e.target.value); setPage(1) }}
+    />
+  </div>
+  <div className="flex items-center gap-1">
+    <Label className="text-xs text-muted-foreground whitespace-nowrap">종료일</Label>
+    <input
+      type="date"
+      className="border rounded px-2 py-1 text-sm"
+      value={toDate}
+      min={fromDate || undefined}
+      onChange={(e) => { setToDate(e.target.value); setPage(1) }}
+    />
+  </div>
+  <Select value={productId} onValueChange={(v) => { setProductId(v === '_all' ? '' : v); setPage(1) }}>
+    <SelectTrigger className="w-[180px] text-sm">
+      <SelectValue placeholder="전체 상품" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="_all">전체 상품</SelectItem>
+      {products.map(p => (
+        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+  {(fromDate || toDate || productId) && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => { setFromDate(''); setToDate(''); setProductId(''); setPage(1) }}
+    >
+      필터 초기화
+    </Button>
+  )}
+</div>
+```
+
+**완료 조건:**
+- [x] 시작일/종료일 date 입력 — 변경 시 page=1 리셋 + 목록 재조회
+- [x] 상품 드롭다운 — 셀러 상품 목록 (status=all) 로드, "전체 상품" 기본값
+- [x] "필터 초기화" 버튼 — 날짜/상품 필터 중 하나라도 설정 시 표시
+- [x] 시작일 max = 종료일, 종료일 min = 시작일 (논리 오류 방지)
+- [x] 30초 자동갱신 useEffect도 fromDate/toDate/productId 의존성 반영
+
+---
+
+#### 59D: `/seller/orders` — "CSV 다운로드" 버튼에 현재 필터 반영
+
+**수정 파일:** `app/seller/orders/page.tsx`
+
+현재 CSV 다운로드 핸들러에서 현재 필터 파라미터를 export URL에 추가:
+
+```typescript
+async function handleExport() {
+  const params = new URLSearchParams()
+  if (statusFilter) params.set('status', statusFilter)
+  if (searchQuery) params.set('q', searchQuery)
+  if (fromDate) params.set('from', fromDate)
+  if (toDate) params.set('to', toDate)
+  if (productId) params.set('productId', productId)
+  window.location.href = `/api/seller/orders/export?${params.toString()}`
+}
+```
+
+버튼 텍스트:
+- 필터 있으면: "필터 조건으로 CSV 내보내기"
+- 필터 없으면: "전체 주문 CSV 다운로드"
+
+```tsx
+<Button variant="outline" size="sm" onClick={handleExport}>
+  <Download className="h-4 w-4 mr-1" />
+  {(statusFilter || searchQuery || fromDate || toDate || productId)
+    ? '필터 조건으로 CSV 내보내기'
+    : '전체 주문 CSV 다운로드'}
+</Button>
+```
+
+**완료 조건:**
+- [x] CSV 다운로드 시 현재 상태/검색어/날짜/상품 필터 모두 export URL에 전달
+- [x] 필터 있을 때 버튼 텍스트 "필터 조건으로 CSV 내보내기"로 변경
+- [x] 파일명에 날짜 범위 반영됨 (59B에서 처리)
+
+---
+
+**구현 순서:** 59A (API 확장) → 59B (export API 확장) → 59C (날짜/상품 UI) → 59D (CSV 버튼 연결)
+
+**주의사항:**
+- `products` 상태 로드 시 `/api/seller/products?status=all&limit=100` 사용 — 비활성 상품 주문도 볼 수 있어야 하므로 `status=all`
+- `date` input은 shadcn DatePicker 없이 네이티브 `<input type="date">` 사용 — 추가 패키지 불필요
+- `fromDate` / `toDate` 상태 변경 시 30초 자동갱신 useEffect도 같이 업데이트 필요 — 의존성 배열에 추가
+- 기존 `fetchOrders` 함수 시그니처가 `(currentPage, currentStatus, currentQuery)` 3개 파라미터 — 59C에서 6개로 확장 시 하위 호환성 유지 (기본값 활용)
+
+---
+
+## ✅ Task 58: 셀러 코드 상세 QR 코드 표시 + 코드별 주문 CSV 다운로드 (2026-04-10 완료)
 
 **목표:** 셀러가 `/seller/codes/[id]` 상세 페이지에서 QR 코드를 확인/다운로드하고, 해당 코드에 달린 주문만 CSV로 내려받을 수 있도록 한다.
 
@@ -102,10 +422,10 @@ useEffect(() => {
 ```
 
 **완료 조건:**
-- [ ] 코드 상세 페이지에 QR 코드 이미지가 표시됨 (256×256)
-- [ ] "QR 저장" 링크 클릭 시 `qr-{codeKey}.png` 파일로 다운로드
-- [ ] data가 null(로딩 중)일 때는 QR 표시 안 함 (깜빡임 없음)
-- [ ] `/order/{codeKey}` URL로 QR 생성 (기존 `/seller/codes/new` 패턴과 동일)
+- [x] 코드 상세 페이지에 QR 코드 이미지가 표시됨 (256×256)
+- [x] "QR 저장" 링크 클릭 시 `qr-{codeKey}.png` 파일로 다운로드
+- [x] data가 null(로딩 중)일 때는 QR 표시 안 함 (깜빡임 없음)
+- [x] `/order/{codeKey}` URL로 QR 생성 (기존 `/seller/codes/new` 패턴과 동일)
 
 ---
 
@@ -178,11 +498,11 @@ export async function GET(
 ```
 
 **완료 조건:**
-- [ ] `GET /api/seller/codes/[id]/orders/export` — 해당 코드 소유 셀러만 접근 가능
-- [ ] 해당 codeId 주문만 포함 (다른 코드 주문 포함 안 됨)
-- [ ] 파일명: `orders_{codeKey}_{날짜}.csv` (예: `orders_K9A-2503-X7YZ_2026-04-09.csv`)
-- [ ] UTF-8 BOM 포함, 컬럼: 주문ID/주문일시/수령인/연락처/주소/상세주소/배송메모/수량/금액/상태/운송장/주문경로
-- [ ] 소유 검증 실패 시 404 반환
+- [x] `GET /api/seller/codes/[id]/orders/export` — 해당 코드 소유 셀러만 접근 가능
+- [x] 해당 codeId 주문만 포함 (다른 코드 주문 포함 안 됨)
+- [x] 파일명: `orders_{codeKey}_{날짜}.csv` (예: `orders_K9A-2503-X7YZ_2026-04-09.csv`)
+- [x] UTF-8 BOM 포함, 컬럼: 주문ID/주문일시/수령인/연락처/주소/상세주소/배송메모/수량/금액/상태/운송장/주문경로
+- [x] 소유 검증 실패 시 404 반환
 
 ---
 
@@ -235,10 +555,10 @@ async function handleExport() {
 ```
 
 **완료 조건:**
-- [ ] "주문 다운로드" 버튼 — 주문 0건이면 disabled
-- [ ] 클릭 시 로딩 스피너 표시, 완료 시 CSV 파일 즉시 다운로드
-- [ ] 성공/실패 토스트 알림
-- [ ] `Download` 아이콘 — lucide-react import (58A에서 이미 추가됨)
+- [x] "주문 다운로드" 버튼 — 주문 0건이면 disabled
+- [x] 클릭 시 로딩 스피너 표시, 완료 시 CSV 파일 즉시 다운로드
+- [x] 성공/실패 토스트 알림
+- [x] `Download` 아이콘 — lucide-react import (58A에서 이미 추가됨)
 
 ---
 
