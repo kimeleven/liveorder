@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 44 완료 확인, Task 45 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 45 완료 확인, Task 46 스펙 수립)_
 
 ---
 
@@ -28,9 +28,10 @@ _최종 업데이트: 2026-04-09 (Task 44 완료 확인, Task 45 스펙 수립)_
 | Task 42 | 셀러 대시보드 채널별 통계 (카카오 vs 웹, 최근 30일) | ✅ 완료 |
 | Task 43 | 운송장 일괄 CSV 업로드 (export 주문ID, bulk API, UI 다이얼로그) | ✅ 완료 |
 | Task 44 | 셀러 주문 30초 자동갱신, PAID 배지 API+SellerShell 폴링, 대시보드 주별/월별 차트 | ✅ 완료 |
+| Task 45 | 셀러 설정 페이지 (`/seller/settings`), GET/PATCH `/api/seller/me`, 비밀번호 변경 API, 이용약관 체크박스 | ✅ 완료 |
 
 ### 현재 진행
-- **Task 45**: 셀러 설정 페이지 (현재 `/seller/settings` 클릭 시 404)
+- **Task 46**: 셀러 주문 상세 페이지 + 구매자명/전화번호 검색
 
 ---
 
@@ -66,14 +67,400 @@ _최종 업데이트: 2026-04-09 (Task 44 완료 확인, Task 45 스펙 수립)_
 [SellerShell 헤더] → 미처리(PAID) 주문 수 배지 (60초 폴링) ← Task 44 완료
 [셀러 대시보드 차트] → 주별/월별 탭 ← Task 44 완료
 
-[셀러 설정 페이지] → /seller/settings ← Task 45 예정
-[API] GET|PATCH /api/seller/me → 셀러 프로필 조회/수정 ← Task 45 예정
-[API] POST /api/seller/me/password → 비밀번호 변경 ← Task 45 예정
+[셀러 설정 페이지] → /seller/settings ← Task 45 완료
+[API] GET|PATCH /api/seller/me → 셀러 프로필 조회/수정 ← Task 45 완료
+[API] POST /api/seller/me/password → 비밀번호 변경 ← Task 45 완료
+
+[셀러 주문 상세] → /seller/orders/[id] ← Task 46 예정
+[API] GET /api/seller/orders/[id] → 주문 상세 조회 ← Task 46 예정
+[API] GET /api/seller/orders?q= → 구매자명/전화번호 검색 ← Task 46 예정
 ```
 
 ---
 
-## Phase 5: Task 45 상세 스펙
+## Phase 5: Task 46 상세 스펙
+
+### 배경 / 목적
+
+현재 셀러 주문 목록(`/seller/orders`)은 페이지별 리스트만 제공하고, 주문 행 클릭 시 아무런 동작이 없음. 셀러가 다음 작업을 하려면 상세 주문 정보가 필요:
+- 전체 배송지 주소 (목록에는 일부만 노출)
+- 메모 (목록에 없음)
+- 결제 수단/PG 거래ID 확인
+- 카카오 진입 여부 배지 확인
+
+또한 주문이 쌓일수록 특정 구매자의 주문을 찾기 어렵고, 이름/전화번호로 검색이 불가함.
+
+---
+
+### Task 46A: `GET /api/seller/orders/[id]` — 주문 상세 API
+
+**현황 확인:** `app/api/seller/orders/[id]/tracking/route.ts`는 있으나, `GET` 핸들러 없음.
+
+**파일:** `app/api/seller/orders/[id]/route.ts` — 신규 생성
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id,
+      code: { product: { sellerId: session.user.id } },
+    },
+    select: {
+      id: true,
+      buyerName: true,
+      buyerPhone: true,
+      address: true,
+      addressDetail: true,
+      memo: true,
+      quantity: true,
+      amount: true,
+      status: true,
+      pgTid: true,
+      trackingNo: true,
+      carrier: true,
+      source: true,
+      createdAt: true,
+      code: {
+        select: {
+          codeKey: true,
+          product: {
+            select: { name: true, price: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!order) {
+    return NextResponse.json({ error: '주문을 찾을 수 없습니다.' }, { status: 404 })
+  }
+
+  return NextResponse.json(order)
+}
+```
+
+**완료 조건:**
+- [ ] `GET /api/seller/orders/[id]` — 셀러 소유 주문만 조회, 전체 필드 반환
+- [ ] 다른 셀러 주문 조회 시 404
+
+---
+
+### Task 46B: `/seller/orders/[id]/page.tsx` — 주문 상세 페이지
+
+**파일:** `app/seller/orders/[id]/page.tsx` — 신규 생성
+
+**레이아웃:**
+```
+/seller/orders/[id]
+┌────────────────────────────────────────────────────┐
+│ ← 주문 목록으로       주문 #[주문번호 뒤 8자리]    │
+├─────────────────────────┬──────────────────────────┤
+│ 주문 정보               │ 구매자 / 배송지 정보     │
+│ 상품명: [상품명]        │ 구매자: 홍길동           │
+│ 코드: K9A-0409-X7YZ    │ 연락처: 010-1234-5678    │
+│ 수량: 3개              │ 주소: 서울시 강남구...    │
+│ 결제금액: ₩90,000      │ 상세주소: 101호           │
+│ 주문경로: 카카오 / 웹  │ 메모: 부재 시 문앞       │
+│ 결제일시: 2026-04-09   │                           │
+├─────────────────────────┴──────────────────────────┤
+│ 배송 정보                                           │
+│ 상태: [배지]  택배사: CJ대한통운  운송장: 1234567890│
+│ [배송추적 링크] (운송장 있을 때만)                   │
+└────────────────────────────────────────────────────┘
+```
+
+**구현 요점:**
+```typescript
+'use client'
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import SellerShell from '@/components/seller/SellerShell'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ArrowLeft } from 'lucide-react'
+import { CARRIER_URLS } from '@/lib/carrier-urls'  // 기존 파일 재사용
+
+type OrderDetail = {
+  id: string
+  buyerName: string
+  buyerPhone: string
+  address: string
+  addressDetail: string | null
+  memo: string | null
+  quantity: number
+  amount: number
+  status: string
+  pgTid: string | null
+  trackingNo: string | null
+  carrier: string | null
+  source: string
+  createdAt: string
+  code: { codeKey: string; product: { name: string; price: number } }
+}
+
+export default function OrderDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+  const [order, setOrder] = useState<OrderDetail | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/seller/orders/${id}`)
+      .then(r => {
+        if (!r.ok) throw new Error('주문을 찾을 수 없습니다.')
+        return r.json()
+      })
+      .then(setOrder)
+      .catch(e => setError(e.message))
+  }, [id])
+
+  if (error) return (
+    <SellerShell>
+      <div className="p-8 text-destructive">{error}</div>
+    </SellerShell>
+  )
+
+  if (!order) return (
+    <SellerShell>
+      <div className="p-8 text-muted-foreground">로딩 중...</div>
+    </SellerShell>
+  )
+
+  const trackingUrl = order.trackingNo && order.carrier
+    ? CARRIER_URLS[order.carrier]?.replace('{trackingNo}', order.trackingNo)
+    : null
+
+  return (
+    <SellerShell>
+      <div className="p-6 space-y-6 max-w-3xl">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            주문 목록
+          </Button>
+          <h1 className="text-xl font-bold">주문 #{order.id.slice(-8).toUpperCase()}</h1>
+          <Badge variant={statusVariant(order.status)}>{statusLabel(order.status)}</Badge>
+          {order.source === 'kakao' && <Badge variant="secondary">카카오</Badge>}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 주문 정보 카드 */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">주문 정보</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <Row label="상품명" value={order.code.product.name} />
+              <Row label="코드" value={order.code.codeKey} mono />
+              <Row label="수량" value={`${order.quantity}개`} />
+              <Row label="결제금액" value={`₩${order.amount.toLocaleString()}`} />
+              <Row label="결제일시" value={new Date(order.createdAt).toLocaleString('ko-KR')} />
+              {order.pgTid && <Row label="PG 거래ID" value={order.pgTid} mono />}
+            </CardContent>
+          </Card>
+
+          {/* 구매자 / 배송지 카드 */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">구매자 / 배송지</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <Row label="구매자" value={order.buyerName} />
+              <Row label="연락처" value={order.buyerPhone} />
+              <Row label="주소" value={order.address} />
+              {order.addressDetail && <Row label="상세주소" value={order.addressDetail} />}
+              {order.memo && <Row label="메모" value={order.memo} />}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 배송 정보 */}
+        {(order.trackingNo || order.carrier) && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">배송 정보</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {order.carrier && <Row label="택배사" value={order.carrier} />}
+              {order.trackingNo && <Row label="운송장번호" value={order.trackingNo} mono />}
+              {trackingUrl && (
+                <a href={trackingUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-block mt-2 text-primary underline text-sm">
+                  배송 추적 →
+                </a>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </SellerShell>
+  )
+}
+
+// 유틸 컴포넌트
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className={`font-medium text-right break-all ${mono ? 'font-mono text-xs' : ''}`}>{value}</span>
+    </div>
+  )
+}
+
+function statusLabel(s: string) {
+  const map: Record<string, string> = {
+    PAID: '결제완료', SHIPPING: '배송중', DELIVERED: '배송완료',
+    SETTLED: '정산완료', REFUNDED: '환불',
+  }
+  return map[s] ?? s
+}
+
+function statusVariant(s: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (s === 'REFUNDED') return 'destructive'
+  if (s === 'SETTLED') return 'outline'
+  if (s === 'PAID') return 'default'
+  return 'secondary'
+}
+```
+
+**완료 조건:**
+- [ ] `/seller/orders/[id]` — 주문 상세 페이지 렌더링
+- [ ] 기본 정보 + 구매자/배송지 + 배송 정보 3개 카드
+- [ ] 배송추적 링크 (운송장 있을 때만)
+- [ ] "주문 목록으로" 뒤로가기 버튼
+- [ ] 카카오 주문 배지 표시
+
+---
+
+### Task 46C: 주문 목록 검색 기능 추가
+
+**배경:** 주문이 많아질수록 특정 구매자 주문을 찾기 어려움. 이름 또는 전화번호로 검색 필요.
+
+#### 46C-1: API 검색 파라미터 추가
+
+**파일 수정:** `app/api/seller/orders/route.ts`
+
+현재 `statusParam`만 필터 처리. `q` 파라미터 추가:
+
+```typescript
+const statusParam = searchParams.get('status')
+const q = searchParams.get('q')?.trim() || ''
+
+// where 절에 추가
+const where: Prisma.OrderWhereInput = {
+  code: { product: { sellerId: session.user.id } },
+  ...(statusParam && validStatuses.includes(statusParam) ? { status: statusParam as OrderStatus } : {}),
+  ...(q ? {
+    OR: [
+      { buyerName: { contains: q, mode: 'insensitive' } },
+      { buyerPhone: { contains: q } },
+    ]
+  } : {}),
+}
+```
+
+#### 46C-2: 주문 목록 페이지 검색 UI 추가
+
+**파일 수정:** `app/seller/orders/page.tsx`
+
+기존 상태 필터 Select 옆에 검색 Input 추가:
+
+```typescript
+// state 추가
+const [searchQuery, setSearchQuery] = useState('')
+const [searchInput, setSearchInput] = useState('')  // 입력 버퍼
+
+// fetchOrders 파라미터에 q 추가
+const params = new URLSearchParams({ page: String(currentPage), limit: '20' })
+if (currentStatus) params.set('status', currentStatus)
+if (currentQuery) params.set('q', currentQuery)
+
+// UI: 상태 필터 바로 옆에 추가
+<form onSubmit={e => { e.preventDefault(); setSearchQuery(searchInput); setPage(1) }}
+  className="flex gap-2">
+  <Input
+    placeholder="구매자명 또는 전화번호"
+    value={searchInput}
+    onChange={e => setSearchInput(e.target.value)}
+    className="w-48"
+  />
+  <Button type="submit" variant="outline" size="sm">검색</Button>
+  {searchQuery && (
+    <Button type="button" variant="ghost" size="sm"
+      onClick={() => { setSearchInput(''); setSearchQuery(''); setPage(1) }}>
+      초기화
+    </Button>
+  )}
+</form>
+```
+
+**완료 조건:**
+- [ ] `GET /api/seller/orders?q=홍길동` — 구매자명 부분 일치 검색
+- [ ] `GET /api/seller/orders?q=010-1234` — 전화번호 부분 일치 검색
+- [ ] 주문 목록 페이지 검색 인풋 UI + 검색/초기화 버튼
+- [ ] 검색어 입력 후 Enter or 검색 버튼으로 실행
+
+---
+
+### Task 46D: 주문 목록 → 상세 링크 연결
+
+**파일 수정:** `app/seller/orders/page.tsx`
+
+현재 테이블 행을 클릭해도 아무것도 안 됨. 주문 상세 페이지 링크 추가.
+
+```tsx
+// TableRow에 클릭 핸들러 추가
+import { useRouter } from 'next/navigation'
+const router = useRouter()
+
+<TableRow
+  key={order.id}
+  className="cursor-pointer hover:bg-muted/50"
+  onClick={() => router.push(`/seller/orders/${order.id}`)}
+>
+```
+
+단, "운송장 등록" 버튼 클릭 시 상세 페이지로 이동하면 안 되므로 버튼에 `e.stopPropagation()` 추가:
+
+```tsx
+<Button
+  size="sm"
+  variant="outline"
+  onClick={e => {
+    e.stopPropagation()  // 행 클릭 이벤트 차단
+    openTrackingDialog(order.id)
+  }}
+>
+  운송장 등록
+</Button>
+```
+
+**완료 조건:**
+- [ ] 주문 목록 행 클릭 → `/seller/orders/[id]` 이동
+- [ ] 운송장 등록 버튼 클릭 시 페이지 이동 안 함 (stopPropagation)
+
+---
+
+### Task 46 전체 완료 조건
+
+- [ ] `app/api/seller/orders/[id]/route.ts` — GET 주문 상세 API 신규 (46A)
+- [ ] `app/seller/orders/[id]/page.tsx` — 주문 상세 페이지 신규 (46B)
+- [ ] `app/api/seller/orders/route.ts` — `q` 검색 파라미터 추가 (46C-1)
+- [ ] `app/seller/orders/page.tsx` — 검색 UI + 행 클릭 링크 (46C-2 + 46D)
+- [ ] git commit + push
+
+---
+
+## Phase 5: Task 45 상세 스펙 (완료됨)
 
 ### 배경 / 목적
 
