@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 52 스펙 수립: 관리자 상품/코드 관리 페이지)_
+_최종 업데이트: 2026-04-09 (Task 52 완료 확인 + Task 53 스펙 수립: 셀러 코드 상세 페이지)_
 
 ---
 
@@ -49,219 +49,222 @@ _최종 업데이트: 2026-04-09 (Task 52 스펙 수립: 관리자 상품/코드
 
 ## Dev1 현재 작업
 
-### Task 52: 관리자 상품/코드 관리 페이지
+### Task 53: 셀러 코드 상세 페이지 + 주문 연결 조회
 
-**우선순위:** HIGH
-**이유:** 관리자 패널에 상품 관리 기능이 없음. 어떤 상품이 플랫폼에서 활성화 중인지 확인/제어 불가. 관리자 패널 완성을 위해 필수.
+**목표:** 셀러가 코드 클릭 시 해당 코드의 주문 현황 및 통계를 즉시 확인할 수 있도록 구현
 
----
-
-#### 52A: `GET /api/admin/products` — 전체 상품 목록 API
-
-**신규 파일:** `app/api/admin/products/route.ts`
-
-**쿼리 파라미터:** `page` (기본 1), `limit` (기본 20), `isActive` (`'true'`|`'false'`|없으면 전체), `sellerId`, `q` (상품명 검색)
-
-**구현:**
-```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-import { parsePagination } from '@/lib/pagination'
-
-export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { searchParams } = new URL(req.url)
-  const { page, limit } = parsePagination(searchParams)
-  const isActiveParam = searchParams.get('isActive')
-  const sellerId = searchParams.get('sellerId')
-  const q = searchParams.get('q')
-
-  const where: Record<string, unknown> = {}
-  if (isActiveParam === 'true') where.isActive = true
-  if (isActiveParam === 'false') where.isActive = false
-  if (sellerId) where.sellerId = sellerId
-  if (q) where.name = { contains: q, mode: 'insensitive' }
-
-  const [items, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        stock: true,
-        isActive: true,
-        category: true,
-        imageUrl: true,
-        createdAt: true,
-        seller: { select: { id: true, name: true, email: true } },
-        _count: { select: { codes: true } },
-      },
-    }),
-    prisma.product.count({ where }),
-  ])
-
-  return NextResponse.json({ items, total, page, limit })
-}
-```
-
-**완료 조건:**
-- [ ] isActive/sellerId/q 필터 동작
-- [ ] 페이지네이션 (`parsePagination` 활용)
-- [ ] seller 정보 + _count.codes 포함
+**배경:**
+- 현재 `/seller/codes` 목록에서 코드 정보만 보임
+- 코드별 주문 현황 조회 불가 (`/seller/codes/[id]` 상세 페이지 없음)
+- `GET /api/seller/codes/[id]` 미구현 (PUT toggle만 있음)
 
 ---
 
-#### 52B: `GET/PATCH /api/admin/products/[id]` — 상품 상세 + 활성 토글 API
+#### 53A: `GET /api/seller/codes/[id]` 추가
 
-**신규 파일:** `app/api/admin/products/[id]/route.ts`
+**수정 파일:** `app/api/seller/codes/[id]/route.ts`
 
-**GET 반환:** 상품 전체 정보 + `seller` (id/name/email/phone) + `codes[]` (id/codeKey/expiresAt/maxQty/usedQty/isActive/createdAt)
-**PATCH 바디:** `{ isActive: boolean }` — 활성/비활성 토글
+기존 PUT(toggle) 핸들러는 유지하고 GET 핸들러 추가:
 
-**구현:**
 ```typescript
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { parsePagination, buildPaginationResponse } from '@/lib/pagination'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session || session.user.role !== 'admin') {
+  if (!session?.user?.id)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
 
   const { id } = await params
-  const product = await prisma.product.findUnique({
-    where: { id },
-    select: {
-      id: true, name: true, description: true, price: true, stock: true,
-      isActive: true, category: true, imageUrl: true, createdAt: true,
-      seller: { select: { id: true, name: true, email: true, phone: true } },
-      codes: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true, codeKey: true, expiresAt: true,
-          maxQty: true, usedQty: true, isActive: true, createdAt: true,
-        },
-      },
+  const { searchParams } = new URL(req.url)
+  const { page, limit, skip } = parsePagination(searchParams)
+
+  // 소유권 확인: product.sellerId === session.user.id
+  const code = await prisma.code.findFirst({
+    where: { id, product: { sellerId: session.user.id } },
+    include: {
+      product: { select: { id: true, name: true, price: true, imageUrl: true } },
     },
   })
+  if (!code)
+    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
 
-  if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(product)
-}
+  const [orders, total, statsAgg] = await prisma.$transaction([
+    prisma.order.findMany({
+      where: { codeId: id },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true, buyerName: true, buyerPhone: true,
+        quantity: true, amount: true, status: true, createdAt: true,
+      },
+    }),
+    prisma.order.count({ where: { codeId: id } }),
+    prisma.order.aggregate({
+      where: { codeId: id, status: { not: 'REFUNDED' } },
+      _sum: { amount: true },
+      _avg: { amount: true },
+      _count: { id: true },
+    }),
+  ])
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth()
-  if (!session || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const maskedOrders = orders.map((o) => ({
+    ...o,
+    buyerPhone: o.buyerPhone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '***-****-$3'),
+  }))
 
-  const { id } = await params
-  const { isActive } = await req.json()
-
-  if (typeof isActive !== 'boolean') {
-    return NextResponse.json({ error: 'isActive must be boolean' }, { status: 400 })
-  }
-
-  const product = await prisma.product.update({
-    where: { id },
-    data: { isActive },
-    select: { id: true, isActive: true, name: true },
+  return NextResponse.json({
+    code,
+    stats: {
+      totalOrders: statsAgg._count.id,
+      totalRevenue: statsAgg._sum.amount ?? 0,
+      avgOrderAmount: Math.round(statsAgg._avg.amount ?? 0),
+    },
+    orders: maskedOrders,
+    pagination: buildPaginationResponse(orders, total, page, limit).pagination,
   })
-
-  return NextResponse.json(product)
 }
 ```
 
 **완료 조건:**
-- [ ] GET — 상품 상세 + 코드 목록 반환
-- [ ] PATCH — isActive 토글 + 400/401/404 처리
+- [ ] 본인 코드만 조회 가능 (타 셀러 → 404)
+- [ ] stats: REFUNDED 제외한 통계 계산
+- [ ] buyerPhone 마스킹 (***-****-XXXX)
+- [ ] 페이지네이션 표준 응답
 
 ---
 
-#### 52C: `/admin/products` 목록 페이지
+#### 53B: `/seller/codes/[id]` 상세 페이지
 
-**신규 파일:** `app/admin/products/page.tsx`
+**신규 파일:** `app/seller/codes/[id]/page.tsx`
 
-**구현 포인트:**
-1. `'use client'` + `useRouter`
-2. 상태: `items`, `total`, `page`, `isActiveFilter: ''|'true'|'false'`, `q`
-3. 검색 디바운스 300ms
-4. 테이블 컬럼: 상품명(bold) / 셀러(muted, 클릭 → `/admin/sellers/[id]`) / 카테고리 / 가격(₩) / 재고 / 코드수 / 상태(Badge)
-5. 행 클릭 → `router.push('/admin/products/' + id)`
-6. 필터: 상태 Select + 검색 Input
-7. 페이지네이션 (이전/다음)
-8. Skeleton 5행 로딩
-9. `AdminShell` 래핑
+**타입 정의 (파일 상단):**
+```typescript
+interface CodeDetailResponse {
+  code: {
+    id: string
+    codeKey: string
+    expiresAt: string
+    maxQty: number
+    usedQty: number
+    isActive: boolean
+    createdAt: string
+    product: { id: string; name: string; price: number; imageUrl: string | null }
+  }
+  stats: { totalOrders: number; totalRevenue: number; avgOrderAmount: number }
+  orders: {
+    id: string; buyerName: string; buyerPhone: string
+    quantity: number; amount: number; status: string; createdAt: string
+  }[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+}
+```
+
+**UI 구조:**
+```
+SellerShell
+  └── div.space-y-6 (max-w-5xl mx-auto)
+        ├── [헤더 행]
+        │     Button variant="ghost" onClick → router.back()  (← 코드 목록)
+        │     h1: code.codeKey (text-2xl font-bold font-mono)
+        │     Badge: 활성/중지/만료/소진 상태
+        │     Button: 활성화/비활성화 (toggling 시 Loader2 + disabled)
+        │
+        ├── [코드 정보 카드] Card
+        │     Grid 2cols: 상품명(Link→/seller/products/[id]) | 유효기간
+        │     Grid 2cols: 최대수량(0=무제한) | 사용/잔여 수량
+        │
+        ├── [통계 3개] grid grid-cols-1 sm:grid-cols-3 gap-4
+        │     Card: 총 주문 수 (stats.totalOrders)
+        │     Card: 총 매출 (stats.totalRevenue.toLocaleString('ko-KR') + '원')
+        │     Card: 평균 주문금액 (stats.avgOrderAmount)
+        │
+        └── [주문 목록 카드] Card
+              CardHeader: "이 코드의 주문"
+              로딩: Skeleton 5행
+              빈 상태: "아직 이 코드로 들어온 주문이 없습니다."
+              Table:
+                columns: 주문번호(앞8자) | 구매자 | 전화 | 수량 | 금액 | 상태 | 일시
+                행 클릭: router.push('/seller/orders/' + order.id)
+                cursor-pointer hover:bg-muted/50
+              Pagination (totalPages > 1)
+```
+
+**상태 배지 헬퍼:**
+```typescript
+function getCodeStatus(code) {
+  if (!code.isActive) return { label: '중지', variant: 'secondary' }
+  if (new Date(code.expiresAt) < new Date()) return { label: '만료', variant: 'destructive' }
+  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return { label: '소진', variant: 'outline' }
+  return { label: '활성', variant: 'default' }
+}
+
+function getOrderStatusBadge(status: string) {
+  const map: Record<string, { label: string; variant: BadgeVariant }> = {
+    PAID: { label: '결제완료', variant: 'default' },
+    SHIPPING: { label: '배송중', variant: 'secondary' },
+    DELIVERED: { label: '배송완료', variant: 'outline' },
+    SETTLED: { label: '정산완료', variant: 'outline' },
+    REFUNDED: { label: '환불', variant: 'destructive' },
+  }
+  return map[status] ?? { label: status, variant: 'outline' }
+}
+```
 
 **완료 조건:**
-- [ ] 테이블 (상품명/셀러/카테고리/가격/재고/코드수/상태)
-- [ ] 활성 상태 필터 + 상품명 검색 (디바운스)
-- [ ] 행 클릭 → `/admin/products/[id]`
-- [ ] 셀러명 클릭 → `/admin/sellers/[sellerId]`
-- [ ] 페이지네이션 + Skeleton
+- [ ] 코드 정보 카드 (상품명 링크, 만료일, 수량)
+- [ ] 통계 3개 카드 (주문수/총매출/평균금액)
+- [ ] 주문 테이블 (행 클릭 → /seller/orders/[id])
+- [ ] Skeleton 로딩 (5행)
+- [ ] 빈 상태 메시지
+- [ ] 코드 토글 (sonner toast 성공/에러)
+- [ ] Pagination
 
 ---
 
-#### 52D: `/admin/products/[id]` 상세 페이지
+#### 53C: `/seller/codes` 목록 행 클릭 연결
 
-**신규 파일:** `app/admin/products/[id]/page.tsx`
+**수정 파일:** `app/seller/codes/page.tsx`
 
-**구현 포인트:**
-1. `'use client'` + `useParams` + `useRouter`
-2. `fetchProduct()` — `GET /api/admin/products/[id]`
-3. `handleToggleActive()` — `PATCH /api/admin/products/[id]` + `toast.success`/`toast.error`
-4. 상단: `← 뒤로` + 상품명 + 상태 Badge + 활성/비활성 버튼 (isPatching 로딩)
-5. 2컬럼:
-   - 좌: 상품 정보 Card (셀러명→클릭/이메일/전화, 카테고리, 가격, 재고, 설명, 이미지 미리보기, 등록일)
-   - 우: 코드 목록 Card (codeKey/만료일/수량/상태, 비활성은 opacity-50)
-6. Skeleton 로딩
-7. `AdminShell` 래핑
+- `useRouter` import 추가 (없으면)
+- `const router = useRouter()`
+- `<TableRow>` 에 `onClick={() => router.push('/seller/codes/' + code.id)}` 추가
+- `<TableRow className="cursor-pointer hover:bg-muted/50">` 클래스 추가
 
 **완료 조건:**
-- [ ] 상품 정보 표시 (이미지 미리보기 포함)
-- [ ] 셀러 정보 + 클릭 → `/admin/sellers/[id]`
-- [ ] 코드 목록 (codeKey, 만료일, 수량, 상태)
-- [ ] 활성/비활성 버튼 + 로딩 상태 + 토스트
+- [ ] 행 클릭 시 `/seller/codes/[id]` 이동
 
 ---
 
-#### 52E: AdminShell 사이드바 "상품 관리" 메뉴 추가
+**구현 순서:** 53A → 53B → 53C
 
-**수정 파일:** `components/admin/AdminShell.tsx` (실제 파일명 확인 후 수정)
-
-**변경 내용:**
-- 기존: 대시보드 → 셀러 관리 → 주문 관리 → 정산 관리
-- **변경:** 대시보드 → 셀러 관리 → **상품 관리** → 주문 관리 → 정산 관리
-- `href="/admin/products"`, 아이콘: `Package` from `lucide-react`
-
-**완료 조건:**
-- [ ] "상품 관리" 메뉴 항목 추가 (Package 아이콘)
-- [ ] active 하이라이트 동작
-
----
-
-**구현 순서:** 52A → 52B → 52C → 52D → 52E
+**주의사항:**
+- `sonner` 토스트 사용 (기존 코드와 통일)
+- `parsePagination`, `buildPaginationResponse` from `@/lib/pagination` 사용
+- Skeleton은 `@/components/ui/skeleton` import
 
 ---
 
 ## ✅ 완료된 작업
+
+### Task 53: 셀러 코드 상세 페이지 ⏳ (진행 예정)
+
+---
+
+### Task 52: 관리자 상품/코드 관리 페이지 ✅
+
+**완료일:** 2026-04-09
+
+- [x] 52A: `GET /api/admin/products` — isActive/sellerId/q 필터 + 페이지네이션
+- [x] 52B: `GET/PATCH /api/admin/products/[id]` — 상품 상세 + 활성 토글 (400/401/404 처리)
+- [x] 52C: `/admin/products` 목록 페이지 (테이블, 필터, 검색 디바운스 300ms, Skeleton 5행)
+- [x] 52D: `/admin/products/[id]` 상세 페이지 (이미지 미리보기, 코드 목록, 토스트)
+- [x] 52E: AdminShell 사이드바 "상품 관리" (Package 아이콘) 메뉴 추가
+
+---
 
 ### Task 51: 관리자 셀러 승인 즉시 처리 UX 개선 ✅
 

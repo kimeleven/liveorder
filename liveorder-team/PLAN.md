@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 51 완료 확인, Task 52 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 52 완료 확인, Task 53 스펙 수립)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-09 (Task 51 완료 확인, Task 52 스펙 수립)_
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 52 예정) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 53 예정) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -45,6 +45,7 @@ _최종 업데이트: 2026-04-09 (Task 51 완료 확인, Task 52 스펙 수립)_
 | 49 | 관리자 정산 상세 페이지 `/admin/settlements/[id]` + `GET/PATCH /api/admin/settlements/[id]` + 목록 행 클릭 연결 |
 | 50 | 관리자 대시보드 개선 — 매출 차트 + 승인 대기 셀러 + 최근 주문 + 통계 카드 6개 |
 | 51 | 관리자 셀러 승인 즉시 처리 UX 개선 — 로딩 상태 + 토스트 알림 + confirm 다이얼로그 |
+| 52 | 관리자 상품/코드 관리 페이지 `/admin/products` + `GET/PATCH /api/admin/products` + 사이드바 메뉴 추가 |
 
 ---
 
@@ -403,6 +404,235 @@ export async function PATCH(
 ### 구현 순서
 
 52A → 52B → 52C → 52D → 52E
+
+---
+
+---
+
+## Task 53 — 셀러 코드 상세 페이지 + 주문 연결 조회
+
+### 배경
+
+현재 셀러는 `/seller/codes` 목록에서 코드를 확인할 수 있으나, **코드별 주문 현황을 볼 방법이 없다.**
+- `/seller/codes/[id]` 상세 페이지 미구현
+- `GET /api/seller/codes/[id]` 미구현 (toggle만 있음)
+- 셀러가 "이 코드에서 얼마나 팔렸는지" 즉시 확인 불가
+
+### 목표
+
+- 셀러가 코드 클릭 → 코드 상세 정보 + 해당 코드로 들어온 주문 목록 확인
+- 코드 성과(매출, 주문 수) 즉시 파악
+- `/seller/codes` 목록 행 클릭 → 상세 페이지 연결
+
+### 레이아웃
+
+```
+/seller/codes/[id] (코드 상세)
+┌──────────────────────────────────────────────────────────┐
+│ ← 코드 목록     ABC-1234-XXXX   [활성 배지]   [토글 버튼]  │
+├────────────────────────────────────────────────────────── │
+│ [코드 정보 카드]                                           │
+│  상품명 | 유효기간 | 최대수량 | 사용수량 | 잔여수량         │
+├──────────────────────────────────────────────────────────┤
+│ [통계 카드 3개]                                           │
+│  총 주문 수 | 총 결제금액 | 평균 주문금액                   │
+├──────────────────────────────────────────────────────────┤
+│ [이 코드의 주문 목록]                                      │
+│ 주문번호(앞8자) | 구매자 | 수량 | 금액 | 상태 | 주문일시    │
+│ [행 클릭 → /seller/orders/[id]]                          │
+│ [페이지네이션]                                            │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 서브태스크
+
+---
+
+#### 53A: `GET /api/seller/codes/[id]` — 코드 상세 + 주문 목록
+
+**수정 파일:** `app/api/seller/codes/[id]/route.ts` (기존에 toggle만 있음 — GET 핸들러 추가)
+
+**쿼리 파라미터:**
+- `page` (기본값: 1)
+- `limit` (기본값: 20)
+
+**반환 타입:**
+```typescript
+{
+  code: {
+    id: string
+    codeKey: string
+    expiresAt: string
+    maxQty: number
+    usedQty: number
+    isActive: boolean
+    createdAt: string
+    product: { id: string; name: string; price: number; imageUrl: string | null }
+  }
+  stats: {
+    totalOrders: number
+    totalRevenue: number
+    avgOrderAmount: number
+  }
+  orders: {
+    id: string
+    buyerName: string
+    buyerPhone: string  // 뒷 4자리만: "***-****-1234"
+    quantity: number
+    amount: number
+    status: string
+    createdAt: string
+  }[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+```
+
+**구현 상세:**
+```typescript
+// 기존 route.ts에 GET 핸들러 추가 (PUT toggle은 유지)
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session?.user?.id)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const { searchParams } = new URL(req.url)
+  const { page, limit, skip } = parsePagination(searchParams)
+
+  // 코드 소유권 확인 (sellerId → product.sellerId)
+  const code = await prisma.code.findFirst({
+    where: { id, product: { sellerId: session.user.id } },
+    include: { product: { select: { id: true, name: true, price: true, imageUrl: true } } },
+  })
+  if (!code) return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
+
+  // 주문 목록 + 통계
+  const [orders, total, statsAgg] = await prisma.$transaction([
+    prisma.order.findMany({
+      where: { codeId: id },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        buyerName: true,
+        buyerPhone: true,
+        quantity: true,
+        amount: true,
+        status: true,
+        createdAt: true,
+      },
+    }),
+    prisma.order.count({ where: { codeId: id } }),
+    prisma.order.aggregate({
+      where: { codeId: id, status: { not: 'REFUNDED' } },
+      _sum: { amount: true },
+      _avg: { amount: true },
+      _count: { id: true },
+    }),
+  ])
+
+  // 전화번호 마스킹 (보안)
+  const maskedOrders = orders.map((o) => ({
+    ...o,
+    buyerPhone: o.buyerPhone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '***-****-$3'),
+  }))
+
+  return NextResponse.json({
+    code,
+    stats: {
+      totalOrders: statsAgg._count.id,
+      totalRevenue: statsAgg._sum.amount ?? 0,
+      avgOrderAmount: Math.round(statsAgg._avg.amount ?? 0),
+    },
+    orders: maskedOrders,
+    pagination: buildPaginationResponse(orders, total, page, limit).pagination,
+  })
+}
+```
+
+**완료 조건:**
+- [ ] 본인 코드만 조회 가능 (다른 셀러 코드 → 404)
+- [ ] 통계: totalOrders, totalRevenue, avgOrderAmount 정확히 계산 (REFUNDED 제외)
+- [ ] 전화번호 마스킹 (뒷 4자리만 노출)
+- [ ] 페이지네이션 정상 동작
+
+---
+
+#### 53B: `/seller/codes/[id]` 상세 페이지 UI
+
+**신규 파일:** `app/seller/codes/[id]/page.tsx`
+
+**컴포넌트 구조:**
+```
+SellerShell
+  └── div.space-y-6
+        ├── [헤더] ← 뒤로 + 코드키 + 상태 배지 + 토글 버튼
+        ├── [코드 정보 카드] Card
+        │     상품명 링크(/seller/products/[id]) | 만료일 | 최대/사용/잔여 수량
+        ├── [통계 카드 3개] grid grid-cols-3
+        │     총 주문 수 | 총 매출 | 평균 주문금액
+        └── [주문 테이블] Card
+              Table: 주문번호(앞8자) | 구매자 | 수량 | 금액 | 상태 | 일시
+              행 클릭 → router.push('/seller/orders/' + id)
+              Skeleton (5행) 로딩 중
+              빈 상태: "아직 주문이 없습니다"
+              Pagination
+```
+
+**상태 관리:**
+```typescript
+const [codeDetail, setCodeDetail] = useState<CodeDetailResponse | null>(null)
+const [loading, setLoading] = useState(true)
+const [toggling, setToggling] = useState(false)
+const [page, setPage] = useState(1)
+
+// 토글: PUT /api/seller/codes/[id]/toggle → isActive 업데이트 + 토스트
+```
+
+**UI 세부:**
+- 상태 배지: 활성(green) / 중지(gray) / 만료(red) / 소진(outline)
+- 토글 버튼: loading 시 Loader2 스피너 + disabled
+- 금액: `toLocaleString('ko-KR')` + "원"
+- 날짜: `new Date(createdAt).toLocaleString('ko-KR')`
+- 주문 상태 배지: PAID(blue) / SHIPPING(orange) / DELIVERED(green) / SETTLED(gray) / REFUNDED(red)
+
+**완료 조건:**
+- [ ] 코드 정보 카드 (상품명, 만료일, 수량 현황)
+- [ ] 통계 카드 3개 (주문수/총매출/평균금액)
+- [ ] 주문 테이블 (행 클릭 → 주문 상세)
+- [ ] Skeleton 로딩
+- [ ] 빈 상태 메시지
+- [ ] 코드 토글 (토스트 피드백)
+- [ ] Pagination
+
+---
+
+#### 53C: `/seller/codes` 목록 행 클릭 → 상세 연결
+
+**수정 파일:** `app/seller/codes/page.tsx`
+
+**변경 내용:**
+- 기존 테이블 행에 `onClick` 추가: `router.push('/seller/codes/' + code.id)`
+- 행에 `cursor-pointer hover:bg-muted/50` 클래스 추가
+- `useRouter` import 추가 (이미 있으면 재사용)
+
+**완료 조건:**
+- [ ] 행 클릭 시 `/seller/codes/[id]` 이동
+
+---
+
+### 구현 순서
+
+53A → 53B → 53C
 
 ---
 
