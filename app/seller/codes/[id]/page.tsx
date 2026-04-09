@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Pencil } from "lucide-react";
+import QRCode from "qrcode";
 import Pagination from "@/components/ui/Pagination";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
@@ -86,6 +87,8 @@ export default function CodeDetailPage() {
   const [editForm, setEditForm] = useState({ expiresAt: "", maxQty: "" });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -102,6 +105,12 @@ export default function CodeDetailPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!data) return;
+    const orderUrl = `${window.location.origin}/order/${data.code.codeKey}`;
+    QRCode.toDataURL(orderUrl, { width: 256, margin: 2 }).then(setQrDataUrl);
+  }, [data]);
 
   async function handleToggle() {
     if (!data) return;
@@ -167,6 +176,26 @@ export default function CodeDetailPage() {
       router.push("/seller/codes");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/seller/codes/${id}/orders/export`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `orders_${data?.code.codeKey ?? id}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('주문 내역을 다운로드했습니다.');
+    } catch {
+      toast.error('다운로드에 실패했습니다.');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -270,6 +299,19 @@ export default function CodeDetailPage() {
                   : `${code.maxQty - code.usedQty}개 남음`}
               </p>
             </div>
+            {qrDataUrl && (
+              <div className="flex flex-col items-center gap-2 pt-2 sm:col-span-2">
+                <img src={qrDataUrl} alt="QR Code" className="w-32 h-32 rounded border" />
+                <a
+                  href={qrDataUrl}
+                  download={`qr-${code.codeKey}.png`}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                >
+                  <Download className="h-3 w-3" />
+                  QR 저장
+                </a>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -302,7 +344,22 @@ export default function CodeDetailPage() {
         {/* 주문 목록 카드 */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">이 코드의 주문</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">주문 목록 ({stats.totalOrders}건)</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting || stats.totalOrders === 0}
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Download className="h-4 w-4 mr-1" />
+                )}
+                주문 다운로드
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {orders.length === 0 ? (
