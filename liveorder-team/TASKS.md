@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 53 완료 확인 + Task 54 스펙 수립: 셀러 상품 상세 페이지)_
+_최종 업데이트: 2026-04-09 (Task 54 완료 확인 + Task 55 스펙 수립: 셀러 코드 편집/삭제)_
 
 ---
 
@@ -49,26 +49,88 @@ _최종 업데이트: 2026-04-09 (Task 53 완료 확인 + Task 54 스펙 수립:
 
 ## Dev1 현재 작업
 
-### Task 54: 셀러 상품 상세 페이지
+### Task 55: 셀러 코드 편집 / 삭제
 
-**목표:** 셀러가 상품 카드 클릭 시 해당 상품의 코드 현황 및 주문 통계를 즉시 확인할 수 있도록 구현
+**목표:** 셀러가 생성된 코드의 만료일과 최대 수량을 수정하고, 주문이 없는 코드를 삭제할 수 있도록 구현
 
 **배경:**
-- 현재 `/seller/products` 목록(카드 그리드)에서 수정/삭제 버튼만 있음
-- `/seller/products/[id]` 상세 페이지 없음 (edit 페이지만 존재)
-- `GET /api/seller/products/[id]` 기본 정보만 반환 (코드 목록, 통계 없음)
-- 셀러가 상품별 코드 현황 및 주문 성과를 즉시 파악 불가
+- 현재 코드 생성 후 수정 방법 없음 (만료일/수량 오설정 시 삭제 후 재생성 필요)
+- `/seller/codes/[id]` 상세 페이지에 활성/비활성 토글만 있음
+- 코드 편집(PATCH)과 삭제(DELETE) API가 미구현
 
 ---
 
-#### 54A: `GET /api/seller/products/[id]` 확장
+#### 55A: `PATCH /api/seller/codes/[id]` — 코드 만료일/최대수량 수정
 
-**수정 파일:** `app/api/seller/products/[id]/route.ts`
+**수정 파일:** `app/api/seller/codes/[id]/route.ts`
 
-기존 GET 핸들러를 확장하여 코드 목록 + 주문 통계 반환:
+기존 GET 핸들러에 `PATCH` 추가:
 
 ```typescript
-export async function GET(
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session?.user?.id)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const body = await req.json()
+
+  const existing = await prisma.code.findFirst({
+    where: { id, product: { sellerId: session.user.id } },
+  })
+  if (!existing)
+    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
+
+  const { expiresAt, maxQty } = body
+  const updateData: Record<string, unknown> = {}
+
+  if (expiresAt !== undefined) {
+    const d = new Date(expiresAt)
+    if (isNaN(d.getTime()))
+      return NextResponse.json({ error: '유효하지 않은 날짜입니다.' }, { status: 400 })
+    if (d <= new Date())
+      return NextResponse.json({ error: '만료일은 현재 시간보다 이후여야 합니다.' }, { status: 400 })
+    updateData.expiresAt = d
+  }
+
+  if (maxQty !== undefined) {
+    const qty = Number(maxQty)
+    if (!Number.isInteger(qty) || qty < 0)
+      return NextResponse.json({ error: '최대 주문 수량은 0 이상의 정수여야 합니다.' }, { status: 400 })
+    if (qty > 0 && qty < existing.usedQty)
+      return NextResponse.json(
+        { error: `이미 ${existing.usedQty}건 주문됨. 최대 수량은 ${existing.usedQty} 이상이어야 합니다.` },
+        { status: 400 }
+      )
+    updateData.maxQty = qty
+  }
+
+  if (Object.keys(updateData).length === 0)
+    return NextResponse.json({ error: '변경할 필드가 없습니다.' }, { status: 400 })
+
+  const updated = await prisma.code.update({ where: { id }, data: updateData })
+  return NextResponse.json(updated)
+}
+```
+
+**완료 조건:**
+- [ ] 본인 코드만 수정 가능 (타인 → 404)
+- [ ] expiresAt 과거 날짜 → 400
+- [ ] maxQty 음수 → 400, usedQty보다 작으면 → 400
+- [ ] 0은 무제한으로 허용
+- [ ] 변경 필드 없으면 → 400
+
+---
+
+#### 55B: `DELETE /api/seller/codes/[id]` — 코드 삭제 (주문 없는 경우만)
+
+**수정 파일:** `app/api/seller/codes/[id]/route.ts` (55A와 같은 파일)
+
+```typescript
+export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -77,170 +139,221 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const product = await prisma.product.findFirst({
-    where: { id, sellerId: session.user.id },
-    include: {
-      codes: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          codeKey: true,
-          isActive: true,
-          expiresAt: true,
-          maxQty: true,
-          usedQty: true,
-          createdAt: true,
-          _count: { select: { orders: true } },
-        },
-      },
-    },
-  })
 
-  if (!product)
-    return NextResponse.json({ error: '상품을 찾을 수 없습니다.' }, { status: 404 })
-
-  // 상품 전체 주문 통계
-  const statsAgg = await prisma.order.aggregate({
-    where: { code: { productId: id }, status: { not: 'REFUNDED' } },
-    _sum: { amount: true },
-    _count: { id: true },
+  const code = await prisma.code.findFirst({
+    where: { id, product: { sellerId: session.user.id } },
+    include: { _count: { select: { orders: true } } },
   })
+  if (!code)
+    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
 
-  return NextResponse.json({
-    ...product,
-    stats: {
-      totalOrders: statsAgg._count.id,
-      totalRevenue: statsAgg._sum.amount ?? 0,
-      activeCodeCount: product.codes.filter((c) => c.isActive).length,
-    },
-  })
+  if (code._count.orders > 0)
+    return NextResponse.json(
+      { error: `주문이 ${code._count.orders}건 있는 코드는 삭제할 수 없습니다. 비활성화를 사용하세요.` },
+      { status: 409 }
+    )
+
+  await prisma.code.delete({ where: { id } })
+  return NextResponse.json({ success: true })
 }
 ```
 
 **완료 조건:**
-- [x] 본인 상품만 조회 가능 (타 셀러 → 404)
-- [x] codes 배열 포함 (id, codeKey, isActive, expiresAt, maxQty, usedQty, _count.orders)
-- [x] stats: totalOrders, totalRevenue (REFUNDED 제외), activeCodeCount
+- [ ] 본인 코드만 삭제 가능
+- [ ] 주문 있는 코드 → 409 에러 + 비활성화 안내 메시지
+- [ ] 주문 없는 코드 → 삭제 성공 `{ success: true }`
 
 ---
 
-#### 54B: `/seller/products/[id]` 상세 페이지
+#### 55C: `/seller/codes/[id]` 페이지에 편집 다이얼로그 + 삭제 버튼 추가
 
-**신규 파일:** `app/seller/products/[id]/page.tsx`
+**수정 파일:** `app/seller/codes/[id]/page.tsx`
 
-**타입 정의 (파일 상단):**
+**추가 import:**
 ```typescript
-interface ProductDetailResponse {
-  id: string
-  name: string
-  description: string | null
-  price: number
-  stock: number
-  category: string
-  imageUrl: string | null
-  isActive: boolean
-  createdAt: string
-  codes: {
-    id: string
-    codeKey: string
-    isActive: boolean
-    expiresAt: string
-    maxQty: number
-    usedQty: number
-    createdAt: string
-    _count: { orders: number }
-  }[]
-  stats: { totalOrders: number; totalRevenue: number; activeCodeCount: number }
+import { Pencil } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+```
+
+**추가 상태 (기존 toggling 아래에):**
+```typescript
+const [editOpen, setEditOpen] = useState(false)
+const [editForm, setEditForm] = useState({ expiresAt: '', maxQty: '' })
+const [saving, setSaving] = useState(false)
+const [deleting, setDeleting] = useState(false)
+```
+
+**fetch 함수 추출 (useEffect 내 fetch 로직을 별도 함수로):**
+```typescript
+const fetchData = useCallback(() => {
+  setLoading(true)
+  fetch(`/api/seller/codes/${id}?page=${page}`)
+    .then((r) => r.json())
+    .then((d) => setData(d))
+    .catch(() => toast.error('데이터를 불러오지 못했습니다.'))
+    .finally(() => setLoading(false))
+}, [id, page])
+
+useEffect(() => { fetchData() }, [fetchData])
+```
+(기존 useEffect에서 직접 호출하던 fetch를 위 fetchData로 교체)
+참고: `useCallback`은 `import { useEffect, useState, useCallback } from 'react'` 로 추가
+
+**편집 오픈 핸들러:**
+```typescript
+function openEdit() {
+  if (!data) return
+  const d = new Date(data.code.expiresAt)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  setEditForm({ expiresAt: local, maxQty: String(data.code.maxQty) })
+  setEditOpen(true)
 }
 ```
 
-**UI 구조:**
-```
-SellerShell
-  └── div.space-y-6 (max-w-5xl mx-auto)
-        ├── [헤더 행]
-        │     Button variant="ghost" onClick → router.back()  (← 상품 목록)
-        │     h1: product.name (text-2xl font-bold)
-        │     Badge: 판매중/중지
-        │     Button: "수정" → router.push('/seller/products/[id]/edit')
-        │
-        ├── [상품 정보 카드] Card (grid 2cols on md+)
-        │     좌: 이미지 (imageUrl 있으면 <img> 미리보기, 없으면 회색 placeholder)
-        │     우: 카테고리 | 가격(₩N.toLocaleString()) | 재고 | 등록일
-        │         설명(있으면)
-        │
-        ├── [통계 3개] grid grid-cols-1 sm:grid-cols-3 gap-4
-        │     Card: 총 주문 수 (stats.totalOrders)
-        │     Card: 총 매출 (stats.totalRevenue.toLocaleString('ko-KR') + '원')
-        │     Card: 활성 코드 수 (stats.activeCodeCount + '개')
-        │
-        └── [코드 목록 카드] Card
-              CardHeader: "발급된 코드" + Button "코드 추가" → router.push('/seller/codes/new?productId='+id)
-              로딩: Skeleton 3행
-              빈 상태: "발급된 코드가 없습니다." + "코드 발급하기" 버튼
-              Table:
-                columns: 코드 | 주문수 | 만료일 | 최대/사용 | 상태
-                행 클릭: router.push('/seller/codes/' + code.id)
-                cursor-pointer hover:bg-muted/50
-                비활성 코드: opacity-60
-```
-
-**상태 배지 헬퍼:**
+**저장 핸들러:**
 ```typescript
-function getCodeStatus(code: ProductDetailResponse['codes'][0]) {
-  if (!code.isActive) return { label: '중지', variant: 'secondary' as const }
-  if (new Date(code.expiresAt) < new Date()) return { label: '만료', variant: 'destructive' as const }
-  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return { label: '소진', variant: 'outline' as const }
-  return { label: '활성', variant: 'default' as const }
+async function handleSave() {
+  setSaving(true)
+  try {
+    const res = await fetch(`/api/seller/codes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : undefined,
+        maxQty: editForm.maxQty !== '' ? Number(editForm.maxQty) : undefined,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      toast.error(err.error ?? '저장 실패')
+      return
+    }
+    toast.success('코드가 수정되었습니다.')
+    setEditOpen(false)
+    fetchData()
+  } finally {
+    setSaving(false)
+  }
 }
 ```
 
-**완료 조건:**
-- [x] 상품 기본 정보 카드 (이미지 미리보기 또는 placeholder, 카테고리/가격/재고/설명)
-- [x] 통계 3개 카드 (총주문/총매출/활성코드수)
-- [x] 코드 목록 테이블 (행 클릭 → /seller/codes/[id])
-- [x] Skeleton 로딩 (3행)
-- [x] 빈 상태 메시지 + "코드 발급하기" 버튼
-- [x] 수정 버튼 → /seller/products/[id]/edit
-- [x] "코드 추가" 버튼 → /seller/codes/new (productId 쿼리스트링)
-
----
-
-#### 54C: `/seller/products` 목록 카드 클릭 → 상세 연결
-
-**수정 파일:** `app/seller/products/page.tsx`
-
-현재 카드 그리드 형태. 카드 자체를 클릭 → 상세 페이지 이동:
-
-- `<Card>` 에 `onClick={() => router.push('/seller/products/' + product.id)}` 추가
-- `<Card className="... cursor-pointer">` 클래스 추가
-- 기존 수정/삭제 버튼의 onClick에 `e.stopPropagation()` 추가 (카드 클릭 이벤트 버블링 방지)
-
+**삭제 핸들러:**
 ```typescript
-// 수정 버튼
-onClick={(e) => { e.stopPropagation(); router.push(`/seller/products/${product.id}/edit`) }}
+async function handleDelete() {
+  if (!confirm('이 코드를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+  setDeleting(true)
+  try {
+    const res = await fetch(`/api/seller/codes/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const err = await res.json()
+      toast.error(err.error ?? '삭제 실패')
+      return
+    }
+    toast.success('코드가 삭제되었습니다.')
+    router.push('/seller/codes')
+  } finally {
+    setDeleting(false)
+  }
+}
+```
 
-// 삭제 버튼
-onClick={(e) => { e.stopPropagation(); setDeleteTarget(product) }}
+**헤더 버튼 영역 변경 (기존 토글 버튼 앞에 편집/삭제 추가):**
+```typescript
+{/* 기존 토글 버튼 앞에 추가 */}
+<Button variant="outline" size="sm" onClick={openEdit} disabled={!data}>
+  <Pencil className="h-4 w-4 mr-1" /> 편집
+</Button>
+<Button
+  variant="outline"
+  size="sm"
+  className="text-destructive hover:text-destructive"
+  onClick={handleDelete}
+  disabled={deleting || !data}
+>
+  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
+</Button>
+{/* 기존 토글 버튼 */}
+```
+
+**편집 다이얼로그 JSX (return 문 내부, SellerShell 밖 또는 안에):**
+```typescript
+<Dialog open={editOpen} onOpenChange={setEditOpen}>
+  <DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle>코드 편집</DialogTitle>
+    </DialogHeader>
+    <div className="space-y-4 py-2">
+      <div className="space-y-2">
+        <Label>만료일</Label>
+        <Input
+          type="datetime-local"
+          value={editForm.expiresAt}
+          onChange={(e) => setEditForm((f) => ({ ...f, expiresAt: e.target.value }))}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>
+          최대 주문 수량{' '}
+          <span className="text-muted-foreground text-xs">(0 = 무제한)</span>
+        </Label>
+        <Input
+          type="number"
+          min={0}
+          value={editForm.maxQty}
+          onChange={(e) => setEditForm((f) => ({ ...f, maxQty: e.target.value }))}
+        />
+      </div>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+        취소
+      </Button>
+      <Button onClick={handleSave} disabled={saving}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 ```
 
 **완료 조건:**
-- [x] 카드 클릭 시 `/seller/products/[id]` 이동
-- [x] 수정/삭제 버튼 클릭 시 카드 onClick 버블링 방지
+- [ ] 편집 버튼 → 다이얼로그 오픈, 현재값(만료일/최대수량) 초기화
+- [ ] 저장 → PATCH 호출 → 성공 toast + 페이지 데이터 새로고침 (setData 재호출)
+- [ ] API 에러 시 toast.error로 서버 메시지 표시
+- [ ] 삭제 버튼 → confirm → DELETE 호출 → 성공 시 `/seller/codes` 이동
+- [ ] 주문 있는 코드 삭제 시도 → toast.error "주문이 N건 있는 코드는 삭제할 수 없습니다" 표시
+- [ ] loading 중이거나 data 없으면 편집/삭제 버튼 disabled
 
 ---
 
-**구현 순서:** 54A → 54B → 54C
+**구현 순서:** 55A → 55B (같은 파일) → 55C
 
 **주의사항:**
-- Skeleton은 `@/components/ui/skeleton` import
-- 통계 카드는 Task 53B와 동일한 패턴 유지
-- 코드 목록 테이블은 Task 53B의 코드 정보 카드를 참고
-- `sonner` 토스트 사용 (현재 Task에서 토스트 불필요하지만, 향후 확장 대비)
+- Dialog 컴포넌트: `@/components/ui/dialog` 사용 (shadcn/ui)
+- `useCallback` import 추가 필요
+- 기존 useEffect의 fetch 로직을 `fetchData` 함수로 추출해야 저장 후 새로고침 가능
+- Skeleton 및 Loader2는 이미 import 되어 있음
 
 ---
 
 ## ✅ 완료된 작업
+
+### Task 54: 셀러 상품 상세 페이지 ✅ (2026-04-09 완료)
+
+- [x] 54A: `GET /api/seller/products/[id]` 확장 (codes 목록 + 주문 통계)
+- [x] 54B: `/seller/products/[id]` 상세 페이지 (상품정보/통계3개/코드테이블/Skeleton/빈상태)
+- [x] 54C: `/seller/products` 카드 클릭 → 상세 연결 + 버튼 stopPropagation
+
+---
 
 ### Task 53: 셀러 코드 상세 페이지 ✅ (2026-04-09 완료)
 
