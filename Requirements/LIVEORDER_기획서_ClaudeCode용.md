@@ -1,5 +1,5 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v2.8
+## Claude Code 개발 기획서 v2.9
 > 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
@@ -8,7 +8,8 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
-| 2026-04-09 | v2.8 | Task 47+48 완료 (관리자 셀러 상세 `/admin/sellers/[id]`, 관리자 주문 상세 `/admin/orders/[id]`). Task 49 스펙 수립: 관리자 정산 상세 페이지 `/admin/settlements/[id]`, `GET /api/admin/settlements/[id]` (정산 요약 + 셀러 정보 + 포함 주문 목록), `PATCH /api/admin/settlements/[id]` (PENDING→COMPLETED 수동 완료 처리), 정산 목록 행 클릭 연결. |
+| 2026-04-09 | v2.9 | Task 49~50 완료 (관리자 정산 상세 `/admin/settlements/[id]`, 관리자 대시보드 개선 — 통계카드 6개+매출차트+승인대기셀러+최근주문). Task 51 스펙 수립: 관리자 상품 관리 페이지 `/admin/products`, `GET /api/admin/products` (검색+필터+페이지네이션), `PATCH /api/admin/products/[id]/toggle` (강제 비활성화 + 연결 코드 비활성화), AdminShell 네비게이션에 "상품 관리" 추가. |
+| 2026-04-09 | v2.8 | Task 47+48 완료 (관리자 셀러 상세 `/admin/sellers/[id]`, 관리자 주문 상세 `/admin/orders/[id]`). Task 49 스펙 수립: 관리자 정산 상세 페이지 `/admin/settlements/[id]`. |
 | 2026-04-09 | v2.7 | Task 46 완료 (셀러 주문 상세 페이지 `/seller/orders/[id]`, `GET /api/seller/orders/[id]`, 주문 검색 `?q=`). Task 47 스펙 수립: 관리자 셀러 상세 페이지 `/admin/sellers/[id]`, `GET /api/admin/sellers/[id]` (기본정보+통계), `GET /api/admin/sellers/[id]/orders` (주문목록), 셀러 목록 행 클릭 연결. |
 | 2026-04-09 | v2.6 | Task 45 완료 (셀러 설정 페이지, GET/PATCH /api/seller/me, 비밀번호 변경 API, 이용약관 동의 체크박스). Task 46 스펙 수립: 셀러 주문 상세 페이지 `/seller/orders/[id]`, 주문 상세 API, 주문 검색 (구매자명/전화번호). |
 | 2026-04-09 | v2.5 | Task 44 완료 (셀러 주문 30초 자동갱신, PAID 배지, 주별/월별 차트). Task 45 스펙 수립: 셀러 설정 페이지 `/seller/settings` (404 해소), PATCH/비밀번호 변경 API, 이용약관 동의 체크박스. |
@@ -355,12 +356,15 @@ function generateCode(sellerId: string): string {
 | 기능 | 구현 상태 |
 |------|-----------|
 | 관리자 로그인 (별도 인증) | ✅ |
-| 관리자 대시보드 | ✅ |
+| 관리자 대시보드 (통계카드 6개, 매출차트 일/주/월 토글, 승인대기셀러, 최근주문) | ✅ (Task 50) |
 | 셀러 승인/거부/정지 관리 + 감사 로그 | ✅ |
 | 셀러 사업자등록증 확인 | ✅ |
 | 주문 목록 조회 + 환불 UI (RefundDialog) | ✅ |
+| 주문 상세 페이지 `/admin/orders/[id]` (운송장+환불+타임라인) | ✅ (Task 48) |
 | 정산 조회 + 배치 실행 버튼 (CRON_SECRET 인증) | ✅ |
-| 셀러 상세 페이지 `/admin/sellers/[id]` (기본정보 + 통계 + 주문목록) | ⬜ (Task 47 예정) |
+| 정산 상세 페이지 `/admin/settlements/[id]` (PENDING→COMPLETED 처리) | ✅ (Task 49) |
+| 셀러 상세 페이지 `/admin/sellers/[id]` (기본정보 + 통계 + 주문목록) | ✅ (Task 47) |
+| 전체 상품 관리 페이지 `/admin/products` (검색+필터+강제 비활성화) | ⬜ (Task 51 예정) |
 | 불법 상품 신고 접수 및 코드 즉시 비활성화 | ⬜ |
 | 분쟁 조정 시스템 | ⬜ |
 | 이상 거래 모니터링 알림 | ⬜ |
