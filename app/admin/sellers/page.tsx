@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function AdminSellersPage() {
+  const router = useRouter();
   const [sellers, setSellers] = useState<SellerItem[]>([]);
   const [tab, setTab] = useState("ALL");
 
@@ -96,7 +98,11 @@ export default function AdminSellersPage() {
             </TableHeader>
             <TableBody>
               {filtered.map((seller) => (
-                <TableRow key={seller.id}>
+                <TableRow
+                  key={seller.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => router.push(`/admin/sellers/${seller.id}`)}
+                >
                   <TableCell className="font-medium">{seller.name}</TableCell>
                   <TableCell>{seller.repName}</TableCell>
                   <TableCell className="font-mono text-sm">
@@ -125,7 +131,7 @@ export default function AdminSellersPage() {
                   <TableCell className="text-sm">
                     {new Date(seller.createdAt).toLocaleDateString("ko-KR")}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
                       {seller.status === "PENDING" && (
                         <>

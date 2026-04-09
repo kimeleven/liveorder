@@ -3,6 +3,58 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const seller = await prisma.seller.findUnique({
+    where: { id },
+    select: {
+      id: true, email: true, name: true, repName: true,
+      businessNo: true, phone: true, address: true,
+      bankAccount: true, bankName: true, tradeRegNo: true,
+      bizRegImageUrl: true, status: true, plan: true,
+      emailVerified: true, createdAt: true,
+    },
+  });
+  if (!seller) return NextResponse.json({ error: "Not Found" }, { status: 404 });
+
+  const [productCount, codeCount, orderStats, pendingSettlement] = await Promise.all([
+    prisma.product.count({ where: { sellerId: id, isActive: true } }),
+    prisma.code.count({ where: { product: { sellerId: id }, isActive: true } }),
+    prisma.order.aggregate({
+      where: {
+        code: { product: { sellerId: id } },
+        status: { notIn: ["REFUNDED"] },
+      },
+      _count: { id: true },
+      _sum: { amount: true },
+    }),
+    prisma.settlement.aggregate({
+      where: { sellerId: id, status: "PENDING" },
+      _sum: { netAmount: true },
+    }),
+  ]);
+
+  return NextResponse.json({
+    ...seller,
+    stats: {
+      productCount,
+      codeCount,
+      orderCount: orderStats._count.id,
+      totalRevenue: orderStats._sum.amount ?? 0,
+      pendingSettlement: pendingSettlement._sum.netAmount ?? 0,
+    },
+  });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
