@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import AdminShell from '@/components/admin/AdminShell'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -84,6 +85,7 @@ export default function AdminSellerDetailPage() {
   const [orderPage, setOrderPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   const fetchSeller = useCallback(() => {
     fetch(`/api/admin/sellers/${id}`)
@@ -109,12 +111,33 @@ export default function AdminSellerDetailPage() {
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
   async function updateStatus(newStatus: string) {
-    await fetch(`/api/admin/sellers/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    fetchSeller()
+    if (!seller) return
+    const isDestructive = newStatus === 'SUSPENDED'
+    if (isDestructive) {
+      const actionLabel = '거부/정지'
+      const confirmed = window.confirm(
+        `${seller.name} 셀러를 ${actionLabel} 처리하시겠습니까?`
+      )
+      if (!confirmed) return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/admin/sellers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error('상태 변경 실패')
+      const label =
+        newStatus === 'APPROVED' ? '승인' : newStatus === 'SUSPENDED' ? '정지' : '복구'
+      toast.success(`셀러가 ${label} 처리되었습니다.`)
+      fetchSeller()
+    } catch {
+      toast.error('상태 변경에 실패했습니다. 다시 시도해 주세요.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) return <AdminShell><div className="p-8 text-muted-foreground">로딩 중...</div></AdminShell>
@@ -133,15 +156,23 @@ export default function AdminSellerDetailPage() {
           <div className="flex gap-2 ml-auto">
             {seller.status === 'PENDING' && (
               <>
-                <Button size="sm" onClick={() => updateStatus('APPROVED')}>승인</Button>
-                <Button size="sm" variant="destructive" onClick={() => updateStatus('SUSPENDED')}>거부</Button>
+                <Button size="sm" disabled={submitting} onClick={() => updateStatus('APPROVED')}>
+                  {submitting ? '처리 중...' : '승인'}
+                </Button>
+                <Button size="sm" variant="destructive" disabled={submitting} onClick={() => updateStatus('SUSPENDED')}>
+                  거부
+                </Button>
               </>
             )}
             {seller.status === 'APPROVED' && (
-              <Button size="sm" variant="destructive" onClick={() => updateStatus('SUSPENDED')}>정지</Button>
+              <Button size="sm" variant="destructive" disabled={submitting} onClick={() => updateStatus('SUSPENDED')}>
+                {submitting ? '처리 중...' : '정지'}
+              </Button>
             )}
             {seller.status === 'SUSPENDED' && (
-              <Button size="sm" variant="outline" onClick={() => updateStatus('APPROVED')}>복구</Button>
+              <Button size="sm" variant="outline" disabled={submitting} onClick={() => updateStatus('APPROVED')}>
+                {submitting ? '처리 중...' : '복구'}
+              </Button>
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,7 @@ export default function AdminSellersPage() {
   const router = useRouter();
   const [sellers, setSellers] = useState<SellerItem[]>([]);
   const [tab, setTab] = useState("ALL");
+  const [submitting, setSubmitting] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/admin/sellers")
@@ -54,15 +56,44 @@ export default function AdminSellersPage() {
       .catch(() => {});
   }, []);
 
-  async function updateStatus(id: string, status: string) {
-    await fetch(`/api/admin/sellers/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    setSellers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s))
-    );
+  async function updateStatus(id: string, status: string, sellerName: string) {
+    const isDestructive = status === "SUSPENDED";
+    if (isDestructive) {
+      const action = status === "SUSPENDED" ? "거부/정지" : "복구";
+      const confirmed = window.confirm(
+        `${sellerName} 셀러를 ${action} 처리하시겠습니까?`
+      );
+      if (!confirmed) return;
+    }
+
+    setSubmitting((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/admin/sellers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("상태 변경 실패");
+
+      setSellers((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status } : s))
+      );
+      const actionLabel =
+        status === "APPROVED"
+          ? "승인"
+          : status === "SUSPENDED"
+          ? "정지"
+          : "복구";
+      toast.success(`${sellerName} 셀러가 ${actionLabel} 처리되었습니다.`);
+    } catch {
+      toast.error("상태 변경에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setSubmitting((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
   const filtered =
@@ -97,85 +128,105 @@ export default function AdminSellersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((seller) => (
-                <TableRow
-                  key={seller.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => router.push(`/admin/sellers/${seller.id}`)}
-                >
-                  <TableCell className="font-medium">{seller.name}</TableCell>
-                  <TableCell>{seller.repName}</TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {seller.businessNo}
-                  </TableCell>
-                  <TableCell>{seller.email}</TableCell>
-                  <TableCell>
-                    {seller.bizRegImageUrl ? (
-                      <a
-                        href={seller.bizRegImageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 underline"
-                      >
-                        보기
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">미첨부</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant[seller.status]}>
-                      {statusLabel[seller.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {new Date(seller.createdAt).toLocaleDateString("ko-KR")}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <div className="flex gap-2">
-                      {seller.status === "PENDING" && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => updateStatus(seller.id, "APPROVED")}
-                          >
-                            승인
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() =>
-                              updateStatus(seller.id, "SUSPENDED")
-                            }
-                          >
-                            거부
-                          </Button>
-                        </>
-                      )}
-                      {seller.status === "APPROVED" && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() =>
-                            updateStatus(seller.id, "SUSPENDED")
-                          }
-                        >
-                          정지
-                        </Button>
-                      )}
-                      {seller.status === "SUSPENDED" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateStatus(seller.id, "APPROVED")}
-                        >
-                          복구
-                        </Button>
-                      )}
-                    </div>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    셀러가 없습니다.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filtered.map((seller) => {
+                  const isLoading = submitting.has(seller.id);
+                  return (
+                    <TableRow
+                      key={seller.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/admin/sellers/${seller.id}`)}
+                    >
+                      <TableCell className="font-medium">{seller.name}</TableCell>
+                      <TableCell>{seller.repName}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {seller.businessNo}
+                      </TableCell>
+                      <TableCell>{seller.email}</TableCell>
+                      <TableCell>
+                        {seller.bizRegImageUrl ? (
+                          <a
+                            href={seller.bizRegImageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            보기
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">미첨부</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusVariant[seller.status]}>
+                          {statusLabel[seller.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(seller.createdAt).toLocaleDateString("ko-KR")}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-2">
+                          {seller.status === "PENDING" && (
+                            <>
+                              <Button
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() =>
+                                  updateStatus(seller.id, "APPROVED", seller.name)
+                                }
+                              >
+                                {isLoading ? "처리 중..." : "승인"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={isLoading}
+                                onClick={() =>
+                                  updateStatus(seller.id, "SUSPENDED", seller.name)
+                                }
+                              >
+                                거부
+                              </Button>
+                            </>
+                          )}
+                          {seller.status === "APPROVED" && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={isLoading}
+                              onClick={() =>
+                                updateStatus(seller.id, "SUSPENDED", seller.name)
+                              }
+                            >
+                              {isLoading ? "처리 중..." : "정지"}
+                            </Button>
+                          )}
+                          {seller.status === "SUSPENDED" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isLoading}
+                              onClick={() =>
+                                updateStatus(seller.id, "APPROVED", seller.name)
+                              }
+                            >
+                              {isLoading ? "처리 중..." : "복구"}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </Card>
