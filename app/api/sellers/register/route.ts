@@ -19,11 +19,19 @@ export async function POST(req: NextRequest) {
       bankName,
       tradeRegNo,
       bizRegImageUrl,
+      termsAgreed,
     } = body;
 
     if (!email || !password || !businessNo || !name || !repName || !address || !phone || !bizRegImageUrl) {
       return NextResponse.json(
         { error: "필수 항목을 모두 입력해주세요. (사업자등록증 이미지 포함)" },
+        { status: 400 }
+      );
+    }
+
+    if (!termsAgreed) {
+      return NextResponse.json(
+        { error: '이용약관 동의가 필요합니다.' },
         { status: 400 }
       );
     }
@@ -62,6 +70,7 @@ export async function POST(req: NextRequest) {
         bankName,
         tradeRegNo,
         bizRegImageUrl,
+        termsAgreedAt: new Date(),
         status: "PENDING",
         emailVerified: false,
         emailVerifyToken,

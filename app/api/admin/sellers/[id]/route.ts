@@ -20,7 +20,7 @@ export async function GET(
       id: true, email: true, name: true, repName: true,
       businessNo: true, phone: true, address: true,
       bankAccount: true, bankName: true, tradeRegNo: true,
-      bizRegImageUrl: true, status: true, plan: true,
+      bizRegImageUrl: true, termsAgreedAt: true, status: true, plan: true,
       emailVerified: true, createdAt: true,
     },
   });

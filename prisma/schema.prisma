@@ -37,6 +37,7 @@ model Seller {
   bankName     String?  @map("bank_name") @db.VarChar(20)
   tradeRegNo         String?  @map("trade_reg_no") @db.VarChar(50) // 통신판매업신고번호
   bizRegImageUrl     String?  @map("biz_reg_image_url") // 사업자등록증 이미지 URL
+  termsAgreedAt      DateTime? @map("terms_agreed_at") @db.Timestamptz // 이용약관 동의 일시
   emailVerified      Boolean  @default(false) @map("email_verified")
   emailVerifyToken          String?   @map("email_verify_token") @db.VarChar(100)
   emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz

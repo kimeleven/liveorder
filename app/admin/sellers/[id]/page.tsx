@@ -26,6 +26,7 @@ type SellerDetail = {
   status: string
   plan: string | null
   emailVerified: boolean
+  termsAgreedAt: string | null
   createdAt: string
   stats: {
     productCount: number
@@ -204,6 +205,18 @@ export default function AdminSellerDetailPage() {
                   </a>
                 </div>
               )}
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground shrink-0">약관 동의</span>
+                <span className="font-medium text-right">
+                  {seller.termsAgreedAt ? (
+                    new Date(seller.termsAgreedAt).toLocaleString('ko-KR')
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                      미동의
+                    </span>
+                  )}
+                </span>
+              </div>
               <InfoRow label="가입일" value={new Date(seller.createdAt).toLocaleDateString('ko-KR')} />
             </CardContent>
           </Card>
