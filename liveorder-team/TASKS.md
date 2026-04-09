@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 52 완료 확인 + Task 53 스펙 수립: 셀러 코드 상세 페이지)_
+_최종 업데이트: 2026-04-09 (Task 53 완료 확인 + Task 54 스펙 수립: 셀러 상품 상세 페이지)_
 
 ---
 
@@ -49,28 +49,27 @@ _최종 업데이트: 2026-04-09 (Task 52 완료 확인 + Task 53 스펙 수립:
 
 ## Dev1 현재 작업
 
-### Task 53: 셀러 코드 상세 페이지 + 주문 연결 조회
+### Task 54: 셀러 상품 상세 페이지
 
-**목표:** 셀러가 코드 클릭 시 해당 코드의 주문 현황 및 통계를 즉시 확인할 수 있도록 구현
+**목표:** 셀러가 상품 카드 클릭 시 해당 상품의 코드 현황 및 주문 통계를 즉시 확인할 수 있도록 구현
 
 **배경:**
-- 현재 `/seller/codes` 목록에서 코드 정보만 보임
-- 코드별 주문 현황 조회 불가 (`/seller/codes/[id]` 상세 페이지 없음)
-- `GET /api/seller/codes/[id]` 미구현 (PUT toggle만 있음)
+- 현재 `/seller/products` 목록(카드 그리드)에서 수정/삭제 버튼만 있음
+- `/seller/products/[id]` 상세 페이지 없음 (edit 페이지만 존재)
+- `GET /api/seller/products/[id]` 기본 정보만 반환 (코드 목록, 통계 없음)
+- 셀러가 상품별 코드 현황 및 주문 성과를 즉시 파악 불가
 
 ---
 
-#### 53A: `GET /api/seller/codes/[id]` 추가
+#### 54A: `GET /api/seller/products/[id]` 확장
 
-**수정 파일:** `app/api/seller/codes/[id]/route.ts`
+**수정 파일:** `app/api/seller/products/[id]/route.ts`
 
-기존 PUT(toggle) 핸들러는 유지하고 GET 핸들러 추가:
+기존 GET 핸들러를 확장하여 코드 목록 + 주문 통계 반환:
 
 ```typescript
-import { parsePagination, buildPaginationResponse } from '@/lib/pagination'
-
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
@@ -78,88 +77,80 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const { searchParams } = new URL(req.url)
-  const { page, limit, skip } = parsePagination(searchParams)
-
-  // 소유권 확인: product.sellerId === session.user.id
-  const code = await prisma.code.findFirst({
-    where: { id, product: { sellerId: session.user.id } },
+  const product = await prisma.product.findFirst({
+    where: { id, sellerId: session.user.id },
     include: {
-      product: { select: { id: true, name: true, price: true, imageUrl: true } },
+      codes: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          codeKey: true,
+          isActive: true,
+          expiresAt: true,
+          maxQty: true,
+          usedQty: true,
+          createdAt: true,
+          _count: { select: { orders: true } },
+        },
+      },
     },
   })
-  if (!code)
-    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
 
-  const [orders, total, statsAgg] = await prisma.$transaction([
-    prisma.order.findMany({
-      where: { codeId: id },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: {
-        id: true, buyerName: true, buyerPhone: true,
-        quantity: true, amount: true, status: true, createdAt: true,
-      },
-    }),
-    prisma.order.count({ where: { codeId: id } }),
-    prisma.order.aggregate({
-      where: { codeId: id, status: { not: 'REFUNDED' } },
-      _sum: { amount: true },
-      _avg: { amount: true },
-      _count: { id: true },
-    }),
-  ])
+  if (!product)
+    return NextResponse.json({ error: '상품을 찾을 수 없습니다.' }, { status: 404 })
 
-  const maskedOrders = orders.map((o) => ({
-    ...o,
-    buyerPhone: o.buyerPhone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '***-****-$3'),
-  }))
+  // 상품 전체 주문 통계
+  const statsAgg = await prisma.order.aggregate({
+    where: { code: { productId: id }, status: { not: 'REFUNDED' } },
+    _sum: { amount: true },
+    _count: { id: true },
+  })
 
   return NextResponse.json({
-    code,
+    ...product,
     stats: {
       totalOrders: statsAgg._count.id,
       totalRevenue: statsAgg._sum.amount ?? 0,
-      avgOrderAmount: Math.round(statsAgg._avg.amount ?? 0),
+      activeCodeCount: product.codes.filter((c) => c.isActive).length,
     },
-    orders: maskedOrders,
-    pagination: buildPaginationResponse(orders, total, page, limit).pagination,
   })
 }
 ```
 
 **완료 조건:**
-- [ ] 본인 코드만 조회 가능 (타 셀러 → 404)
-- [ ] stats: REFUNDED 제외한 통계 계산
-- [ ] buyerPhone 마스킹 (***-****-XXXX)
-- [ ] 페이지네이션 표준 응답
+- [x] 본인 상품만 조회 가능 (타 셀러 → 404)
+- [x] codes 배열 포함 (id, codeKey, isActive, expiresAt, maxQty, usedQty, _count.orders)
+- [x] stats: totalOrders, totalRevenue (REFUNDED 제외), activeCodeCount
 
 ---
 
-#### 53B: `/seller/codes/[id]` 상세 페이지
+#### 54B: `/seller/products/[id]` 상세 페이지
 
-**신규 파일:** `app/seller/codes/[id]/page.tsx`
+**신규 파일:** `app/seller/products/[id]/page.tsx`
 
 **타입 정의 (파일 상단):**
 ```typescript
-interface CodeDetailResponse {
-  code: {
+interface ProductDetailResponse {
+  id: string
+  name: string
+  description: string | null
+  price: number
+  stock: number
+  category: string
+  imageUrl: string | null
+  isActive: boolean
+  createdAt: string
+  codes: {
     id: string
     codeKey: string
+    isActive: boolean
     expiresAt: string
     maxQty: number
     usedQty: number
-    isActive: boolean
     createdAt: string
-    product: { id: string; name: string; price: number; imageUrl: string | null }
-  }
-  stats: { totalOrders: number; totalRevenue: number; avgOrderAmount: number }
-  orders: {
-    id: string; buyerName: string; buyerPhone: string
-    quantity: number; amount: number; status: string; createdAt: string
+    _count: { orders: number }
   }[]
-  pagination: { page: number; limit: number; total: number; totalPages: number }
+  stats: { totalOrders: number; totalRevenue: number; activeCodeCount: number }
 }
 ```
 
@@ -168,89 +159,94 @@ interface CodeDetailResponse {
 SellerShell
   └── div.space-y-6 (max-w-5xl mx-auto)
         ├── [헤더 행]
-        │     Button variant="ghost" onClick → router.back()  (← 코드 목록)
-        │     h1: code.codeKey (text-2xl font-bold font-mono)
-        │     Badge: 활성/중지/만료/소진 상태
-        │     Button: 활성화/비활성화 (toggling 시 Loader2 + disabled)
+        │     Button variant="ghost" onClick → router.back()  (← 상품 목록)
+        │     h1: product.name (text-2xl font-bold)
+        │     Badge: 판매중/중지
+        │     Button: "수정" → router.push('/seller/products/[id]/edit')
         │
-        ├── [코드 정보 카드] Card
-        │     Grid 2cols: 상품명(Link→/seller/products/[id]) | 유효기간
-        │     Grid 2cols: 최대수량(0=무제한) | 사용/잔여 수량
+        ├── [상품 정보 카드] Card (grid 2cols on md+)
+        │     좌: 이미지 (imageUrl 있으면 <img> 미리보기, 없으면 회색 placeholder)
+        │     우: 카테고리 | 가격(₩N.toLocaleString()) | 재고 | 등록일
+        │         설명(있으면)
         │
         ├── [통계 3개] grid grid-cols-1 sm:grid-cols-3 gap-4
         │     Card: 총 주문 수 (stats.totalOrders)
         │     Card: 총 매출 (stats.totalRevenue.toLocaleString('ko-KR') + '원')
-        │     Card: 평균 주문금액 (stats.avgOrderAmount)
+        │     Card: 활성 코드 수 (stats.activeCodeCount + '개')
         │
-        └── [주문 목록 카드] Card
-              CardHeader: "이 코드의 주문"
-              로딩: Skeleton 5행
-              빈 상태: "아직 이 코드로 들어온 주문이 없습니다."
+        └── [코드 목록 카드] Card
+              CardHeader: "발급된 코드" + Button "코드 추가" → router.push('/seller/codes/new?productId='+id)
+              로딩: Skeleton 3행
+              빈 상태: "발급된 코드가 없습니다." + "코드 발급하기" 버튼
               Table:
-                columns: 주문번호(앞8자) | 구매자 | 전화 | 수량 | 금액 | 상태 | 일시
-                행 클릭: router.push('/seller/orders/' + order.id)
+                columns: 코드 | 주문수 | 만료일 | 최대/사용 | 상태
+                행 클릭: router.push('/seller/codes/' + code.id)
                 cursor-pointer hover:bg-muted/50
-              Pagination (totalPages > 1)
+                비활성 코드: opacity-60
 ```
 
 **상태 배지 헬퍼:**
 ```typescript
-function getCodeStatus(code) {
-  if (!code.isActive) return { label: '중지', variant: 'secondary' }
-  if (new Date(code.expiresAt) < new Date()) return { label: '만료', variant: 'destructive' }
-  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return { label: '소진', variant: 'outline' }
-  return { label: '활성', variant: 'default' }
-}
-
-function getOrderStatusBadge(status: string) {
-  const map: Record<string, { label: string; variant: BadgeVariant }> = {
-    PAID: { label: '결제완료', variant: 'default' },
-    SHIPPING: { label: '배송중', variant: 'secondary' },
-    DELIVERED: { label: '배송완료', variant: 'outline' },
-    SETTLED: { label: '정산완료', variant: 'outline' },
-    REFUNDED: { label: '환불', variant: 'destructive' },
-  }
-  return map[status] ?? { label: status, variant: 'outline' }
+function getCodeStatus(code: ProductDetailResponse['codes'][0]) {
+  if (!code.isActive) return { label: '중지', variant: 'secondary' as const }
+  if (new Date(code.expiresAt) < new Date()) return { label: '만료', variant: 'destructive' as const }
+  if (code.maxQty > 0 && code.usedQty >= code.maxQty) return { label: '소진', variant: 'outline' as const }
+  return { label: '활성', variant: 'default' as const }
 }
 ```
 
 **완료 조건:**
-- [ ] 코드 정보 카드 (상품명 링크, 만료일, 수량)
-- [ ] 통계 3개 카드 (주문수/총매출/평균금액)
-- [ ] 주문 테이블 (행 클릭 → /seller/orders/[id])
-- [ ] Skeleton 로딩 (5행)
-- [ ] 빈 상태 메시지
-- [ ] 코드 토글 (sonner toast 성공/에러)
-- [ ] Pagination
+- [x] 상품 기본 정보 카드 (이미지 미리보기 또는 placeholder, 카테고리/가격/재고/설명)
+- [x] 통계 3개 카드 (총주문/총매출/활성코드수)
+- [x] 코드 목록 테이블 (행 클릭 → /seller/codes/[id])
+- [x] Skeleton 로딩 (3행)
+- [x] 빈 상태 메시지 + "코드 발급하기" 버튼
+- [x] 수정 버튼 → /seller/products/[id]/edit
+- [x] "코드 추가" 버튼 → /seller/codes/new (productId 쿼리스트링)
 
 ---
 
-#### 53C: `/seller/codes` 목록 행 클릭 연결
+#### 54C: `/seller/products` 목록 카드 클릭 → 상세 연결
 
-**수정 파일:** `app/seller/codes/page.tsx`
+**수정 파일:** `app/seller/products/page.tsx`
 
-- `useRouter` import 추가 (없으면)
-- `const router = useRouter()`
-- `<TableRow>` 에 `onClick={() => router.push('/seller/codes/' + code.id)}` 추가
-- `<TableRow className="cursor-pointer hover:bg-muted/50">` 클래스 추가
+현재 카드 그리드 형태. 카드 자체를 클릭 → 상세 페이지 이동:
+
+- `<Card>` 에 `onClick={() => router.push('/seller/products/' + product.id)}` 추가
+- `<Card className="... cursor-pointer">` 클래스 추가
+- 기존 수정/삭제 버튼의 onClick에 `e.stopPropagation()` 추가 (카드 클릭 이벤트 버블링 방지)
+
+```typescript
+// 수정 버튼
+onClick={(e) => { e.stopPropagation(); router.push(`/seller/products/${product.id}/edit`) }}
+
+// 삭제 버튼
+onClick={(e) => { e.stopPropagation(); setDeleteTarget(product) }}
+```
 
 **완료 조건:**
-- [ ] 행 클릭 시 `/seller/codes/[id]` 이동
+- [x] 카드 클릭 시 `/seller/products/[id]` 이동
+- [x] 수정/삭제 버튼 클릭 시 카드 onClick 버블링 방지
 
 ---
 
-**구현 순서:** 53A → 53B → 53C
+**구현 순서:** 54A → 54B → 54C
 
 **주의사항:**
-- `sonner` 토스트 사용 (기존 코드와 통일)
-- `parsePagination`, `buildPaginationResponse` from `@/lib/pagination` 사용
 - Skeleton은 `@/components/ui/skeleton` import
+- 통계 카드는 Task 53B와 동일한 패턴 유지
+- 코드 목록 테이블은 Task 53B의 코드 정보 카드를 참고
+- `sonner` 토스트 사용 (현재 Task에서 토스트 불필요하지만, 향후 확장 대비)
 
 ---
 
 ## ✅ 완료된 작업
 
-### Task 53: 셀러 코드 상세 페이지 ⏳ (진행 예정)
+### Task 53: 셀러 코드 상세 페이지 ✅ (2026-04-09 완료)
+
+- [x] 53A: `GET /api/seller/codes/[id]` 추가 (코드 상세 + 주문 목록 + 통계)
+- [x] 53B: `/seller/codes/[id]` 상세 페이지 (코드정보/통계3개/주문테이블/Skeleton/Pagination)
+- [x] 53C: `/seller/codes` 목록 행 클릭 → `/seller/codes/[id]` 연결
 
 ---
 

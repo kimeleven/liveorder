@@ -1,5 +1,5 @@
 # LIVEORDER — 라이브커머스 주문·결제 플랫폼
-## Claude Code 개발 기획서 v3.0
+## Claude Code 개발 기획서 v3.1
 > 작성일: 2026년 3월 | 최종 수정: 2026년 4월 9일 | 플랫폼 포지션: 통신판매중개업자
 
 ---
@@ -8,6 +8,7 @@
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|-----------|
+| 2026-04-09 | v3.1 | Task 53 완료 (셀러 코드 상세 페이지 `/seller/codes/[id]`). Task 54 스펙 수립: 셀러 상품 상세 페이지 `/seller/products/[id]` (상품정보+코드목록+주문통계) + `GET /api/seller/products/[id]` 확장 (codes+stats 포함) + 상품 목록 카드 클릭 연결. |
 | 2026-04-09 | v3.0 | Task 51~52 완료 (관리자 셀러 승인 UX 개선, 관리자 상품/코드 관리 페이지 `/admin/products`). Task 53 스펙 수립: 셀러 코드 상세 페이지 `/seller/codes/[id]` + `GET /api/seller/codes/[id]` (코드 상세+주문목록+통계) + 코드 목록 행 클릭 연결. |
 | 2026-04-09 | v2.9 | Task 49~50 완료 (관리자 정산 상세 `/admin/settlements/[id]`, 관리자 대시보드 개선 — 통계카드 6개+매출차트+승인대기셀러+최근주문). Task 51 스펙 수립: 관리자 상품 관리 페이지 `/admin/products`, `GET /api/admin/products` (검색+필터+페이지네이션), `PATCH /api/admin/products/[id]/toggle` (강제 비활성화 + 연결 코드 비활성화), AdminShell 네비게이션에 "상품 관리" 추가. |
 | 2026-04-09 | v2.8 | Task 47+48 완료 (관리자 셀러 상세 `/admin/sellers/[id]`, 관리자 주문 상세 `/admin/orders/[id]`). Task 49 스펙 수립: 관리자 정산 상세 페이지 `/admin/settlements/[id]`. |
