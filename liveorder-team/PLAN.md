@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 43 완료 확인, Task 44 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 44 완료 확인, Task 45 스펙 수립)_
 
 ---
 
@@ -27,9 +27,10 @@ _최종 업데이트: 2026-04-09 (Task 43 완료 확인, Task 44 스펙 수립)_
 | Task 41 | 카카오 세션 일회성 보장 (즉시 삭제) + CSV 주문경로 컬럼 추가 | ✅ 완료 |
 | Task 42 | 셀러 대시보드 채널별 통계 (카카오 vs 웹, 최근 30일) | ✅ 완료 |
 | Task 43 | 운송장 일괄 CSV 업로드 (export 주문ID, bulk API, UI 다이얼로그) | ✅ 완료 |
+| Task 44 | 셀러 주문 30초 자동갱신, PAID 배지 API+SellerShell 폴링, 대시보드 주별/월별 차트 | ✅ 완료 |
 
 ### 현재 진행
-- **Task 44**: 셀러 주문 실시간 현황 개선 (30초 폴링 + 미처리 주문 배지 + 주별/월별 매출 차트)
+- **Task 45**: 셀러 설정 페이지 (현재 `/seller/settings` 클릭 시 404)
 
 ---
 
@@ -61,222 +62,338 @@ _최종 업데이트: 2026-04-09 (Task 43 완료 확인, Task 44 스펙 수립)_
 [셀러 운송장 일괄 업로드] → POST /api/seller/orders/tracking/bulk ← Task 43 완료
 [셀러 대시보드] → 채널별 주문 비율 통계 (최근 30일) ← Task 42 완료
 
-[셀러 주문 목록] → 30초 자동 갱신 ← Task 44 예정
-[SellerShell 헤더] → 미처리(PAID) 주문 수 배지 ← Task 44 예정
-[셀러 대시보드 차트] → 주별/월별 탭 추가 ← Task 44 예정
+[셀러 주문 목록] → 30초 자동 갱신 ← Task 44 완료
+[SellerShell 헤더] → 미처리(PAID) 주문 수 배지 (60초 폴링) ← Task 44 완료
+[셀러 대시보드 차트] → 주별/월별 탭 ← Task 44 완료
+
+[셀러 설정 페이지] → /seller/settings ← Task 45 예정
+[API] GET|PATCH /api/seller/me → 셀러 프로필 조회/수정 ← Task 45 예정
+[API] POST /api/seller/me/password → 비밀번호 변경 ← Task 45 예정
 ```
 
 ---
 
-## Phase 4: Task 44 상세 스펙
+## Phase 5: Task 45 상세 스펙
 
 ### 배경 / 목적
 
-셀러가 주문 관리 페이지를 열어두고 운영할 때:
-1. **신규 주문이 들어왔는지 수동 새로고침이 필요** — 자동 폴링 없음
-2. **다른 페이지(대시보드, 상품 등)에서 미처리 주문 수 파악 불가** — 헤더 배지 없음
-3. **일별 차트만 있고 주별/월별 성과 확인 불가** — 탭 없음
+현재 `SellerShell` 네비게이션에 **설정** 메뉴(`/seller/settings`)가 존재하나 페이지가 없어 404 반환.
+셀러가 정산 계좌, 연락처, 주소를 변경할 방법이 없어 운영 불편.
 
 ---
 
-### Task 44A: 셀러 주문 목록 30초 자동 갱신
+### Task 45A: `/api/seller/me` PATCH 핸들러 추가
 
-**파일 수정:** `app/seller/orders/page.tsx`
+**파일 수정:** `app/api/seller/me/route.ts`
 
-현재 `fetchOrders`는 수동 실행만 됨. `useEffect`에 interval 추가.
+기존 `GET`에 `PATCH` 핸들러 추가:
 
-**추가할 코드 (기존 useEffect 아래에 추가):**
 ```typescript
-// 30초마다 자동 갱신
-useEffect(() => {
-  const timer = setInterval(() => {
-    fetchOrders(page)
-  }, 30000)
-  return () => clearInterval(timer)
-}, [page, statusFilter])
+export async function PATCH(req: Request) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await req.json()
+
+  // 수정 허용 필드만 추출 (사업자번호·이메일·이름 수정 불가)
+  const allowed = ['phone', 'address', 'bankAccount', 'bankName', 'tradeRegNo'] as const
+  const data: Record<string, string> = {}
+  for (const key of allowed) {
+    if (typeof body[key] === 'string') data[key] = body[key].trim()
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
+  }
+
+  const seller = await prisma.seller.update({
+    where: { id: session.user.id },
+    data,
+    select: { phone: true, address: true, bankAccount: true, bankName: true, tradeRegNo: true },
+  })
+
+  return NextResponse.json(seller)
+}
 ```
 
-**주의:** `fetchOrders`가 `page`와 `statusFilter` state에 의존하므로 deps에 포함. 페이지나 필터가 바뀌면 interval 재설정.
+또한 기존 `GET` 핸들러 수정 — 설정 페이지에 필요한 전체 필드 반환:
+```typescript
+select: {
+  status: true, name: true, email: true,
+  repName: true, businessNo: true,
+  phone: true, address: true,
+  bankAccount: true, bankName: true, tradeRegNo: true,
+  plan: true, createdAt: true,
+}
+```
 
 **완료 조건:**
-- [ ] `useEffect` interval 30초 추가
-- [ ] 컴포넌트 unmount 시 `clearInterval` 정상 동작 확인
+- [ ] `PATCH /api/seller/me` — phone/address/bankAccount/bankName/tradeRegNo 수정 처리
+- [ ] `GET /api/seller/me` — 설정 페이지용 전체 필드 반환
 
 ---
 
-### Task 44B: 미처리(PAID) 주문 수 배지 API
+### Task 45B: `/api/seller/me/password/route.ts` 신규 생성
 
-**파일 신규 생성:** `app/api/seller/orders/unread/route.ts`
+**파일 신규 생성:** `app/api/seller/me/password/route.ts`
 
 ```typescript
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import bcrypt from 'bcryptjs'
 
-export async function GET() {
+export async function POST(req: Request) {
   const session = await auth()
   if (!session?.user?.id) {
-    return NextResponse.json({ count: 0 }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const count = await prisma.order.count({
-    where: {
-      code: { product: { sellerId: session.user.id } },
-      status: 'PAID',
-    },
+  const { currentPassword, newPassword } = await req.json()
+  if (!currentPassword || !newPassword) {
+    return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
+  }
+  if (newPassword.length < 8) {
+    return NextResponse.json({ error: '비밀번호는 8자 이상이어야 합니다' }, { status: 400 })
+  }
+
+  const seller = await prisma.seller.findUnique({
+    where: { id: session.user.id },
+    select: { password: true },
+  })
+  if (!seller) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  const valid = await bcrypt.compare(currentPassword, seller.password)
+  if (!valid) {
+    return NextResponse.json({ error: '현재 비밀번호가 올바르지 않습니다' }, { status: 400 })
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 12)
+  await prisma.seller.update({
+    where: { id: session.user.id },
+    data: { password: hashed },
   })
 
-  return NextResponse.json({ count })
+  return NextResponse.json({ ok: true })
 }
 ```
 
+**완료 조건:**
+- [ ] `POST /api/seller/me/password` — 현재 비밀번호 검증 후 새 비밀번호 저장
+- [ ] 8자 미만 비밀번호 거부
+- [ ] 현재 비밀번호 불일치 시 400 반환
+
 ---
 
-### Task 44C: SellerShell 헤더에 미처리 주문 배지
+### Task 45C: `/seller/settings/page.tsx` 신규 생성
 
-**파일 수정:** `components/seller/SellerShell.tsx` (또는 셀러 레이아웃 파일)
+**파일 신규 생성:** `app/seller/settings/page.tsx`
 
-먼저 파일 위치 확인 후 구현:
-```bash
-find /Users/a1111/eddy-agent/liveorder/components -name "*.tsx" | xargs grep -l "SellerShell\|seller.*layout" 2>/dev/null
+**레이아웃:** 상단 2열 카드, 하단 비밀번호 변경 카드
+
+```
+┌──────────────────────────────────────────────────────┐
+│ 설정                                                  │
+├─────────────────────────┬────────────────────────────┤
+│ 기본 정보 (읽기 전용)    │ 연락처 / 계좌 정보 (수정)  │
+│                          │                            │
+│ 이름: 홍길동 상호        │ 연락처: [010-1234-5678]    │
+│ 이메일: a@b.com          │ 주소: [서울시...]           │
+│ 사업자번호: 123-45-67890 │ 은행명: [국민은행]         │
+│ 대표자명: 홍길동         │ 계좌번호: [123456789012]   │
+│ 가입일: 2026-04-01      │ 통신판매업신고번호: [...]   │
+│ 플랜: FREE               │ [저장]                     │
+└─────────────────────────┴────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ 비밀번호 변경                                         │
+│ 현재 비밀번호: [________]                            │
+│ 새 비밀번호: [________] (8자 이상)                   │
+│ 새 비밀번호 확인: [________]                         │
+│ [변경]                                               │
+└──────────────────────────────────────────────────────┘
 ```
 
-**구현 내용:**
-- 최상단에서 `GET /api/seller/orders/unread` 60초마다 폴링
-- "주문 관리" 메뉴 링크 옆에 PAID 건수 배지 표시
-- 0건이면 배지 미표시, 1건 이상이면 붉은 원 배지로 표시
+**구현 골격:**
 
-**예시 UI:**
-```tsx
-// 주문 관리 링크에 배지 추가
-<Link href="/seller/orders" className="flex items-center gap-2">
-  주문 관리
-  {paidCount > 0 && (
-    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
-      {paidCount > 99 ? '99+' : paidCount}
-    </span>
-  )}
-</Link>
-```
-
-**폴링 로직 (SellerShell 내부):**
 ```typescript
-const [paidCount, setPaidCount] = useState(0)
+'use client'
+import { useState, useEffect } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { toast } from 'sonner'  // or useToast
 
-useEffect(() => {
-  async function fetchUnread() {
+type SellerProfile = {
+  name: string; email: string; repName: string; businessNo: string
+  phone: string; address: string; bankAccount: string | null
+  bankName: string | null; tradeRegNo: string | null
+  plan: string; createdAt: string; status: string
+}
+
+export default function SettingsPage() {
+  const [profile, setProfile] = useState<SellerProfile | null>(null)
+  const [saving, setSaving] = useState(false)
+  // 수정 폼 state
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [bankAccount, setBankAccount] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [tradeRegNo, setTradeRegNo] = useState('')
+  // 비밀번호 변경 state
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [changingPw, setChangingPw] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/seller/me')
+      .then(r => r.json())
+      .then((data: SellerProfile) => {
+        setProfile(data)
+        setPhone(data.phone ?? '')
+        setAddress(data.address ?? '')
+        setBankAccount(data.bankAccount ?? '')
+        setBankName(data.bankName ?? '')
+        setTradeRegNo(data.tradeRegNo ?? '')
+      })
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
     try {
-      const res = await fetch('/api/seller/orders/unread')
-      if (res.ok) {
-        const data = await res.json()
-        setPaidCount(data.count)
-      }
-    } catch { /* 무시 */ }
+      const res = await fetch('/api/seller/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, address, bankAccount, bankName, tradeRegNo }),
+      })
+      if (!res.ok) throw new Error('저장 실패')
+      // toast 성공 메시지
+    } catch {
+      // toast 실패 메시지
+    } finally {
+      setSaving(false)
+    }
   }
-  fetchUnread()
-  const timer = setInterval(fetchUnread, 60000)
-  return () => clearInterval(timer)
-}, [])
+
+  async function handlePasswordChange() {
+    if (newPw !== confirmPw) {
+      // 비밀번호 불일치 toast
+      return
+    }
+    setChangingPw(true)
+    try {
+      const res = await fetch('/api/seller/me/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '변경 실패')
+      setCurrentPw(''); setNewPw(''); setConfirmPw('')
+      // toast 성공 메시지
+    } catch (e: unknown) {
+      // toast 실패 메시지
+    } finally {
+      setChangingPw(false)
+    }
+  }
+
+  if (!profile) return <div className="p-8">로딩 중...</div>
+
+  // JSX 반환 — 위 레이아웃대로 구현
+}
 ```
+
+**toast 처리:**
+- 프로젝트에 `sonner` 또는 `shadcn/ui useToast`가 있는지 먼저 확인.
+  ```bash
+  grep -r "toast\|sonner" /Users/a1111/eddy-agent/liveorder/components --include="*.tsx" -l | head -3
+  ```
+- 있는 것 재사용, 없으면 `alert()` 임시 사용 후 별도 TODO 주석.
+
+**완료 조건:**
+- [ ] `/seller/settings` 접근 시 404 대신 설정 페이지 렌더링
+- [ ] 기본 정보 섹션 (읽기 전용): 이름, 이메일, 사업자번호, 대표자명, 플랜, 가입일
+- [ ] 연락처/계좌 정보 수정 폼: phone, address, bankAccount, bankName, tradeRegNo
+- [ ] 저장 버튼 클릭 → `PATCH /api/seller/me` 호출 → 성공/실패 피드백
+- [ ] 비밀번호 변경 섹션: 현재/새/확인 입력 → `POST /api/seller/me/password` 호출
 
 ---
 
-### Task 44D: 셀러 대시보드 주별/월별 매출 차트 탭
+### Task 45D: 회원가입 이용약관 동의 체크박스 추가
 
-**파일 수정:** `app/api/seller/dashboard/route.ts`
+**파일 수정:** `app/seller/auth/register/page.tsx`
 
-현재 API는 `period` 파라미터 없이 최근 7일 일별 데이터만 반환.
+현재 회원가입 폼에 약관 동의 체크박스가 없음 (법적 의무 — 전자상거래법).
 
-**파라미터 추가:**
+**추가할 state:**
 ```typescript
-const url = new URL(req.url)
-const period = url.searchParams.get('period') ?? 'daily' // 'daily' | 'weekly' | 'monthly'
+const [termsAgreed, setTermsAgreed] = useState(false)
+const [sellerTermsAgreed, setSellerTermsAgreed] = useState(false)
 ```
 
-**각 period별 SQL 로직:**
-
-`daily` (기존, 최근 7일):
-```sql
-SELECT DATE(created_at AT TIME ZONE 'Asia/Seoul') as date,
-       COUNT(*) as orders, SUM(amount) as revenue
-FROM orders
-WHERE created_at >= NOW() - INTERVAL '7 days'
-  AND code_id IN (셀러 코드 목록)
-  AND status NOT IN ('REFUNDED')
-GROUP BY 1 ORDER BY 1
-```
-
-`weekly` (최근 8주):
-```sql
-SELECT DATE_TRUNC('week', created_at AT TIME ZONE 'Asia/Seoul') as week_start,
-       COUNT(*) as orders, SUM(amount) as revenue
-FROM orders
-WHERE created_at >= NOW() - INTERVAL '8 weeks'
-  AND code_id IN (셀러 코드 목록)
-  AND status NOT IN ('REFUNDED')
-GROUP BY 1 ORDER BY 1
-```
-
-`monthly` (최근 6개월):
-```sql
-SELECT DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Seoul') as month_start,
-       COUNT(*) as orders, SUM(amount) as revenue
-FROM orders
-WHERE created_at >= NOW() - INTERVAL '6 months'
-  AND code_id IN (셀러 코드 목록)
-  AND status NOT IN ('REFUNDED')
-GROUP BY 1 ORDER BY 1
-```
-
-**기존 API 응답 구조 유지** — `dailySales` 키는 period 무관하게 동일 키 사용 (하위 호환).
-
----
-
-**파일 수정:** `app/seller/dashboard/page.tsx`
-
-현재 차트 위에 기간 탭 추가:
-
+**폼 제출 버튼 위에 추가할 UI:**
 ```tsx
-// 탭 state
-const [chartPeriod, setChartPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily')
-
-// fetchDashboard에서 period 파라미터 전달
-const res = await fetch(`/api/seller/dashboard?period=${chartPeriod}`)
-
-// 차트 위 탭 UI
-<div className="flex gap-1 mb-4">
-  {(['daily', 'weekly', 'monthly'] as const).map((p) => (
-    <Button
-      key={p}
-      variant={chartPeriod === p ? 'default' : 'outline'}
-      size="sm"
-      onClick={() => setChartPeriod(p)}
-    >
-      {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
-    </Button>
-  ))}
+<div className="space-y-2 rounded-md border p-4 bg-muted/40">
+  <p className="text-sm font-medium">이용 약관 동의 (필수)</p>
+  <label className="flex items-start gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={termsAgreed}
+      onChange={e => setTermsAgreed(e.target.checked)}
+      className="mt-0.5"
+    />
+    <span className="text-sm">
+      <a href="/terms" target="_blank" className="underline text-primary">이용약관</a>에 동의합니다 (필수)
+    </span>
+  </label>
+  <label className="flex items-start gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={sellerTermsAgreed}
+      onChange={e => setSellerTermsAgreed(e.target.checked)}
+      className="mt-0.5"
+    />
+    <span className="text-sm">
+      <a href="/seller-terms" target="_blank" className="underline text-primary">판매자 이용약관</a>에 동의합니다 (필수)
+    </span>
+  </label>
 </div>
 ```
 
-**X축 레이블 포맷:**
+**제출 버튼 비활성화 조건에 약관 동의 추가:**
 ```typescript
-function formatChartLabel(dateStr: string, period: string) {
-  const d = new Date(dateStr)
-  if (period === 'daily') return `${d.getMonth()+1}/${d.getDate()}`
-  if (period === 'weekly') return `${d.getMonth()+1}/${d.getDate()}주`
-  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`
-}
+disabled={loading || !termsAgreed || !sellerTermsAgreed}
 ```
+
+**`/seller-terms` 페이지 확인:** `Requirements/LIVEORDER_판매자약관.md` 파일이 있으므로 해당 내용으로 정적 페이지 생성.
+
+파일 경로 확인:
+```bash
+ls /Users/a1111/eddy-agent/liveorder/app/\(buyer\)/terms/ 2>/dev/null
+ls /Users/a1111/eddy-agent/liveorder/app/seller-terms/ 2>/dev/null
+```
+
+약관 페이지가 없으면 `/app/(buyer)/seller-terms/page.tsx` 생성 (정적 내용).
+
+**완료 조건:**
+- [ ] 회원가입 폼에 이용약관 + 판매자약관 동의 체크박스 추가
+- [ ] 미동의 시 제출 버튼 비활성화
+- [ ] 약관 링크 클릭 시 새 탭에서 약관 내용 표시 (기존 `/terms` 또는 새로 생성)
 
 ---
 
-### Task 44 완료 조건
+### Task 45 전체 완료 조건
 
-- [ ] `app/seller/orders/page.tsx` — 30초 interval 자동 갱신 (44A)
-- [ ] `app/api/seller/orders/unread/route.ts` — PAID 주문 수 반환 API 신규 생성 (44B)
-- [ ] `components/seller/SellerShell.tsx` (또는 레이아웃 파일) — 60초 폴링 + 주문 배지 UI (44C)
-- [ ] `app/api/seller/dashboard/route.ts` — period 파라미터 (daily/weekly/monthly) 처리 (44D)
-- [ ] `app/seller/dashboard/page.tsx` — 차트 기간 탭 UI + chartPeriod state (44D)
+- [ ] `app/api/seller/me/route.ts` — GET 반환 필드 확장 + PATCH 핸들러 추가 (45A)
+- [ ] `app/api/seller/me/password/route.ts` — 비밀번호 변경 API 신규 생성 (45B)
+- [ ] `app/seller/settings/page.tsx` — 설정 페이지 신규 생성 (45C)
+- [ ] `app/seller/auth/register/page.tsx` — 이용약관 동의 체크박스 추가 (45D)
 - [ ] git commit + push
 
 ---
