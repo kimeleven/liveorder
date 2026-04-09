@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-10 (Task 60 스펙 수립: 관리자 정산 페이지 필터 + 페이지네이션 + CSV 내보내기)_
+_최종 업데이트: 2026-04-10 (Task 60 완료 확인 + Task 61 스펙 수립: 관리자 셀러 목록 검색 + 페이지네이션 + CSV 내보내기)_
 
 ---
 
@@ -48,6 +48,315 @@ _최종 업데이트: 2026-04-10 (Task 60 스펙 수립: 관리자 정산 페이
 ---
 
 ## Dev1 현재 작업
+
+### Task 61: 관리자 셀러 목록 고도화 — 검색 + 페이지네이션 + CSV 내보내기
+
+**목표:** 현재 전체 로드·클라이언트 필터링 방식인 관리자 셀러 목록을 서버사이드 페이지네이션 + 검색 + CSV 내보내기로 고도화한다.
+
+**배경:**
+- 현재 `GET /api/admin/sellers`는 전체 셀러를 한 번에 반환 — 셀러가 쌓이면 성능 저하
+- 상태 탭 필터(PENDING/APPROVED/SUSPENDED)는 클라이언트에서만 처리 — 서버 필터링 없음
+- 검색 기능 없음 — 특정 셀러(이름/이메일/사업자번호)를 빠르게 찾을 수 없음
+- CSV 내보내기 없음 — 셀러 관리·감사 목적으로 목록 추출 필요 시 수동 복사
+
+---
+
+#### 61A: `GET /api/admin/sellers` — 페이지네이션 + 검색 + 상태 필터 추가
+
+**수정 파일:** `app/api/admin/sellers/route.ts`
+
+현재 `GET()`을 `GET(req: NextRequest)`로 변경, 파라미터 추가:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { SellerStatus } from '@prisma/client'
+import { parsePagination, buildPaginationResponse } from '@/lib/pagination'
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session || session.user.role !== 'admin')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const statusParam = searchParams.get('status')
+  const q = searchParams.get('q')?.trim() ?? ''
+  const { page, limit, skip } = parsePagination(searchParams)
+
+  const statusFilter = statusParam && Object.values(SellerStatus).includes(statusParam as SellerStatus)
+    ? { status: statusParam as SellerStatus }
+    : {}
+
+  const searchFilter = q ? {
+    OR: [
+      { name: { contains: q, mode: 'insensitive' as const } },
+      { email: { contains: q, mode: 'insensitive' as const } },
+      { businessNo: { contains: q, mode: 'insensitive' as const } },
+      { repName: { contains: q, mode: 'insensitive' as const } },
+    ],
+  } : {}
+
+  const where = { ...statusFilter, ...searchFilter }
+
+  const [total, sellers] = await Promise.all([
+    prisma.seller.count({ where }),
+    prisma.seller.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        repName: true,
+        businessNo: true,
+        phone: true,
+        status: true,
+        bizRegImageUrl: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+  ])
+
+  return NextResponse.json(buildPaginationResponse(sellers, total, page, limit))
+}
+```
+
+**완료 조건:**
+- [ ] `?status=PENDING|APPROVED|SUSPENDED` 서버사이드 필터
+- [ ] `?q=검색어` — 이름, 이메일, 사업자번호, 대표자명 포함 검색 (대소문자 무시)
+- [ ] `?page=`, `?limit=` 페이지네이션 (기본 limit=20)
+- [ ] 응답 형식: `{ data: [], pagination: { total, page, limit, totalPages } }`
+
+---
+
+#### 61B: `GET /api/admin/sellers/export` — CSV 내보내기 API 신규
+
+**신규 파일:** `app/api/admin/sellers/export/route.ts`
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { SellerStatus } from '@prisma/client'
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session || session.user.role !== 'admin')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const statusParam = searchParams.get('status')
+  const q = searchParams.get('q')?.trim() ?? ''
+
+  const statusFilter = statusParam && Object.values(SellerStatus).includes(statusParam as SellerStatus)
+    ? { status: statusParam as SellerStatus }
+    : {}
+
+  const searchFilter = q ? {
+    OR: [
+      { name: { contains: q, mode: 'insensitive' as const } },
+      { email: { contains: q, mode: 'insensitive' as const } },
+      { businessNo: { contains: q, mode: 'insensitive' as const } },
+      { repName: { contains: q, mode: 'insensitive' as const } },
+    ],
+  } : {}
+
+  const sellers = await prisma.seller.findMany({
+    where: { ...statusFilter, ...searchFilter },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      repName: true,
+      businessNo: true,
+      phone: true,
+      status: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10000,
+  })
+
+  const statusLabel: Record<string, string> = {
+    PENDING: '승인대기',
+    APPROVED: '승인완료',
+    SUSPENDED: '정지',
+  }
+
+  const header = '셀러ID,상호명,대표자,이메일,사업자번호,전화번호,상태,가입일\n'
+  const rows = sellers
+    .map((s) =>
+      [
+        s.id,
+        s.name,
+        s.repName,
+        s.email,
+        s.businessNo,
+        s.phone,
+        statusLabel[s.status] ?? s.status,
+        new Date(s.createdAt).toLocaleDateString('ko-KR'),
+      ]
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    .join('\n')
+
+  const bom = '\uFEFF'
+  const csv = bom + header + rows
+  const filename = `sellers_${new Date().toISOString().slice(0, 10)}.csv`
+
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+```
+
+**완료 조건:**
+- [ ] 61A와 동일한 필터 파라미터 (`?status=`, `?q=`)
+- [ ] UTF-8 BOM 포함
+- [ ] 컬럼: 셀러ID, 상호명, 대표자, 이메일, 사업자번호, 전화번호, 상태, 가입일
+- [ ] take:10000 상한
+
+---
+
+#### 61C: `/admin/sellers` 페이지 — 검색창 + 페이지네이션 + CSV 버튼 추가
+
+**수정 파일:** `app/admin/sellers/page.tsx`
+
+**레이아웃 변경:**
+```
+/admin/sellers
+┌──────────────────────────────────────────────────────────┐
+│ 셀러 관리                              [CSV 내보내기]      │
+│                                                           │
+│ [🔍 이름/이메일/사업자번호 검색...]    (300ms 디바운스)   │
+│ [전체] [승인대기] [승인완료] [정지]    (상태 탭 — 서버)   │
+│                                                           │
+│ (셀러 테이블)                                             │
+│                                                           │
+│ ← 이전   1 / 5 페이지  (총 N건)   다음 →                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**추가 상태:**
+```typescript
+const [search, setSearch] = useState('')
+const [searchInput, setSearchInput] = useState('')
+const [page, setPage] = useState(1)
+const [totalPages, setTotalPages] = useState(1)
+const [total, setTotal] = useState(0)
+const LIMIT = 20
+```
+
+**검색 디바운스 (300ms):**
+```typescript
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setSearch(searchInput)
+    setPage(1)
+  }, 300)
+  return () => clearTimeout(timer)
+}, [searchInput])
+```
+
+**fetchSellers 함수:**
+```typescript
+async function fetchSellers(currentPage = page, currentTab = tab, currentSearch = search) {
+  const params = new URLSearchParams({ page: String(currentPage), limit: String(LIMIT) })
+  if (currentTab !== 'ALL') params.set('status', currentTab)
+  if (currentSearch) params.set('q', currentSearch)
+  const res = await fetch(`/api/admin/sellers?${params}`)
+  const data = await res.json()
+  if (data.data) {
+    setSellers(data.data)
+    setTotalPages(data.totalPages ?? 1)
+    setTotal(data.total ?? 0)
+  }
+}
+```
+
+**handleExport:**
+```typescript
+function handleExport() {
+  const params = new URLSearchParams()
+  if (tab !== 'ALL') params.set('status', tab)
+  if (search) params.set('q', search)
+  window.location.href = `/api/admin/sellers/export?${params}`
+}
+```
+
+**검색창 UI (탭 위에 추가):**
+```tsx
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  <Input
+    placeholder="이름, 이메일, 사업자번호 검색..."
+    className="pl-9"
+    value={searchInput}
+    onChange={(e) => setSearchInput(e.target.value)}
+  />
+</div>
+```
+
+**페이지네이션 UI (테이블 아래):**
+```tsx
+{totalPages > 1 && (
+  <div className="flex items-center justify-between px-4 py-3 border-t">
+    <p className="text-sm text-muted-foreground">총 {total}건</p>
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" disabled={page === 1}
+        onClick={() => { setPage(p => p - 1); fetchSellers(page - 1) }}>
+        이전
+      </Button>
+      <span className="text-sm">{page} / {totalPages}</span>
+      <Button variant="outline" size="sm" disabled={page === totalPages}
+        onClick={() => { setPage(p => p + 1); fetchSellers(page + 1) }}>
+        다음
+      </Button>
+    </div>
+  </div>
+)}
+```
+
+**헤더 버튼 + import 추가:**
+```typescript
+import { Search, Download } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+```
+
+```tsx
+{/* 헤더 우측 */}
+<Button variant="outline" size="sm" onClick={handleExport}>
+  <Download className="h-4 w-4 mr-1" />
+  CSV 내보내기
+</Button>
+```
+
+**완료 조건:**
+- [ ] 검색창 — 이름/이메일/사업자번호 300ms 디바운스
+- [ ] 상태 탭 클릭 → 서버사이드 필터 + page=1 리셋
+- [ ] 검색어 변경 → page=1 리셋 + 목록 재조회
+- [ ] 페이지네이션 — 이전/다음 버튼 + 현재/전체 페이지 + 총 건수
+- [ ] CSV 내보내기 버튼 — 현재 필터 조건 반영
+- [ ] 기존 상태 변경(승인/거부/정지) 기능 그대로 유지
+
+---
+
+**구현 순서:** 61A (API 수정) → 61B (export API 신규) → 61C (페이지 수정)
+
+**주의사항:**
+- 61A API 응답 형식이 `[]` → `{ data, pagination }` 변경 — 61C 페이지 동시 수정 필수
+- `export` 경로 충돌 없음: `app/api/admin/sellers/export/route.ts` (기존 `app/api/admin/sellers/[id]/route.ts`와 Next.js 라우팅 우선순위 충돌 주의 — `export`는 정적 경로이므로 `[id]`보다 우선)
+- 기존 `PATCH /api/admin/sellers/[id]` 코드 영향 없음 (별도 파일)
+- 상태 탭은 기존 `Tabs` 컴포넌트 유지 — tab 변경 핸들러에서 `fetchSellers(1, newTab)` 호출하도록 수정
+
+---
 
 ### ✅ Task 60: 관리자 정산 페이지 개선 — 필터 + 페이지네이션 + CSV 내보내기 (완료 — Dev1)
 
