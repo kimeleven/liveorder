@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Dev1 — Task 49 시작: 관리자 정산 상세 페이지)_
+_최종 업데이트: 2026-04-09 (Dev1 — Task 49 완료: 관리자 정산 상세 페이지)_
 
 ---
 
@@ -160,12 +160,12 @@ export async function PATCH(
 ```
 
 **완료 조건:**
-- [ ] 관리자 세션 없으면 401
-- [ ] 없는 ID → 404
-- [ ] GET: seller 정보 (id, name, businessNo, email, phone, bankName, bankAccount) 포함 반환
-- [ ] GET: 포함 주문 목록 (id, buyerName, quantity, amount, status, source, createdAt, code.codeKey, product.name) 반환
-- [ ] PATCH: PENDING → COMPLETED 전환 (settledAt = now)
-- [ ] PATCH: 이미 COMPLETED/FAILED면 400
+- [x] 관리자 세션 없으면 401
+- [x] 없는 ID → 404
+- [x] GET: seller 정보 (id, name, businessNo, email, phone, bankName, bankAccount) 포함 반환
+- [x] GET: 포함 주문 목록 (id, buyerName, quantity, amount, status, source, createdAt, code.codeKey, product.name) 반환
+- [x] PATCH: PENDING → COMPLETED 전환 (settledAt = now)
+- [x] PATCH: 이미 COMPLETED/FAILED면 400
 
 ---
 
@@ -215,12 +215,12 @@ export async function PATCH(
 10. 카드 레이아웃: `grid grid-cols-1 md:grid-cols-2 gap-4`
 
 **완료 조건:**
-- [ ] 정산 요약 전체 표시 (거래금액, 수수료, PG수수료, 실지급액, 예정일, 완료일)
-- [ ] 셀러 정보 표시 (상호명 링크, 정산 계좌)
-- [ ] 포함 주문 목록 테이블 + 행 클릭 → `/admin/orders/[id]`
-- [ ] PENDING 상태에서만 "정산 완료 처리" 버튼
-- [ ] 완료 처리 후 상태 즉시 갱신
-- [ ] `AdminShell` 래핑 적용
+- [x] 정산 요약 전체 표시 (거래금액, 수수료, PG수수료, 실지급액, 예정일, 완료일)
+- [x] 셀러 정보 표시 (상호명 링크, 정산 계좌)
+- [x] 포함 주문 목록 테이블 + 행 클릭 → `/admin/orders/[id]`
+- [x] PENDING 상태에서만 "정산 완료 처리" 버튼
+- [x] 완료 처리 후 상태 즉시 갱신
+- [x] `AdminShell` 래핑 적용
 
 ---
 
@@ -242,12 +242,22 @@ export async function PATCH(
 ```
 
 **완료 조건:**
-- [ ] 정산 행 클릭 시 `/admin/settlements/[id]`로 이동
-- [ ] 마우스 커서가 pointer로 변경
+- [x] 정산 행 클릭 시 `/admin/settlements/[id]`로 이동
+- [x] 마우스 커서가 pointer로 변경
 
 ---
 
 ## ✅ 완료된 작업
+
+### Task 49: 관리자 정산 상세 페이지 ✅
+
+**완료일:** 2026-04-09
+
+- [x] 49A: `GET /api/admin/settlements/[id]` + `PATCH /api/admin/settlements/[id]` — 신규 파일 생성 (`app/api/admin/settlements/[id]/route.ts`)
+- [x] 49B: `/admin/settlements/[id]` 페이지 신규 생성 (`app/admin/settlements/[id]/page.tsx`)
+- [x] 49C: `/admin/settlements` 목록 행 클릭 → `router.push('/admin/settlements/' + id)` 연결
+
+---
 
 ### Task 48: 관리자 주문 상세 페이지 ✅
 

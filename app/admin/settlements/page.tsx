@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ interface SettlementItem {
 }
 
 export default function AdminSettlementsPage() {
+  const router = useRouter();
   const [settlements, setSettlements] = useState<SettlementItem[]>([]);
   const [batchResult, setBatchResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -103,7 +105,11 @@ export default function AdminSettlementsPage() {
                 </TableRow>
               ) : (
                 settlements.map((s) => (
-                  <TableRow key={s.id}>
+                  <TableRow
+                    key={s.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => router.push(`/admin/settlements/${s.id}`)}
+                  >
                     <TableCell>{s.seller.name}</TableCell>
                     <TableCell>₩{s.amount.toLocaleString()}</TableCell>
                     <TableCell>₩{s.fee.toLocaleString()}</TableCell>
