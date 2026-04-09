@@ -61,16 +61,28 @@ export default function SellerDashboardPage() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  async function fetchDashboard(period = chartPeriod) {
+    try {
+      const res = await fetch(`/api/seller/dashboard?period=${period}`);
+      const data = await res.json();
+      setStats(data);
+    } catch (err) {
+      console.error('[seller/dashboard] fetch failed:', err);
+      setDashboardError('대시보드 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
+    }
+  }
 
   useEffect(() => {
-    fetch("/api/seller/dashboard")
-      .then((r) => r.json())
-      .then(setStats)
-      .catch((err) => {
-        console.error('[seller/dashboard] fetch failed:', err);
-        setDashboardError('대시보드 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
-      });
+    fetchDashboard('daily');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    fetchDashboard(chartPeriod);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartPeriod]);
 
   async function checkApprovalStatus() {
     setCheckLoading(true);
@@ -214,15 +226,38 @@ export default function SellerDashboardPage() {
           })}
         </div>
 
-        {stats.dailySales && stats.dailySales.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">최근 7일 매출</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">매출 추이</CardTitle>
+              <div className="flex gap-1">
+                {(['daily', 'weekly', 'monthly'] as const).map((p) => (
+                  <Button
+                    key={p}
+                    variant={chartPeriod === p ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setChartPeriod(p)}
+                    className="text-xs h-7 px-3"
+                  >
+                    {p === 'daily' ? '일별' : p === 'weekly' ? '주별' : '월별'}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {stats.dailySales && stats.dailySales.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={stats.dailySales}>
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v: string) => {
+                      const d = new Date(v);
+                      if (chartPeriod === 'monthly') return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+                      return `${d.getMonth() + 1}/${d.getDate()}${chartPeriod === 'weekly' ? '주' : ''}`;
+                    }}
+                  />
                   <YAxis
                     tickFormatter={(v: number) =>
                       v >= 10000 ? `${(v / 10000).toFixed(0)}만` : `${v}`
@@ -241,9 +276,11 @@ export default function SellerDashboardPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">데이터가 없습니다.</p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* 채널별 주문 통계 (최근 30일) */}
         {stats.channelStats && (

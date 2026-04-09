@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const sellerId = session.user.id;
+  const { searchParams } = new URL(req.url);
+  const period = searchParams.get('period') ?? 'daily'; // 'daily' | 'weekly' | 'monthly'
 
   const [seller, totalProducts, activeCodes, totalOrders, pendingSettlement, recentOrders] =
     await Promise.all([
@@ -46,25 +48,62 @@ export async function GET() {
       }),
     ]);
 
-  const dailySalesRaw: { date: string; total: bigint }[] = await prisma.$queryRaw`
-    SELECT
-      TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD') as date,
-      COALESCE(SUM(o.amount), 0)::bigint as total
-    FROM generate_series(
-      NOW() - INTERVAL '6 days', NOW(), INTERVAL '1 day'
-    ) gs(day)
-    LEFT JOIN orders o
-      ON DATE(o.created_at AT TIME ZONE 'Asia/Seoul') = DATE(gs.day AT TIME ZONE 'Asia/Seoul')
-      AND o.status != 'REFUNDED'
-      AND o.code_id IN (
-        SELECT c.id FROM codes c
-        JOIN products p ON c.product_id = p.id
-        WHERE p.seller_id = ${sellerId}::uuid
-      )
-    GROUP BY DATE(gs.day), TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'MM/DD')
-    ORDER BY DATE(gs.day) ASC
-  `;
-  const dailySales = dailySalesRaw.map((r) => ({ date: r.date, total: Number(r.total) }));
+  let salesRows: { date: string; orders: bigint; revenue: bigint }[];
+
+  if (period === 'weekly') {
+    salesRows = await prisma.$queryRaw`
+      SELECT
+        TO_CHAR(DATE_TRUNC('week', o.created_at AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD') AS date,
+        COUNT(*)::bigint AS orders,
+        COALESCE(SUM(o.amount), 0)::bigint AS revenue
+      FROM orders o
+      JOIN codes c ON c.id = o.code_id
+      JOIN products p ON p.id = c.product_id
+      WHERE p.seller_id = ${sellerId}::uuid
+        AND o.status NOT IN ('REFUNDED')
+        AND o.created_at >= NOW() - INTERVAL '8 weeks'
+      GROUP BY DATE_TRUNC('week', o.created_at AT TIME ZONE 'Asia/Seoul')
+      ORDER BY 1
+    `;
+  } else if (period === 'monthly') {
+    salesRows = await prisma.$queryRaw`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', o.created_at AT TIME ZONE 'Asia/Seoul'), 'YYYY-MM-DD') AS date,
+        COUNT(*)::bigint AS orders,
+        COALESCE(SUM(o.amount), 0)::bigint AS revenue
+      FROM orders o
+      JOIN codes c ON c.id = o.code_id
+      JOIN products p ON p.id = c.product_id
+      WHERE p.seller_id = ${sellerId}::uuid
+        AND o.status NOT IN ('REFUNDED')
+        AND o.created_at >= NOW() - INTERVAL '6 months'
+      GROUP BY DATE_TRUNC('month', o.created_at AT TIME ZONE 'Asia/Seoul')
+      ORDER BY 1
+    `;
+  } else {
+    // daily: 기존 7일 로직 (generate_series로 빈 날짜 포함)
+    const dailySalesRaw: { date: string; total: bigint }[] = await prisma.$queryRaw`
+      SELECT
+        TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD') as date,
+        COALESCE(SUM(o.amount), 0)::bigint as revenue
+      FROM generate_series(
+        NOW() - INTERVAL '6 days', NOW(), INTERVAL '1 day'
+      ) gs(day)
+      LEFT JOIN orders o
+        ON DATE(o.created_at AT TIME ZONE 'Asia/Seoul') = DATE(gs.day AT TIME ZONE 'Asia/Seoul')
+        AND o.status != 'REFUNDED'
+        AND o.code_id IN (
+          SELECT c.id FROM codes c
+          JOIN products p ON c.product_id = p.id
+          WHERE p.seller_id = ${sellerId}::uuid
+        )
+      GROUP BY DATE(gs.day), TO_CHAR(gs.day AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD')
+      ORDER BY DATE(gs.day) ASC
+    `;
+    salesRows = dailySalesRaw.map((r) => ({ date: r.date, orders: BigInt(0), revenue: r.total }));
+  }
+
+  const dailySales = salesRows.map((r) => ({ date: r.date, total: Number(r.revenue) }));
 
   // 채널별 주문 통계 (최근 30일, 환불 제외)
   const now = new Date()

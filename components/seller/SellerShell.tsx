@@ -16,7 +16,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   { href: "/seller/dashboard", label: "대시보드", icon: LayoutDashboard },
@@ -35,6 +35,22 @@ export default function SellerShell({
   const pathname = usePathname();
   const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paidCount, setPaidCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchUnread() {
+      try {
+        const res = await fetch('/api/seller/orders/unread')
+        if (res.ok) {
+          const { count } = await res.json()
+          setPaidCount(count)
+        }
+      } catch { /* 무시 */ }
+    }
+    fetchUnread()
+    const timer = setInterval(fetchUnread, 60000)
+    return () => clearInterval(timer)
+  }, []);
 
   return (
     <div className="flex min-h-screen">
@@ -60,6 +76,7 @@ export default function SellerShell({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname.startsWith(item.href);
+            const isOrders = item.href === '/seller/orders';
             return (
               <Link
                 key={item.href}
@@ -73,7 +90,12 @@ export default function SellerShell({
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {isOrders && paidCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 text-xs font-bold text-white bg-red-500 rounded-full">
+                    {paidCount > 99 ? '99+' : paidCount}
+                  </span>
+                )}
               </Link>
             );
           })}

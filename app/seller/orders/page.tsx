@@ -111,6 +111,15 @@ export default function OrdersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, statusFilter]);
 
+  // 30초마다 자동 갱신
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchOrders(page, statusFilter)
+    }, 30000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, statusFilter]);
+
   function openTrackingDialog(orderId: string) {
     setTrackingDialog({ open: true, orderId });
     setTrackingCarrier("");

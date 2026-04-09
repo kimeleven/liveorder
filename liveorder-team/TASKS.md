@@ -282,12 +282,12 @@ Recharts `XAxis` `tickFormatter` 수정:
 
 #### 44 완료 조건 (전체)
 
-- [ ] `app/seller/orders/page.tsx` — 30초 interval 자동 갱신 (44A)
-- [ ] `app/api/seller/orders/unread/route.ts` — PAID 주문 수 반환 API (44B)
-- [ ] SellerShell 또는 레이아웃 파일 — 60초 폴링 + 주문 배지 UI (44C)
-- [ ] `app/api/seller/dashboard/route.ts` — period 파라미터 처리 (44D)
-- [ ] `app/seller/dashboard/page.tsx` — 차트 기간 탭 (44D)
-- [ ] git commit + push
+- [x] `app/seller/orders/page.tsx` — 30초 interval 자동 갱신 (44A) ✅
+- [x] `app/api/seller/orders/unread/route.ts` — PAID 주문 수 반환 API (44B) ✅
+- [x] `components/seller/SellerShell.tsx` — 60초 폴링 + 주문 배지 UI (44C) ✅
+- [x] `app/api/seller/dashboard/route.ts` — period 파라미터 처리 daily/weekly/monthly (44D) ✅
+- [x] `app/seller/dashboard/page.tsx` — 차트 기간 탭 (44D) ✅
+- [x] git commit + push ✅
 
 ---
 
@@ -348,6 +348,7 @@ Recharts `XAxis` `tickFormatter` 수정:
 
 | Task | 내용 | 완료일 |
 |------|------|--------|
+| Task 44 | 셀러 주문 30초 자동갱신, PAID 배지 API+SellerShell 폴링, 대시보드 주별/월별 차트 | 2026-04-09 |
 | Task 43 | 운송장 일괄 CSV 업로드 (export 주문ID, bulk API, UI 다이얼로그) | 2026-04-09 |
 | Task 42 | 셀러 대시보드 채널별 통계 API + UI 카드 | 2026-04-09 |
 | Task 41 | 카카오 세션 일회성 삭제, CSV 주문경로 컬럼 추가 | 2026-04-09 |
