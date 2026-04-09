@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-10 (Task 60 완료 확인 + Task 61 스펙 수립: 관리자 셀러 목록 검색 + 페이지네이션 + CSV 내보내기)_
+_최종 업데이트: 2026-04-10 (Task 61 완료 확인 + Task 62 스펙 수립: 관리자 주문 검색 + 날짜 필터 + CSV 내보내기)_
 
 ---
 
@@ -48,6 +48,330 @@ _최종 업데이트: 2026-04-10 (Task 60 완료 확인 + Task 61 스펙 수립:
 ---
 
 ## Dev1 현재 작업
+
+### Task 62: 관리자 주문 검색 + 날짜 범위 필터 + CSV 내보내기
+
+**목표:** 관리자 주문 목록에 구매자 이름/전화번호 검색, 날짜 범위 필터, CSV 내보내기를 추가하여 Tasks 60·61과 동일한 수준의 관리 도구를 완성한다.
+
+**배경:**
+- 현재 `GET /api/admin/orders`는 상태 필터 + 페이지네이션은 있지만, 검색(구매자명/전화번호) 없음
+- 날짜 범위 필터 없음 — 특정 기간 주문만 조회 불가 (배송 처리·정산 기간 확인에 불편)
+- CSV 내보내기 없음 — 관리자가 주문 내역을 회계/분석용으로 추출하려면 수동 복사 필요
+- 전체 일관성: 관리자 정산(Task 60), 관리자 셀러(Task 61)는 이미 검색+날짜+CSV 완비
+
+---
+
+#### 62A: `GET /api/admin/orders` — 검색 + 날짜 범위 필터 추가
+
+**수정 파일:** `app/api/admin/orders/route.ts`
+
+현재 `?status=`, `?page=`, `?limit=`만 지원. 아래 파라미터를 추가:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { OrderStatus } from '@prisma/client'
+import { parsePagination, buildPaginationResponse } from '@/lib/pagination'
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session || session.user.role !== 'admin')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const statusParam = searchParams.get('status')
+  const q = searchParams.get('q')?.trim() ?? ''
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+  const { page, limit, skip } = parsePagination(searchParams)
+
+  const validStatuses = ['PAID', 'SHIPPING', 'DELIVERED', 'SETTLED', 'REFUNDED']
+  const statusFilter = statusParam && validStatuses.includes(statusParam)
+    ? { status: statusParam as OrderStatus }
+    : {}
+
+  const searchFilter = q ? {
+    OR: [
+      { buyerName: { contains: q, mode: 'insensitive' as const } },
+      { buyerPhone: { contains: q, mode: 'insensitive' as const } },
+    ],
+  } : {}
+
+  const dateFilter = (from || to) ? {
+    createdAt: {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to   ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+    },
+  } : {}
+
+  const where = { ...statusFilter, ...searchFilter, ...dateFilter }
+
+  const [total, data] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      include: {
+        code: {
+          include: {
+            product: {
+              select: { name: true, seller: { select: { name: true } } },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+  ])
+
+  return NextResponse.json(buildPaginationResponse(data, total, page, limit))
+}
+```
+
+**완료 조건:**
+- [ ] `?q=검색어` — buyerName 또는 buyerPhone 포함 검색 (대소문자 무시)
+- [ ] `?from=YYYY-MM-DD`, `?to=YYYY-MM-DD` 날짜 범위 (createdAt 기준)
+- [ ] 기존 `?status=`, `?page=`, `?limit=` 동작 유지
+- [ ] 응답 형식 `{ data, pagination }` 유지 (이미 buildPaginationResponse 적용됨)
+
+---
+
+#### 62B: `GET /api/admin/orders/export` — CSV 내보내기 API 신규
+
+**신규 파일:** `app/api/admin/orders/export/route.ts`
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { OrderStatus } from '@prisma/client'
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session || session.user.role !== 'admin')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const statusParam = searchParams.get('status')
+  const q = searchParams.get('q')?.trim() ?? ''
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+
+  const validStatuses = ['PAID', 'SHIPPING', 'DELIVERED', 'SETTLED', 'REFUNDED']
+  const statusFilter = statusParam && validStatuses.includes(statusParam)
+    ? { status: statusParam as OrderStatus }
+    : {}
+
+  const searchFilter = q ? {
+    OR: [
+      { buyerName: { contains: q, mode: 'insensitive' as const } },
+      { buyerPhone: { contains: q, mode: 'insensitive' as const } },
+    ],
+  } : {}
+
+  const dateFilter = (from || to) ? {
+    createdAt: {
+      ...(from ? { gte: new Date(from) } : {}),
+      ...(to   ? { lte: new Date(to + 'T23:59:59.999Z') } : {}),
+    },
+  } : {}
+
+  const where = { ...statusFilter, ...searchFilter, ...dateFilter }
+
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      code: {
+        include: {
+          product: {
+            select: { name: true, seller: { select: { name: true } } },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10000,
+  })
+
+  const statusLabel: Record<string, string> = {
+    PAID: '결제완료', SHIPPING: '배송중', DELIVERED: '배송완료',
+    SETTLED: '정산완료', REFUNDED: '환불',
+  }
+
+  const header = '주문ID,셀러,상품명,구매자,연락처,배송지,수량,금액,상태,주문일시\n'
+  const rows = orders
+    .map((o) =>
+      [
+        o.id,
+        o.code.product.seller.name,
+        o.code.product.name,
+        o.buyerName,
+        o.buyerPhone,
+        `${o.shippingAddress} ${o.shippingAddressDetail ?? ''}`.trim(),
+        o.quantity,
+        o.amount,
+        statusLabel[o.status] ?? o.status,
+        new Date(o.createdAt).toLocaleString('ko-KR'),
+      ]
+        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    .join('\n')
+
+  const fromPart = from ?? 'all'
+  const toPart = to ?? new Date().toISOString().slice(0, 10)
+  const filename = `orders_${fromPart}_${toPart}.csv`
+
+  return new NextResponse('\uFEFF' + header + rows, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+}
+```
+
+**완료 조건:**
+- [ ] 62A와 동일한 필터 파라미터 (`?status=`, `?q=`, `?from=`, `?to=`)
+- [ ] UTF-8 BOM 포함
+- [ ] 컬럼: 주문ID, 셀러, 상품명, 구매자, 연락처, 배송지, 수량, 금액, 상태, 주문일시
+- [ ] take:10000 상한
+- [ ] 파일명: `orders_{from}_{to}.csv`
+
+---
+
+#### 62C: `/admin/orders` 페이지 — 검색창 + 날짜 필터 + CSV 버튼 추가
+
+**수정 파일:** `app/admin/orders/page.tsx`
+
+**레이아웃 변경:**
+```
+/admin/orders
+┌──────────────────────────────────────────────────────────┐
+│ 주문 관리                              [CSV 내보내기]      │
+│                                                           │
+│ [🔍 구매자명/전화번호 검색...]          (300ms 디바운스)  │
+│ [시작일: ____-__-__]  [종료일: ____-__-__]  [초기화]      │  ← 신규
+│ [전체 ▼ 상태 Select]   (기존 Select 유지)                 │
+│                                                           │
+│ (기존 주문 테이블)                                         │
+│                                                           │
+│ ← 이전   1 / N 페이지  (총 N건)   다음 →                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**추가 상태:**
+```typescript
+const [search, setSearch] = useState('')
+const [searchInput, setSearchInput] = useState('')
+const [fromDate, setFromDate] = useState('')
+const [toDate, setToDate] = useState('')
+```
+
+**검색 디바운스 (300ms):**
+```typescript
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setSearch(searchInput)
+    setPage(1)
+  }, 300)
+  return () => clearTimeout(timer)
+}, [searchInput])
+```
+
+**fetchOrders URL 파라미터 확장:**
+```typescript
+const params = new URLSearchParams({ page: String(page) })
+if (statusFilter !== 'ALL') params.set('status', statusFilter)
+if (search) params.set('q', search)
+if (fromDate) params.set('from', fromDate)
+if (toDate) params.set('to', toDate)
+```
+
+**handleExport 추가:**
+```typescript
+function handleExport() {
+  const params = new URLSearchParams()
+  if (statusFilter !== 'ALL') params.set('status', statusFilter)
+  if (search) params.set('q', search)
+  if (fromDate) params.set('from', fromDate)
+  if (toDate) params.set('to', toDate)
+  window.location.href = `/api/admin/orders/export?${params}`
+}
+```
+
+**UI 추가 (기존 Select 위에):**
+```tsx
+{/* 검색창 */}
+<div className="relative">
+  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+  <Input
+    placeholder="구매자명 또는 전화번호 검색..."
+    className="pl-9"
+    value={searchInput}
+    onChange={(e) => setSearchInput(e.target.value)}
+  />
+</div>
+
+{/* 날짜 필터 */}
+<div className="flex items-center gap-2">
+  <input
+    type="date"
+    className="border rounded px-2 py-1 text-sm"
+    value={fromDate}
+    onChange={(e) => { setFromDate(e.target.value); setPage(1) }}
+  />
+  <span className="text-muted-foreground text-sm">~</span>
+  <input
+    type="date"
+    className="border rounded px-2 py-1 text-sm"
+    value={toDate}
+    onChange={(e) => { setToDate(e.target.value); setPage(1) }}
+  />
+  {(fromDate || toDate) && (
+    <Button variant="ghost" size="sm" onClick={() => { setFromDate(''); setToDate(''); setPage(1) }}>
+      초기화
+    </Button>
+  )}
+</div>
+```
+
+**헤더 CSV 버튼:**
+```tsx
+<Button variant="outline" size="sm" onClick={handleExport}>
+  <Download className="h-4 w-4 mr-1" />
+  CSV 내보내기
+</Button>
+```
+
+**import 추가:**
+```typescript
+import { Search, Download } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+```
+
+**완료 조건:**
+- [ ] 검색창 — 구매자명/전화번호 300ms 디바운스 검색
+- [ ] 날짜 범위 입력 — from/to date input + 초기화 버튼
+- [ ] 상태 필터 Select 변경 시 page=1 리셋 (기존 동작 유지)
+- [ ] 검색/날짜 변경 시 page=1 리셋 + 목록 재조회
+- [ ] fetchOrders가 search/fromDate/toDate에도 의존하도록 useCallback deps 추가
+- [ ] CSV 내보내기 버튼 — 현재 필터 조건 반영
+- [ ] 기존 환불(RefundDialog) 기능 그대로 유지
+
+---
+
+**구현 순서:** 62A (API 수정) → 62B (export API 신규) → 62C (페이지 수정)
+
+**주의사항:**
+- 62A: 기존 `where = status && validStatuses.includes(status) ? { status } : {}` 구조를 `searchFilter`, `dateFilter` 병합으로 확장
+- 62B: `export` 경로 `app/api/admin/orders/export/route.ts` — Next.js 정적 경로가 `[id]`보다 우선하므로 충돌 없음
+- 62C: `fetchOrders` useCallback deps에 `search`, `fromDate`, `toDate` 추가 필수 (누락 시 필터 반영 안 됨)
+- Order 모델에 `buyerPhone` 필드가 있는지 prisma 스키마 확인 필요 (실제 필드명 확인 후 적용)
+
+---
 
 ### ✅ Task 61: 관리자 셀러 목록 고도화 — 검색 + 페이지네이션 + CSV 내보내기 (완료 — Dev1)
 
