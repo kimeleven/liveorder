@@ -49,7 +49,7 @@ _최종 업데이트: 2026-04-10 (Task 60 스펙 수립: 관리자 정산 페이
 
 ## Dev1 현재 작업
 
-### Task 60: 관리자 정산 페이지 개선 — 필터 + 페이지네이션 + CSV 내보내기
+### ✅ Task 60: 관리자 정산 페이지 개선 — 필터 + 페이지네이션 + CSV 내보내기 (완료 — Dev1)
 
 **목표:** 관리자가 정산 내역을 날짜/상태로 필터링하고, 페이지네이션으로 대량 데이터를 탐색하며, 필터 조건 그대로 CSV로 내보낼 수 있도록 한다.
 
@@ -119,12 +119,12 @@ export async function GET(req: NextRequest) {
 ```
 
 **완료 조건:**
-- [ ] `?status=PENDING|COMPLETED|FAILED` 필터 작동
-- [ ] `?from=YYYY-MM-DD`, `?to=YYYY-MM-DD` 날짜 범위 (scheduledAt 기준)
-- [ ] `?sellerId=uuid` 특정 셀러 정산만 조회
-- [ ] `?page=`, `?limit=` 페이지네이션 (기본 limit=20)
-- [ ] 응답 형식: `{ data: [], total, page, limit, totalPages }`
-- [ ] 기존 `POST` (배치 실행) 그대로 유지
+- [x] `?status=PENDING|COMPLETED|FAILED` 필터 작동
+- [x] `?from=YYYY-MM-DD`, `?to=YYYY-MM-DD` 날짜 범위 (scheduledAt 기준)
+- [x] `?sellerId=uuid` 특정 셀러 정산만 조회
+- [x] `?page=`, `?limit=` 페이지네이션 (기본 limit=20)
+- [x] 응답 형식: `{ data: [], pagination: { total, page, limit, totalPages, ... } }`
+- [x] 기존 `POST` (배치 실행) 그대로 유지
 
 ---
 
@@ -211,11 +211,11 @@ export async function GET(req: NextRequest) {
 ```
 
 **완료 조건:**
-- [ ] 60A와 동일한 필터 파라미터 지원 (`?status=`, `?from=`, `?to=`, `?sellerId=`)
-- [ ] UTF-8 BOM 포함
-- [ ] 컬럼: 정산ID, 셀러, 사업자번호, 거래금액, 플랫폼수수료, PG수수료, 실지급액, 상태, 정산예정일, 정산완료일, 생성일
-- [ ] 파일명에 날짜 범위 반영 (`settlements_2026-04-01_2026-04-10_2026-04-10.csv`)
-- [ ] take:10000 상한
+- [x] 60A와 동일한 필터 파라미터 지원 (`?status=`, `?from=`, `?to=`, `?sellerId=`)
+- [x] UTF-8 BOM 포함
+- [x] 컬럼: 정산ID, 셀러, 사업자번호, 거래금액, 플랫폼수수료, PG수수료, 실지급액, 상태, 정산예정일, 정산완료일, 생성일
+- [x] 파일명에 날짜 범위 반영 (`settlements_2026-04-01_2026-04-10_2026-04-10.csv`)
+- [x] take:10000 상한
 
 ---
 
@@ -334,13 +334,13 @@ function handleExport() {
 ```
 
 **완료 조건:**
-- [ ] 날짜 범위 필터 — 시작일/종료일 input, 변경 시 page=1 리셋 + 목록 재조회
-- [ ] 상태 탭 클릭 시 page=1 리셋 (기존 탭 기능 유지)
-- [ ] 페이지네이션 — 이전/다음 버튼 + 현재/전체 페이지 표시 + 총 건수
-- [ ] "CSV 내보내기" 버튼 — 현재 필터 조건 그대로 export URL에 전달
-- [ ] 필터 있을 때 버튼 텍스트 "필터 조건으로 CSV"
-- [ ] `Download` 아이콘 import (lucide-react)
-- [ ] 기존 배치 실행 버튼 + 결과 배너 유지
+- [x] 날짜 범위 필터 — 시작일/종료일 input, 변경 시 page=1 리셋 + 목록 재조회
+- [x] 상태 탭 클릭 시 page=1 리셋 (기존 탭 기능 유지)
+- [x] 페이지네이션 — 이전/다음 버튼 + 현재/전체 페이지 표시 + 총 건수
+- [x] "CSV 내보내기" 버튼 — 현재 필터 조건 그대로 export URL에 전달
+- [x] 필터 있을 때 버튼 텍스트 "필터 조건으로 CSV"
+- [x] `Download` 아이콘 import (lucide-react)
+- [x] 기존 배치 실행 버튼 + 결과 배너 유지
 
 ---
 
