@@ -1,6 +1,6 @@
 # LiveOrder v3 프로젝트 계획
 _Planner 관리 | Eddy가 방향 조정_
-_최종 업데이트: 2026-04-09 (Task 48 완료 확인, Task 49 스펙 수립)_
+_최종 업데이트: 2026-04-09 (Task 49 완료 확인, Task 50 스펙 수립)_
 
 ---
 
@@ -18,7 +18,7 @@ _최종 업데이트: 2026-04-09 (Task 48 완료 확인, Task 49 스펙 수립)_
 |-------|------|
 | Phase 1 — MVP | ✅ 완료 |
 | Phase 2 — 고도화 | ✅ 완료 |
-| Phase 3 — 확장 | 🔧 진행 중 (Task 49 예정) |
+| Phase 3 — 확장 | 🔧 진행 중 (Task 50 예정) |
 | Phase 4 — 카카오 챗봇 v3 | ✅ 완료 (재가동 대기 중) |
 
 ---
@@ -42,233 +42,272 @@ _최종 업데이트: 2026-04-09 (Task 48 완료 확인, Task 49 스펙 수립)_
 | 46 | 셀러 주문 상세 페이지 `/seller/orders/[id]` + `GET /api/seller/orders/[id]` + 주문 검색 (`?q=`) |
 | 47 | 관리자 셀러 상세 페이지 `/admin/sellers/[id]` + `GET /api/admin/sellers/[id]` + `GET /api/admin/sellers/[id]/orders` + 목록 행 클릭 연결 |
 | 48 | 관리자 주문 상세 페이지 `/admin/orders/[id]` + `GET /api/admin/orders/[id]` + 목록 행 클릭 연결 |
+| 49 | 관리자 정산 상세 페이지 `/admin/settlements/[id]` + `GET/PATCH /api/admin/settlements/[id]` + 목록 행 클릭 연결 |
 
 ---
 
-## Task 49 — 관리자 정산 상세 페이지
+## Task 50 — 관리자 대시보드 개선
 
 ### 배경
 
-현재 관리자 `/admin/settlements` 정산 목록 페이지는 셀러명, 금액, 수수료, 상태만 표시하고, 행 클릭 시 아무 동작 없음.
-운영자가 특정 정산 건에 어떤 주문들이 포함되어 있는지, 셀러 계좌 정보가 무엇인지 확인할 방법이 없음.
-Task 46(셀러 주문 상세), 47(관리자 셀러 상세), 48(관리자 주문 상세)과 동일한 드릴다운 패턴으로 관리자 정산 상세 구현.
+현재 관리자 대시보드(`app/admin/dashboard/page.tsx`)는 숫자 통계 카드 4개만 존재.
+셀러 대시보드는 recharts 매출 차트 + 채널 통계 + 최근 주문 테이블이 있는데,
+관리자 대시보드는 이에 비해 매우 빈약하여 운영자가 전체 현황을 파악하기 어려움.
+
+현재 API(`GET /api/admin/dashboard`)도 4개 집계 숫자만 반환 중.
 
 ### 목표
 
-- 관리자가 정산 행 클릭 → `/admin/settlements/[id]` 상세 페이지
-- 정산 요약 + 셀러 정보 (계좌 포함) + 포함 주문 목록 표시
-- 정산 완료 처리 버튼 (PENDING → COMPLETED 수동 전환)
+- 일별/주별/월별 **플랫폼 전체 매출 차트** 추가
+- **승인 대기 셀러 목록** (최근 5건) — 클릭 → `/admin/sellers/[id]`
+- **최근 주문 목록** (최근 5건) — 클릭 → `/admin/orders/[id]`
+- 통계 카드 개선 — **오늘 매출 / 이번 달 매출** 분리 추가
 
 ### 서브태스크
 
 ---
 
-#### 49A: `GET /api/admin/settlements/[id]` — 신규 파일 생성
+#### 50A: `GET /api/admin/dashboard` 응답 확장
 
-**파일 신규 생성:** `app/api/admin/settlements/[id]/route.ts`
+**수정 파일:** `app/api/admin/dashboard/route.ts`
+
+현재 반환:
+```typescript
+{ pendingSellers, totalOrders, pendingSettlements, totalRevenue }
+```
+
+변경 후 반환:
+```typescript
+{
+  pendingSellers: number
+  totalOrders: number
+  pendingSettlements: number
+  totalRevenue: number        // 기존: 누적 수수료 수입
+  todayRevenue: number        // 신규: 오늘 결제 완료 주문 합산
+  thisMonthRevenue: number    // 신규: 이번달 결제 완료 주문 합산
+  dailySales: { date: string; total: number }[]  // 신규: 기간별 매출 (period 파라미터)
+  recentOrders: {
+    id: string
+    buyerName: string
+    amount: number
+    status: string
+    source: string
+    createdAt: string
+    code: { product: { name: string } }
+    seller: { name: string }
+  }[]                         // 신규: 최근 주문 5건 (전체 셀러 통합)
+  pendingSellerList: {
+    id: string
+    name: string
+    email: string
+    createdAt: string
+  }[]                         // 신규: 승인 대기 셀러 최근 5건
+}
+```
+
+**구현 상세:**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { id } = await params
+  const { searchParams } = new URL(req.url)
+  const period = searchParams.get('period') ?? 'daily'  // daily | weekly | monthly
 
-  const settlement = await prisma.settlement.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      amount: true,
-      fee: true,
-      pgFee: true,
-      netAmount: true,
-      status: true,
-      scheduledAt: true,
-      settledAt: true,
-      createdAt: true,
-      seller: {
-        select: {
-          id: true,
-          name: true,
-          businessNo: true,
-          email: true,
-          phone: true,
-          bankName: true,
-          bankAccount: true,
-        },
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  // 기간별 dailySales 계산
+  let groupByFormat: string
+  let rangeStart: Date
+  if (period === 'monthly') {
+    groupByFormat = 'YYYY-MM'
+    rangeStart = new Date(now.getFullYear(), now.getMonth() - 11, 1)  // 최근 12개월
+  } else if (period === 'weekly') {
+    rangeStart = new Date(now.getTime() - 11 * 7 * 24 * 60 * 60 * 1000)  // 최근 12주
+    groupByFormat = 'YYYY-IW'
+  } else {
+    rangeStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000)  // 최근 7일
+    groupByFormat = 'YYYY-MM-DD'
+  }
+
+  const [
+    pendingSellers,
+    totalOrders,
+    pendingSettlements,
+    feeSum,
+    todayRevenue,
+    thisMonthRevenue,
+    rawDailySales,
+    recentOrders,
+    pendingSellerList,
+  ] = await Promise.all([
+    prisma.seller.count({ where: { status: 'PENDING' } }),
+    prisma.order.count(),
+    prisma.settlement.count({ where: { status: 'PENDING' } }),
+    prisma.settlement.aggregate({ _sum: { fee: true } }).then(r => Number(r._sum.fee ?? 0)),
+
+    // 오늘 매출 (PAID 이상 주문 합산)
+    prisma.order.aggregate({
+      _sum: { amount: true },
+      where: {
+        status: { notIn: ['REFUNDED'] },
+        createdAt: { gte: todayStart },
       },
-      orders: {
-        select: {
-          id: true,
-          buyerName: true,
-          buyerPhone: true,
-          quantity: true,
-          amount: true,
-          status: true,
-          source: true,
-          createdAt: true,
-          code: {
-            select: {
-              codeKey: true,
-              product: { select: { name: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
+    }).then(r => Number(r._sum.amount ?? 0)),
+
+    // 이번달 매출
+    prisma.order.aggregate({
+      _sum: { amount: true },
+      where: {
+        status: { notIn: ['REFUNDED'] },
+        createdAt: { gte: monthStart },
       },
-    },
+    }).then(r => Number(r._sum.amount ?? 0)),
+
+    // 기간별 매출 (Raw SQL for grouping)
+    prisma.$queryRaw<{ date: string; total: bigint }[]>`
+      SELECT
+        TO_CHAR("createdAt" AT TIME ZONE 'Asia/Seoul', ${
+          period === 'monthly' ? 'YYYY-MM' :
+          period === 'weekly'  ? 'IYYY-IW' :
+          'YYYY-MM-DD'
+        }) AS date,
+        SUM(amount) AS total
+      FROM "Order"
+      WHERE status NOT IN ('REFUNDED')
+        AND "createdAt" >= ${rangeStart}
+      GROUP BY 1
+      ORDER BY 1
+    `,
+
+    // 최근 주문 5건 (전체 셀러)
+    prisma.order.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        buyerName: true,
+        amount: true,
+        status: true,
+        source: true,
+        createdAt: true,
+        code: { select: { product: { select: { name: true } } } },
+        seller: { select: { name: true } },
+      },
+    }),
+
+    // 승인 대기 셀러 최근 5건
+    prisma.seller.findMany({
+      take: 5,
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, email: true, createdAt: true },
+    }),
+  ])
+
+  const dailySales = rawDailySales.map(r => ({
+    date: r.date,
+    total: Number(r.total),
+  }))
+
+  return NextResponse.json({
+    pendingSellers,
+    totalOrders,
+    pendingSettlements,
+    totalRevenue: feeSum,
+    todayRevenue,
+    thisMonthRevenue,
+    dailySales,
+    recentOrders,
+    pendingSellerList,
   })
-
-  if (!settlement) {
-    return NextResponse.json({ error: '정산 건을 찾을 수 없습니다.' }, { status: 404 })
-  }
-
-  return NextResponse.json(settlement)
-}
-
-export async function PATCH(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth()
-  if (!session || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { id } = await params
-
-  const settlement = await prisma.settlement.findUnique({ where: { id } })
-  if (!settlement) {
-    return NextResponse.json({ error: '정산 건을 찾을 수 없습니다.' }, { status: 404 })
-  }
-  if (settlement.status !== 'PENDING') {
-    return NextResponse.json({ error: '대기 중인 정산만 완료 처리할 수 있습니다.' }, { status: 400 })
-  }
-
-  const updated = await prisma.settlement.update({
-    where: { id },
-    data: {
-      status: 'COMPLETED',
-      settledAt: new Date(),
-    },
-  })
-
-  return NextResponse.json(updated)
 }
 ```
 
 **완료 조건:**
-- [ ] 관리자 세션 없으면 401
-- [ ] 없는 ID → 404
-- [ ] seller 정보 (id, name, businessNo, email, phone, bankName, bankAccount) 포함 반환
-- [ ] 포함 주문 목록 (id, buyerName, quantity, amount, status, source, createdAt, code.codeKey, product.name) 반환
-- [ ] PATCH: PENDING → COMPLETED 전환 (settledAt = now)
-- [ ] PATCH: 이미 COMPLETED면 400
+- [ ] `period` 쿼리 파라미터 지원 (daily/weekly/monthly)
+- [ ] `todayRevenue`, `thisMonthRevenue` 반환
+- [ ] `dailySales` 배열 반환 (BigInt → number 변환 필수)
+- [ ] `recentOrders` 최근 5건 반환 (seller.name 포함)
+- [ ] `pendingSellerList` 최근 5건 반환
 
 ---
 
-#### 49B: `/admin/settlements/[id]` 페이지 신규 생성
+#### 50B: 관리자 대시보드 페이지 UI 개선
 
-**파일 신규 생성:** `app/admin/settlements/[id]/page.tsx`
+**수정 파일:** `app/admin/dashboard/page.tsx`
 
-**레이아웃 (3카드 + 1테이블):**
+**레이아웃:**
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ ← 정산 목록  |  정산 #XXXXXXXX  [상태배지]  [완료처리버튼(PENDING시)]│
-├──────────────────────┬──────────────────────────────────────────┤
-│ 정산 요약             │ 셀러 정보                                  │
-│ 거래금액              │ 상호명 (셀러 상세 링크)                     │
-│ 플랫폼 수수료 (2.5%)  │ 사업자번호                                  │
-│ PG 수수료             │ 이메일                                      │
-│ 실지급액              │ 연락처                                      │
-│ 정산예정일            │ 정산 계좌 (은행명 + 계좌번호)               │
-│ 정산완료일 (있을 때)  │                                            │
-├──────────────────────┴──────────────────────────────────────────┤
-│ 포함 주문 목록 (N건)                                              │
-│ 주문번호 | 상품명 | 코드키 | 구매자 | 수량 | 금액 | 채널 | 주문일  │
-│ [행 클릭 → /admin/orders/[id]]                                   │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ 관리자 대시보드                                                     │
+├──────────┬──────────┬──────────┬──────────┬──────────┬──────────┤
+│ 승인대기  │ 총주문   │ 정산대기  │ 수수료수입│ 오늘매출 │ 이번달   │
+│ N건      │ N건      │ N건      │ ₩N       │ ₩N       │ ₩N       │
+├──────────┴──────────┴──────────┴──────────┴──────────┴──────────┤
+│ 플랫폼 매출 추이           [일별] [주별] [월별]                    │
+│ (LineChart 200px)                                                  │
+├─────────────────────────────┬────────────────────────────────────┤
+│ 승인 대기 셀러 (N건)         │ 최근 주문                          │
+│ 상호명 | 이메일 | 가입일     │ 주문번호 | 셀러 | 상품 | 금액 | 상태│
+│ [행 클릭 → /admin/sellers/id]│ [행 클릭 → /admin/orders/id]      │
+└─────────────────────────────┴────────────────────────────────────┘
 ```
 
 **구현 포인트:**
-1. `'use client'` + `useParams<{ id: string }>()`으로 ID 추출
-2. `useEffect`로 `GET /api/admin/settlements/${id}` 호출, 에러/로딩 상태 처리
-3. 정산 완료 처리 버튼:
-   - 조건: `settlement.status === 'PENDING'`
-   - 클릭 시 `PATCH /api/admin/settlements/${id}` 호출
-   - 성공 후 `fetchSettlement()` 재호출 → 상태 즉시 갱신
-   - 버튼 텍스트: "정산 완료 처리"
-4. 셀러 상호명: `<Link href={'/admin/sellers/' + seller.id}>` 링크
-5. 정산 계좌: `bankName ? ${bankName} ${bankAccount} : '미등록'`
-6. 포함 주문 테이블 행 클릭: `router.push('/admin/orders/' + order.id)`
-7. 상태 배지 매핑:
+
+1. `'use client'` + `useRouter`
+2. `fetchDashboard(period: string)` 함수 — `GET /api/admin/dashboard?period=${period}` 호출
+3. `chartPeriod` state (`'daily' | 'weekly' | 'monthly'`), 버튼 클릭 시 재조회
+4. 통계 카드 6개로 확장:
    ```typescript
-   const STATUS_BADGE = {
-     PENDING: { label: '대기중', variant: 'secondary' },
-     COMPLETED: { label: '완료', variant: 'default' },
-     FAILED: { label: '실패', variant: 'destructive' },
-   }
+   const cards = [
+     { title: '승인 대기 셀러', value: stats.pendingSellers, icon: Users, color: 'text-orange-600' },
+     { title: '총 주문', value: stats.totalOrders, icon: ShoppingCart, color: 'text-blue-600' },
+     { title: '정산 대기', value: stats.pendingSettlements, icon: Wallet, color: 'text-purple-600' },
+     { title: '수수료 수입 (누적)', value: `₩${stats.totalRevenue.toLocaleString()}`, icon: TrendingUp, color: 'text-green-600' },
+     { title: '오늘 매출', value: `₩${(stats.todayRevenue ?? 0).toLocaleString()}`, icon: AlertTriangle, color: 'text-red-500' },
+     { title: '이번달 매출', value: `₩${(stats.thisMonthRevenue ?? 0).toLocaleString()}`, icon: Calendar, color: 'text-indigo-600' },
+   ]
    ```
-8. 채널 배지: `source === 'kakao'` → `<Badge variant="secondary">카카오</Badge>`
-9. `AdminShell` 래핑 필수
-10. 카드 레이아웃: `grid grid-cols-1 md:grid-cols-2 gap-4`
+5. 매출 차트: `recharts` `LineChart` — 셀러 대시보드(`app/seller/dashboard/page.tsx`)와 동일한 구조로 구현
+   - XAxis tickFormatter: daily `M/D`, weekly `M/D주`, monthly `YYYY.MM`
+   - YAxis tickFormatter: `v >= 10000 ? ${(v/10000).toFixed(0)}만 : v`
+   - stroke: `#6366f1` (동일 컬러)
+6. 승인 대기 셀러 테이블:
+   - 컬럼: 상호명, 이메일, 가입일
+   - 행 클릭: `router.push('/admin/sellers/' + seller.id)`
+   - 빈 상태: "승인 대기 중인 셀러가 없습니다."
+7. 최근 주문 테이블:
+   - 컬럼: 주문번호(8자 앞, 대문자, mono), 셀러명, 상품명, 금액, 상태 배지, 채널 배지
+   - 행 클릭: `router.push('/admin/orders/' + order.id)`
+   - source === 'kakao' → `<Badge variant="secondary">카카오</Badge>`, 아니면 `<Badge variant="outline">웹</Badge>`
+   - 빈 상태: "아직 주문이 없습니다."
+8. import 추가: `TrendingUp, Calendar` from `lucide-react`, `LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer` from `recharts`
 
 **완료 조건:**
-- [ ] 정산 요약 전체 표시 (거래금액, 수수료, PG수수료, 실지급액, 예정일, 완료일)
-- [ ] 셀러 정보 표시 (상호명 링크 포함, 정산 계좌)
-- [ ] 포함 주문 목록 테이블 + 행 클릭 → `/admin/orders/[id]`
-- [ ] PENDING 상태에서만 "정산 완료 처리" 버튼 표시
-- [ ] 완료 처리 후 상태 즉시 갱신 (재조회)
-- [ ] `AdminShell` 래핑 적용
+- [ ] 통계 카드 6개 (오늘 매출, 이번달 매출 추가)
+- [ ] 매출 추이 LineChart (일별/주별/월별 토글)
+- [ ] 승인 대기 셀러 테이블 + 행 클릭 → `/admin/sellers/[id]`
+- [ ] 최근 주문 테이블 + 행 클릭 → `/admin/orders/[id]`
+- [ ] 에러/로딩 처리 (catch 후 에러 메시지 표시)
+- [ ] `AdminShell` 래핑 유지
 
 ---
 
-#### 49C: `/admin/settlements` 목록 행 클릭 연결
+## Task 51 예고 — 관리자 셀러 승인 즉시 처리 UX 개선
 
-**수정 파일:** `app/admin/settlements/page.tsx`
-
-**변경 내용:**
-1. `import { useRouter } from 'next/navigation'` 추가
-2. 컴포넌트 내 `const router = useRouter()` 추가
-3. `TableRow`에 클릭 핸들러 + 커서 스타일 추가:
-
-```tsx
-<TableRow
-  key={s.id}
-  className="cursor-pointer hover:bg-muted/50"
-  onClick={() => router.push(`/admin/settlements/${s.id}`)}
->
-  {/* 기존 컬럼들 */}
-</TableRow>
-```
-
-4. "정산 배치 실행" `Button`의 `onClick`이 있으므로 행 클릭과 충돌 없음 (버튼은 TableRow 밖)
-
-**완료 조건:**
-- [ ] 정산 행 클릭 시 `/admin/settlements/[id]`로 이동
-- [ ] 마우스 커서가 pointer로 변경
-
----
-
-## Task 50 예고 — 관리자 대시보드 개선
-
-현재 관리자 대시보드는 숫자 통계 카드 4개만 존재. 셀러 대시보드처럼 매출 추이 차트 + 빠른 링크 추가 예정.
-
-### 구현 예정 내용
-
-1. **일별 매출 차트 (7일)** — `recharts` LineChart, `GET /api/admin/dashboard`에 `dailySales` 추가
-2. **승인 대기 셀러 목록** — 최근 5건, 클릭 → `/admin/sellers/[id]`
-3. **최근 주문 목록** — 최근 5건, 클릭 → `/admin/orders/[id]`
-4. **통계 카드 개선** — 오늘 매출 / 이번 달 매출 분리
+현재 관리자 셀러 목록/상세에서 승인 처리 후 페이지 새로고침 필요.
+Task 47에서 만든 셀러 상세 페이지에서 승인/거부/정지 버튼 추가 및 즉시 상태 반영 개선 예정.
 
 ---
 
