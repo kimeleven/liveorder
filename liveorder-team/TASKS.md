@@ -1,6 +1,6 @@
 # LiveOrder v3 — 팀 태스크 현황
 _Eddy(PM) 관리_
-_최종 업데이트: 2026-04-09 (Task 54 완료 확인 + Task 55 스펙 수립: 셀러 코드 편집/삭제)_
+_최종 업데이트: 2026-04-09 (Task 55 완료 확인 + Task 56 스펙 수립: 셀러 상품 활성/비활성 토글 + 비활성 상품 목록)_
 
 ---
 
@@ -59,88 +59,28 @@ _최종 업데이트: 2026-04-09 (Task 54 완료 확인 + Task 55 스펙 수립:
 
 ## Dev1 현재 작업
 
-### Task 55: 셀러 코드 편집 / 삭제
+### Task 56: 셀러 상품 활성/비활성 토글 + 비활성 상품 목록 표시
 
-**목표:** 셀러가 생성된 코드의 만료일과 최대 수량을 수정하고, 주문이 없는 코드를 삭제할 수 있도록 구현
+**목표:** 셀러가 상품을 일시 중지(비활성화)하고, 필요 시 다시 활성화할 수 있도록 구현
 
 **배경:**
-- 현재 코드 생성 후 수정 방법 없음 (만료일/수량 오설정 시 삭제 후 재생성 필요)
-- `/seller/codes/[id]` 상세 페이지에 활성/비활성 토글만 있음
-- 코드 편집(PATCH)과 삭제(DELETE) API가 미구현
+- 현재 상품 목록(`/seller/products`)은 `isActive: true`만 표시 → 비활성화된 상품 재활성화 불가
+- 상품 삭제(DELETE) API는 soft-delete(isActive=false)이나, 목록에서 사라지므로 실질적으로 영구 삭제처럼 동작
+- 상품 상세 페이지에 활성/비활성 토글 버튼이 없음 (코드 상세 페이지와 달리)
+- 코드(`/api/seller/codes/[id]/toggle`)와 동일한 패턴을 상품에도 적용
 
 ---
 
-#### 55A: `PATCH /api/seller/codes/[id]` — 코드 만료일/최대수량 수정
+#### 56A: `POST /api/seller/products/[id]/toggle` — 상품 활성/비활성 토글
 
-**수정 파일:** `app/api/seller/codes/[id]/route.ts`
-
-기존 GET 핸들러에 `PATCH` 추가:
+**신규 파일:** `app/api/seller/products/[id]/toggle/route.ts`
 
 ```typescript
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth()
-  if (!session?.user?.id)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 
-  const { id } = await params
-  const body = await req.json()
-
-  const existing = await prisma.code.findFirst({
-    where: { id, product: { sellerId: session.user.id } },
-  })
-  if (!existing)
-    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
-
-  const { expiresAt, maxQty } = body
-  const updateData: Record<string, unknown> = {}
-
-  if (expiresAt !== undefined) {
-    const d = new Date(expiresAt)
-    if (isNaN(d.getTime()))
-      return NextResponse.json({ error: '유효하지 않은 날짜입니다.' }, { status: 400 })
-    if (d <= new Date())
-      return NextResponse.json({ error: '만료일은 현재 시간보다 이후여야 합니다.' }, { status: 400 })
-    updateData.expiresAt = d
-  }
-
-  if (maxQty !== undefined) {
-    const qty = Number(maxQty)
-    if (!Number.isInteger(qty) || qty < 0)
-      return NextResponse.json({ error: '최대 주문 수량은 0 이상의 정수여야 합니다.' }, { status: 400 })
-    if (qty > 0 && qty < existing.usedQty)
-      return NextResponse.json(
-        { error: `이미 ${existing.usedQty}건 주문됨. 최대 수량은 ${existing.usedQty} 이상이어야 합니다.` },
-        { status: 400 }
-      )
-    updateData.maxQty = qty
-  }
-
-  if (Object.keys(updateData).length === 0)
-    return NextResponse.json({ error: '변경할 필드가 없습니다.' }, { status: 400 })
-
-  const updated = await prisma.code.update({ where: { id }, data: updateData })
-  return NextResponse.json(updated)
-}
-```
-
-**완료 조건:**
-- [ ] 본인 코드만 수정 가능 (타인 → 404)
-- [ ] expiresAt 과거 날짜 → 400
-- [ ] maxQty 음수 → 400, usedQty보다 작으면 → 400
-- [ ] 0은 무제한으로 허용
-- [ ] 변경 필드 없으면 → 400
-
----
-
-#### 55B: `DELETE /api/seller/codes/[id]` — 코드 삭제 (주문 없는 경우만)
-
-**수정 파일:** `app/api/seller/codes/[id]/route.ts` (55A와 같은 파일)
-
-```typescript
-export async function DELETE(
+export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -150,208 +90,208 @@ export async function DELETE(
 
   const { id } = await params
 
-  const code = await prisma.code.findFirst({
-    where: { id, product: { sellerId: session.user.id } },
-    include: { _count: { select: { orders: true } } },
+  const product = await prisma.product.findFirst({
+    where: { id, sellerId: session.user.id },
   })
-  if (!code)
-    return NextResponse.json({ error: '코드를 찾을 수 없습니다.' }, { status: 404 })
+  if (!product)
+    return NextResponse.json({ error: '상품을 찾을 수 없습니다.' }, { status: 404 })
 
-  if (code._count.orders > 0)
-    return NextResponse.json(
-      { error: `주문이 ${code._count.orders}건 있는 코드는 삭제할 수 없습니다. 비활성화를 사용하세요.` },
-      { status: 409 }
-    )
+  const updated = await prisma.product.update({
+    where: { id },
+    data: { isActive: !product.isActive },
+  })
 
-  await prisma.code.delete({ where: { id } })
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ isActive: updated.isActive })
 }
 ```
 
 **완료 조건:**
-- [ ] 본인 코드만 삭제 가능
-- [ ] 주문 있는 코드 → 409 에러 + 비활성화 안내 메시지
-- [ ] 주문 없는 코드 → 삭제 성공 `{ success: true }`
+- [ ] 본인 상품만 토글 가능 (타인 상품 → 404)
+- [ ] isActive 값이 반전되어 반환
+- [ ] `{ isActive: boolean }` 응답
 
 ---
 
-#### 55C: `/seller/codes/[id]` 페이지에 편집 다이얼로그 + 삭제 버튼 추가
+#### 56B: `GET /api/seller/products` — `?status` 필터 지원
 
-**수정 파일:** `app/seller/codes/[id]/page.tsx`
+**수정 파일:** `app/api/seller/products/route.ts`
 
-**추가 import:**
+현재 `isActive: true` 고정 → status 파라미터로 필터:
+
 ```typescript
-import { Pencil } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+// GET 핸들러 내 where 부분 수정
+const status = searchParams.get('status') ?? 'active'
+const isActiveFilter =
+  status === 'all' ? {} :
+  status === 'inactive' ? { isActive: false } :
+  { isActive: true }
+const where = { sellerId: session.user.id, ...isActiveFilter }
 ```
 
-**추가 상태 (기존 toggling 아래에):**
+**완료 조건:**
+- [ ] `?status=active` (기본) → isActive=true 상품만
+- [ ] `?status=inactive` → isActive=false 상품만
+- [ ] `?status=all` → 전체 상품 (활성+비활성)
+- [ ] 기존 페이지네이션 동작 유지
+
+---
+
+#### 56C: `/seller/products` 목록 페이지 — 상태 필터 탭 + 토글 버튼
+
+**수정 파일:** `app/seller/products/page.tsx`
+
+**추가할 상태:**
 ```typescript
-const [editOpen, setEditOpen] = useState(false)
-const [editForm, setEditForm] = useState({ expiresAt: '', maxQty: '' })
-const [saving, setSaving] = useState(false)
-const [deleting, setDeleting] = useState(false)
+const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
+const [toggling, setToggling] = useState<string | null>(null)
 ```
 
-**fetch 함수 추출 (useEffect 내 fetch 로직을 별도 함수로):**
+**fetch 수정:**
 ```typescript
-const fetchData = useCallback(() => {
-  setLoading(true)
-  fetch(`/api/seller/codes/${id}?page=${page}`)
-    .then((r) => r.json())
-    .then((d) => setData(d))
-    .catch(() => toast.error('데이터를 불러오지 못했습니다.'))
-    .finally(() => setLoading(false))
-}, [id, page])
-
-useEffect(() => { fetchData() }, [fetchData])
-```
-(기존 useEffect에서 직접 호출하던 fetch를 위 fetchData로 교체)
-참고: `useCallback`은 `import { useEffect, useState, useCallback } from 'react'` 로 추가
-
-**편집 오픈 핸들러:**
-```typescript
-function openEdit() {
-  if (!data) return
-  const d = new Date(data.code.expiresAt)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-  setEditForm({ expiresAt: local, maxQty: String(data.code.maxQty) })
-  setEditOpen(true)
-}
+// fetchProducts 함수의 fetch URL 수정
+fetch(`/api/seller/products?page=${currentPage}&status=${statusFilter}`)
 ```
 
-**저장 핸들러:**
+**필터 탭 UI (카드 위에 추가):**
+```tsx
+<div className="flex gap-2 mb-4">
+  {(['active', 'inactive', 'all'] as const).map((s) => (
+    <Button
+      key={s}
+      variant={statusFilter === s ? 'default' : 'outline'}
+      size="sm"
+      onClick={() => { setStatusFilter(s); setPage(1) }}
+    >
+      {s === 'active' ? '활성' : s === 'inactive' ? '비활성' : '전체'}
+    </Button>
+  ))}
+</div>
+```
+
+**토글 핸들러:**
 ```typescript
-async function handleSave() {
-  setSaving(true)
+async function handleToggle(product: Product) {
+  setToggling(product.id)
   try {
-    const res = await fetch(`/api/seller/codes/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        expiresAt: editForm.expiresAt ? new Date(editForm.expiresAt).toISOString() : undefined,
-        maxQty: editForm.maxQty !== '' ? Number(editForm.maxQty) : undefined,
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      toast.error(err.error ?? '저장 실패')
-      return
-    }
-    toast.success('코드가 수정되었습니다.')
-    setEditOpen(false)
-    fetchData()
+    const res = await fetch(`/api/seller/products/${product.id}/toggle`, { method: 'POST' })
+    if (!res.ok) { toast.error('상태 변경 실패'); return }
+    const { isActive } = await res.json()
+    toast.success(isActive ? '상품이 활성화되었습니다.' : '상품이 비활성화되었습니다.')
+    fetchProducts(page)
+  } catch {
+    toast.error('서버 오류가 발생했습니다.')
   } finally {
-    setSaving(false)
+    setToggling(null)
   }
 }
 ```
 
-**삭제 핸들러:**
-```typescript
-async function handleDelete() {
-  if (!confirm('이 코드를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
-  setDeleting(true)
-  try {
-    const res = await fetch(`/api/seller/codes/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const err = await res.json()
-      toast.error(err.error ?? '삭제 실패')
-      return
-    }
-    toast.success('코드가 삭제되었습니다.')
-    router.push('/seller/codes')
-  } finally {
-    setDeleting(false)
-  }
-}
-```
-
-**헤더 버튼 영역 변경 (기존 토글 버튼 앞에 편집/삭제 추가):**
-```typescript
-{/* 기존 토글 버튼 앞에 추가 */}
-<Button variant="outline" size="sm" onClick={openEdit} disabled={!data}>
-  <Pencil className="h-4 w-4 mr-1" /> 편집
+**카드에 토글 버튼 추가 (기존 연필/휴지통 버튼 영역):**
+```tsx
+<Button
+  variant="ghost"
+  size="sm"
+  onClick={(e) => { e.stopPropagation(); handleToggle(product) }}
+  disabled={toggling === product.id}
+>
+  {toggling === product.id
+    ? <Loader2 className="h-4 w-4 animate-spin" />
+    : product.isActive ? '중지' : '활성화'}
 </Button>
+```
+
+**비활성 상품 카드 시각 처리:**
+```tsx
+// 카드 className에 조건부 추가
+className={`... ${!product.isActive ? 'opacity-60' : ''}`}
+```
+
+**import 추가:**
+```typescript
+import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+```
+
+**완료 조건:**
+- [ ] 상태 필터 탭 (활성/비활성/전체) — 탭 전환 시 목록 즉시 갱신
+- [ ] 각 상품 카드에 "활성화" / "중지" 버튼 (현재 상태 반전)
+- [ ] 토글 성공 → toast + 목록 새로고침
+- [ ] 비활성 상품은 opacity-60으로 시각적 구분
+- [ ] 기본 필터는 'active' (기존 동작 유지)
+
+---
+
+#### 56D: `/seller/products/[id]` 상세 페이지 — 토글 버튼 추가
+
+**수정 파일:** `app/seller/products/[id]/page.tsx`
+
+**추가 상태:**
+```typescript
+const [toggling, setToggling] = useState(false)
+const fetchProduct = useCallback(() => {
+  setLoading(true)
+  fetch(`/api/seller/products/${id}`)
+    .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+    .then((res) => setProduct(res))
+    .catch(() => toast.error('상품 정보를 불러오지 못했습니다.'))
+    .finally(() => setLoading(false))
+}, [id])
+
+useEffect(() => { fetchProduct() }, [fetchProduct])
+```
+(기존 useEffect fetch 로직을 fetchProduct로 추출, useCallback import 추가)
+
+**토글 핸들러:**
+```typescript
+async function handleToggle() {
+  if (!product) return
+  setToggling(true)
+  try {
+    const res = await fetch(`/api/seller/products/${id}/toggle`, { method: 'POST' })
+    if (!res.ok) { toast.error('상태 변경 실패'); return }
+    const { isActive } = await res.json()
+    toast.success(isActive ? '상품이 활성화되었습니다.' : '상품이 비활성화되었습니다.')
+    fetchProduct()
+  } finally {
+    setToggling(false)
+  }
+}
+```
+
+**헤더 버튼 추가 (기존 "수정" 버튼 앞에):**
+```tsx
 <Button
   variant="outline"
   size="sm"
-  className="text-destructive hover:text-destructive"
-  onClick={handleDelete}
-  disabled={deleting || !data}
+  onClick={handleToggle}
+  disabled={toggling || !product}
 >
-  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : '삭제'}
+  {toggling
+    ? <Loader2 className="h-4 w-4 animate-spin" />
+    : product?.isActive ? '판매 중지' : '판매 재개'}
 </Button>
-{/* 기존 토글 버튼 */}
 ```
 
-**편집 다이얼로그 JSX (return 문 내부, SellerShell 밖 또는 안에):**
+**import 추가:**
 ```typescript
-<Dialog open={editOpen} onOpenChange={setEditOpen}>
-  <DialogContent className="sm:max-w-md">
-    <DialogHeader>
-      <DialogTitle>코드 편집</DialogTitle>
-    </DialogHeader>
-    <div className="space-y-4 py-2">
-      <div className="space-y-2">
-        <Label>만료일</Label>
-        <Input
-          type="datetime-local"
-          value={editForm.expiresAt}
-          onChange={(e) => setEditForm((f) => ({ ...f, expiresAt: e.target.value }))}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>
-          최대 주문 수량{' '}
-          <span className="text-muted-foreground text-xs">(0 = 무제한)</span>
-        </Label>
-        <Input
-          type="number"
-          min={0}
-          value={editForm.maxQty}
-          onChange={(e) => setEditForm((f) => ({ ...f, maxQty: e.target.value }))}
-        />
-      </div>
-    </div>
-    <DialogFooter>
-      <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
-        취소
-      </Button>
-      <Button onClick={handleSave} disabled={saving}>
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : '저장'}
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
+import { useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 ```
+(Loader2가 이미 import돼 있으면 생략, useCallback은 기존 useState, useEffect 옆에 추가)
 
 **완료 조건:**
-- [ ] 편집 버튼 → 다이얼로그 오픈, 현재값(만료일/최대수량) 초기화
-- [ ] 저장 → PATCH 호출 → 성공 toast + 페이지 데이터 새로고침 (setData 재호출)
-- [ ] API 에러 시 toast.error로 서버 메시지 표시
-- [ ] 삭제 버튼 → confirm → DELETE 호출 → 성공 시 `/seller/codes` 이동
-- [ ] 주문 있는 코드 삭제 시도 → toast.error "주문이 N건 있는 코드는 삭제할 수 없습니다" 표시
-- [ ] loading 중이거나 data 없으면 편집/삭제 버튼 disabled
+- [ ] 헤더에 "판매 중지" / "판매 재개" 버튼 표시 (isActive에 따라 전환)
+- [ ] 토글 성공 → toast + 상품 데이터 새로고침 (fetchProduct 재호출)
+- [ ] loading 중이거나 product 없으면 버튼 disabled
 
 ---
 
-**구현 순서:** 55A → 55B (같은 파일) → 55C
+**구현 순서:** 56A (신규 파일) → 56B (기존 파일 수정) → 56C → 56D
 
 **주의사항:**
-- Dialog 컴포넌트: `@/components/ui/dialog` 사용 (shadcn/ui)
-- `useCallback` import 추가 필요
-- 기존 useEffect의 fetch 로직을 `fetchData` 함수로 추출해야 저장 후 새로고침 가능
-- Skeleton 및 Loader2는 이미 import 되어 있음
+- 56A는 코드 toggle(`app/api/seller/codes/[id]/toggle/route.ts`)과 동일한 패턴
+- 56C에서 `toast`가 기존에 import 안 돼 있으면 `import { toast } from 'sonner'` 추가
+- 56D에서 `useCallback` 미import 시 추가 필요
 
 ---
 
