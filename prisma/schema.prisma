@@ -41,6 +41,8 @@ model Seller {
   emailVerified      Boolean  @default(false) @map("email_verified")
   emailVerifyToken          String?   @map("email_verify_token") @db.VarChar(100)
   emailVerifyTokenExpiresAt DateTime? @map("email_verify_token_expires_at") @db.Timestamptz
+  shopCode     String?  @unique @map("shop_code") @db.VarChar(6)
+  kakaoPayId   String?  @map("kakao_pay_id") @db.VarChar(100)
   status       SellerStatus @default(PENDING)
   plan         SellerPlan   @default(FREE)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -98,9 +100,8 @@ model Code {
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  product          Product          @relation(fields: [productId], references: [id])
-  orders           Order[]
-  kakaoPaySessions KakaoPaySession[]
+  product Product @relation(fields: [productId], references: [id])
+  orders  Order[]
 
   @@map("codes")
 }
@@ -119,7 +120,7 @@ model Order {
   memo          String?
   quantity      Int         @default(1)
   amount        Int // 결제금액
-  status        OrderStatus @default(PAID)
+  status        OrderStatus @default(TRANSFER_PENDING)
   source        String      @default("web") @map("source") @db.VarChar(10)
   pgTid         String?     @unique @map("pg_tid") @db.VarChar(100) // PG사 거래번호
   trackingNo    String?     @map("tracking_no") @db.VarChar(50) // 운송장번호
@@ -136,11 +137,13 @@ model Order {
 }
 
 enum OrderStatus {
-  PAID      // 결제 완료
-  SHIPPING  // 배송 중 (선택)
-  DELIVERED // 배송 완료
-  SETTLED   // 정산 완료
-  REFUNDED  // 환불
+  TRANSFER_PENDING // 송금 대기 (MVP: 주문 생성 초기 상태)
+  CONFIRMED        // 송금 확인 완료
+  PAID             // 결제 완료 (레거시)
+  SHIPPING         // 배송 중
+  DELIVERED        // 배송 완료
+  SETTLED          // 정산 완료
+  REFUNDED         // 환불
 }
 
 // ========================================
@@ -186,17 +189,3 @@ model SellerAuditLog {
   @@map("seller_audit_log")
 }
 
-// ========================================
-// 카카오 결제 세션 (Task 35)
-// ========================================
-model KakaoPaySession {
-  id        String   @id @default(uuid()) @db.Uuid
-  token     String   @unique @db.VarChar(64)
-  codeId    String   @map("code_id") @db.Uuid
-  expiresAt DateTime @map("expires_at") @db.Timestamptz
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  code Code @relation(fields: [codeId], references: [id])
-
-  @@map("kakao_pay_sessions")
-}
