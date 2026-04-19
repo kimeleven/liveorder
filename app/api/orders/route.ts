@@ -105,7 +105,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(order, { status: 201 });
+    return NextResponse.json(
+      {
+        ...order,
+        sellerPayment: codeWithSeller?.product?.seller
+          ? {
+              bankName: codeWithSeller.product.seller.bankName ?? null,
+              bankAccount: codeWithSeller.product.seller.bankAccount ?? null,
+              kakaoPayId: codeWithSeller.product.seller.kakaoPayId ?? null,
+            }
+          : null,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("주문 생성 오류:", error);
     return NextResponse.json({ error: "주문 처리 중 오류가 발생했습니다." }, { status: 500 });

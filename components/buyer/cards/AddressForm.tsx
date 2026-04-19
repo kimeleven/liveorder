@@ -19,8 +19,10 @@ export default function AddressForm({ data }: Props) {
   const [agreePersonal, setAgreePersonal] = useState(false);
   const [agreeThirdParty, setAgreeThirdParty] = useState(false);
   const [phoneError, setPhoneError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
@@ -31,6 +33,7 @@ export default function AddressForm({ data }: Props) {
       return;
     }
     setPhoneError("");
+    setSubmitError("");
 
     const address = {
       buyerName: formData.get("buyerName") as string,
@@ -50,20 +53,51 @@ export default function AddressForm({ data }: Props) {
 
     updateFlowStep("address_entry", { address });
 
-    // 결제 요약 표시
-    const totalAmount = data.totalAmount as number;
-    addMessage({
-      direction: "incoming",
-      type: "payment-summary",
-      payload: {
-        quantity: data.quantity,
-        totalAmount,
-        product: currentFlow?.product,
-        seller: currentFlow?.seller,
-        address,
-      },
-    });
-    updateFlowStep("payment_pending");
+    // 주문 생성 API 호출
+    setSubmitting(true);
+    try {
+      const totalAmount = data.totalAmount as number;
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codeId: currentFlow?.codeId,
+          buyerName: address.buyerName,
+          buyerPhone: address.buyerPhone,
+          address: address.address,
+          addressDetail: address.addressDetail,
+          memo: address.memo,
+          quantity: data.quantity,
+          amount: totalAmount,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        setSubmitError(result.error || "주문 생성에 실패했습니다.");
+        return;
+      }
+
+      const sellerPayment = result.sellerPayment ?? {};
+      updateFlowStep("transfer_pending", { orderId: result.id });
+      addMessage({
+        direction: "incoming",
+        type: "transfer-options",
+        payload: {
+          orderId: result.id,
+          bank: sellerPayment.bankName ?? "",
+          accountNo: sellerPayment.bankAccount ?? "",
+          amount: totalAmount,
+          kakaoPayId: sellerPayment.kakaoPayId ?? null,
+          productName: currentFlow?.product?.name ?? "",
+          quantity: data.quantity,
+        },
+      });
+    } catch {
+      setSubmitError("서버 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -157,12 +191,15 @@ export default function AddressForm({ data }: Props) {
                   </span>
                 </label>
               </div>
+              {submitError && (
+                <p className="text-xs text-destructive">{submitError}</p>
+              )}
               <Button
                 type="submit"
                 className="w-full"
-                disabled={!agreePersonal || !agreeThirdParty}
+                disabled={!agreePersonal || !agreeThirdParty || submitting}
               >
-                배송정보 확인
+                {submitting ? "주문 생성 중..." : "배송정보 확인"}
               </Button>
             </>
           )}

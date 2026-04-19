@@ -7,6 +7,7 @@ import ProductCard from "./cards/ProductCard";
 import QuantitySelector from "./cards/QuantitySelector";
 import AddressForm from "./cards/AddressForm";
 import PaymentSummary from "./cards/PaymentSummary";
+import TransferOptions from "./TransferOptions";
 import OrderConfirmation from "./cards/OrderConfirmation";
 import TrackingUpdate from "./cards/TrackingUpdate";
 
@@ -16,7 +17,7 @@ interface Props {
 
 export default function ChatMessageBubble({ message }: Props) {
   const isIncoming = message.direction === "incoming";
-  const { setFlow, updateFlowStep } = useBuyerStore();
+  const { setFlow, updateFlowStep, addMessage } = useBuyerStore();
 
   if (message.type === "divider") {
     return (
@@ -37,6 +38,7 @@ export default function ChatMessageBubble({ message }: Props) {
       "quantity-selector",
       "address-form",
       "payment-summary",
+      "transfer-options",
       "order-confirmation",
       "tracking-update",
     ].includes(message.type)
@@ -54,6 +56,31 @@ export default function ChatMessageBubble({ message }: Props) {
         )}
         {message.type === "payment-summary" && (
           <PaymentSummary data={message.payload} />
+        )}
+        {message.type === "transfer-options" && (
+          <TransferOptions
+            orderId={message.payload.orderId as string}
+            bank={message.payload.bank as string}
+            accountNo={message.payload.accountNo as string}
+            amount={message.payload.amount as number}
+            kakaoPayId={message.payload.kakaoPayId as string | null}
+            onConfirmed={() => {
+              updateFlowStep("transfer_confirmed");
+              addMessage({
+                direction: "incoming",
+                type: "order-confirmation",
+                payload: {
+                  orderId: message.payload.orderId,
+                  productName: message.payload.productName,
+                  quantity: message.payload.quantity,
+                  totalAmount: message.payload.amount,
+                  status: "TRANSFER_PENDING",
+                  createdAt: new Date().toISOString(),
+                },
+              });
+              setFlow({ step: "idle" });
+            }}
+          />
         )}
         {message.type === "order-confirmation" && (
           <OrderConfirmation data={message.payload} />
