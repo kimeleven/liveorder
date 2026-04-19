@@ -16,6 +16,8 @@ type SellerProfile = {
   bankAccount: string | null;
   bankName: string | null;
   tradeRegNo: string | null;
+  shopCode: string | null;
+  kakaoPayId: string | null;
   plan: string;
   createdAt: string;
   status: string;
@@ -29,6 +31,8 @@ export default function SettingsPage() {
   const [bankAccount, setBankAccount] = useState("");
   const [bankName, setBankName] = useState("");
   const [tradeRegNo, setTradeRegNo] = useState("");
+  const [shopCode, setShopCode] = useState("");
+  const [kakaoPayId, setKakaoPayId] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -46,6 +50,8 @@ export default function SettingsPage() {
         setBankAccount(data.bankAccount ?? "");
         setBankName(data.bankName ?? "");
         setTradeRegNo(data.tradeRegNo ?? "");
+        setShopCode(data.shopCode ?? "");
+        setKakaoPayId(data.kakaoPayId ?? "");
       });
   }, []);
 
@@ -56,7 +62,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/seller/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, address, bankAccount, bankName, tradeRegNo }),
+        body: JSON.stringify({ phone, address, bankAccount, bankName, tradeRegNo, shopCode, kakaoPayId }),
       });
       if (!res.ok) throw new Error("저장 실패");
       setSaveMsg("저장되었습니다.");
@@ -188,6 +194,60 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* shopCode + 카카오페이 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>결제 링크 설정</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 max-w-md">
+          <div className="space-y-1">
+            <Label>
+              shopCode{" "}
+              <span className="text-xs text-muted-foreground">(영소문자+숫자 6자리)</span>
+            </Label>
+            <div className="flex gap-2 items-center">
+              <Input
+                value={shopCode}
+                onChange={(e) => setShopCode(e.target.value.toLowerCase())}
+                placeholder="abc123"
+                maxLength={6}
+                className="font-mono"
+              />
+              {shopCode && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  /s/{shopCode}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              구매자가 이 링크로 접속합니다. 변경 시 기존 링크가 무효화됩니다.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label>
+              카카오페이 ID{" "}
+              <span className="text-xs text-muted-foreground">(선택 — QR 결제 활성화)</span>
+            </Label>
+            <Input
+              value={kakaoPayId}
+              onChange={(e) => setKakaoPayId(e.target.value)}
+              placeholder="kakaopay_id"
+            />
+            <p className="text-xs text-muted-foreground">
+              입력 시 구매자에게 카카오페이 QR이 표시됩니다.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label>
+              은행명 <span className="text-red-500">*</span>
+            </Label>
+            <p className="text-xs text-amber-600">
+              송금 방식 결제를 위해 은행명과 계좌번호를 반드시 입력하세요.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 비밀번호 변경 */}
       <Card>

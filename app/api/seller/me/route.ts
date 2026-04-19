@@ -21,6 +21,8 @@ export async function GET() {
       bankAccount: true,
       bankName: true,
       tradeRegNo: true,
+      shopCode: true,
+      kakaoPayId: true,
       plan: true,
       createdAt: true,
     },
@@ -46,10 +48,32 @@ export async function PATCH(req: Request) {
     "bankAccount",
     "bankName",
     "tradeRegNo",
+    "shopCode",
+    "kakaoPayId",
   ] as const;
   const data: Record<string, string> = {};
   for (const key of allowed) {
     if (typeof body[key] === "string") data[key] = body[key].trim();
+  }
+
+  // shopCode 유효성: 영소문자+숫자 6자리
+  if (data.shopCode !== undefined) {
+    if (!/^[a-z0-9]{6}$/.test(data.shopCode)) {
+      return NextResponse.json(
+        { error: "shopCode는 영소문자+숫자 6자리여야 합니다." },
+        { status: 400 }
+      );
+    }
+    // 중복 체크
+    const existing = await prisma.seller.findUnique({
+      where: { shopCode: data.shopCode },
+    });
+    if (existing && existing.id !== session.user.id) {
+      return NextResponse.json(
+        { error: "이미 사용 중인 shopCode입니다." },
+        { status: 409 }
+      );
+    }
   }
 
   if (Object.keys(data).length === 0) {
@@ -65,6 +89,8 @@ export async function PATCH(req: Request) {
       bankAccount: true,
       bankName: true,
       tradeRegNo: true,
+      shopCode: true,
+      kakaoPayId: true,
     },
   });
 
