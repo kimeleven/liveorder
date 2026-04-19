@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/db";
 import { sendEmail, ADMIN_EMAIL } from "@/lib/email";
+import { generateShopCode } from "@/lib/shop-code";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await hash(password, 8);
     const emailVerifyToken = randomBytes(32).toString("hex");
+    const shopCode = await generateShopCode();
 
     const seller = await prisma.seller.create({
       data: {
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest) {
         emailVerified: false,
         emailVerifyToken,
         emailVerifyTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        shopCode,
       },
     });
 
