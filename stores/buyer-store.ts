@@ -57,6 +57,7 @@ export interface FlowAddress {
 
 export interface FlowState {
   step: FlowStep;
+  shopCode?: string;
   codeKey?: string;
   codeId?: string;
   productId?: string;

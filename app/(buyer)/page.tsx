@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,49 +8,28 @@ import Link from "next/link";
 
 export default function BuyerLandingPage() {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  const [shopCode, setShopCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function formatCodeInput(value: string) {
-    const clean = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-    let formatted = clean;
-    if (clean.length > 3) formatted = clean.slice(0, 3) + "-" + clean.slice(3);
-    if (clean.length > 7)
-      formatted =
-        clean.slice(0, 3) + "-" + clean.slice(3, 7) + "-" + clean.slice(7, 11);
-    return formatted;
-  }
+  useEffect(() => {
+    const entryError = sessionStorage.getItem("shopEntryError");
+    if (entryError) {
+      sessionStorage.removeItem("shopEntryError");
+      setError(entryError);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    const codeKey = code.replace(/-/g, "").toUpperCase();
-    if (codeKey.length < 10) {
-      setError("올바른 코드 형식이 아닙니다.");
-      setLoading(false);
+    const code = shopCode.trim().toLowerCase();
+    if (!/^[a-z0-9]{6}$/.test(code)) {
+      setError("쇼핑몰 코드는 영소문자+숫자 6자리입니다.");
       return;
     }
-
-    try {
-      const res = await fetch(`/api/codes/${code}`);
-      const data = await res.json();
-
-      if (!data.valid) {
-        setError(data.reason || "유효하지 않은 코드입니다.");
-        setLoading(false);
-        return;
-      }
-
-      // 채팅 페이지로 이동하면서 코드 데이터 전달
-      sessionStorage.setItem("pendingCode", JSON.stringify({ code: code, data }));
-      router.push("/chat");
-    } catch {
-      setError("서버 오류가 발생했습니다.");
-      setLoading(false);
-    }
+    setLoading(true);
+    setError("");
+    router.push(`/s/${code}`);
   }
 
   return (
@@ -64,19 +43,19 @@ export default function BuyerLandingPage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm space-y-8 text-center">
           <div>
-            <h2 className="text-2xl font-bold">상품 코드 입력</h2>
+            <h2 className="text-2xl font-bold">쇼핑몰 코드 입력</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              라이브 방송에서 안내받은 코드를 입력하세요
+              셀러에게 전달받은 쇼핑몰 코드를 입력하세요
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              value={code}
-              onChange={(e) => setCode(formatCodeInput(e.target.value))}
-              placeholder="AAA-0000-XXXX"
+              value={shopCode}
+              onChange={(e) => setShopCode(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))}
+              placeholder="abc123"
               className="text-center text-2xl font-mono tracking-[0.3em] h-14"
-              maxLength={14}
+              maxLength={6}
               autoFocus
             />
             {error && (
@@ -85,9 +64,9 @@ export default function BuyerLandingPage() {
             <Button
               type="submit"
               className="w-full h-12 text-base"
-              disabled={loading || code.length < 12}
+              disabled={loading || shopCode.length !== 6}
             >
-              {loading ? "확인 중..." : "코드 확인"}
+              {loading ? "이동 중..." : "쇼핑몰 입장"}
             </Button>
           </form>
 

@@ -22,6 +22,27 @@ export default function ChatPage() {
       });
     }
 
+    // /s/[shopCode]에서 넘어온 경우 — shopCode + seller 정보 세션 저장
+    const pendingShop = sessionStorage.getItem("pendingShop");
+    if (pendingShop) {
+      sessionStorage.removeItem("pendingShop");
+      try {
+        const { shopCode, seller } = JSON.parse(pendingShop);
+        setFlow({
+          step: "product_shown",
+          seller: { id: seller.id, name: seller.name },
+          shopCode,
+        });
+        addMessage({
+          direction: "incoming",
+          type: "text",
+          payload: { text: `${seller.name} 쇼핑몰에 오신 것을 환영합니다! 주문할 상품 코드를 입력해주세요.` },
+        });
+      } catch {
+        // 손상된 데이터 무시
+      }
+    }
+
     // 랜딩에서 코드 검증 후 진입한 경우
     const pending = sessionStorage.getItem("pendingCode");
     if (pending) {
