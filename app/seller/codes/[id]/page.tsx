@@ -67,6 +67,8 @@ function getCodeStatus(code: CodeDetailResponse["code"]) {
 
 function getOrderStatusBadge(status: string) {
   const map: Record<string, { label: string; variant: BadgeVariant }> = {
+    TRANSFER_PENDING: { label: "송금대기", variant: "outline" },
+    CONFIRMED: { label: "송금확인", variant: "default" },
     PAID: { label: "결제완료", variant: "default" },
     SHIPPING: { label: "배송중", variant: "secondary" },
     DELIVERED: { label: "배송완료", variant: "outline" },

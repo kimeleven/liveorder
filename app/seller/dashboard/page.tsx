@@ -42,6 +42,8 @@ interface DashboardStats {
 }
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
+  TRANSFER_PENDING: "송금대기",
+  CONFIRMED: "송금확인",
   PAID: "결제완료",
   SHIPPING: "배송중",
   DELIVERED: "배송완료",

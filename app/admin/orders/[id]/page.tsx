@@ -35,6 +35,8 @@ type OrderDetail = {
 }
 
 const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  TRANSFER_PENDING: { label: '송금대기', variant: 'outline' },
+  CONFIRMED: { label: '송금확인', variant: 'default' },
   PAID: { label: '결제완료', variant: 'default' },
   SHIPPING: { label: '배송중', variant: 'secondary' },
   DELIVERED: { label: '배송완료', variant: 'outline' },
@@ -88,7 +90,7 @@ export default function AdminOrderDetailPage() {
   if (error || !order) return <AdminShell><div className="p-8 text-destructive">{error || '주문을 찾을 수 없습니다.'}</div></AdminShell>
 
   const badge = STATUS_BADGE[order.status] ?? { label: order.status, variant: 'secondary' as const }
-  const canRefund = ['PAID', 'SHIPPING', 'DELIVERED'].includes(order.status)
+  const canRefund = ['TRANSFER_PENDING', 'CONFIRMED', 'PAID', 'SHIPPING', 'DELIVERED'].includes(order.status)
   const seller = order.code.product.seller
 
   const trackingUrl = order.carrier && order.trackingNo && CARRIER_URLS[order.carrier]

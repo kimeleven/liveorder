@@ -62,6 +62,8 @@ interface ProductOption {
 }
 
 const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  TRANSFER_PENDING: { label: "송금대기", variant: "outline" },
+  CONFIRMED: { label: "송금확인", variant: "default" },
   PAID: { label: "결제완료", variant: "default" },
   SHIPPING: { label: "배송중", variant: "secondary" },
   DELIVERED: { label: "배송완료", variant: "secondary" },
@@ -325,6 +327,8 @@ export default function OrdersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">전체</SelectItem>
+                <SelectItem value="TRANSFER_PENDING">송금대기</SelectItem>
+                <SelectItem value="CONFIRMED">송금확인</SelectItem>
                 <SelectItem value="PAID">결제완료</SelectItem>
                 <SelectItem value="SHIPPING">배송중</SelectItem>
                 <SelectItem value="DELIVERED">배송완료</SelectItem>
@@ -461,7 +465,7 @@ export default function OrdersPage() {
                       <TableCell className="text-sm">
                         {order.trackingNo ? (
                           `${order.carrier} ${order.trackingNo}`
-                        ) : (order.status === "PAID" || order.status === "SHIPPING") ? (
+                        ) : (order.status === "CONFIRMED" || order.status === "PAID" || order.status === "SHIPPING") ? (
                           <Button
                             size="sm"
                             variant="outline"

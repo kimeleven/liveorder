@@ -44,6 +44,8 @@ interface OrderItem {
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "전체" },
+  { value: "TRANSFER_PENDING", label: "송금대기" },
+  { value: "CONFIRMED", label: "송금확인" },
   { value: "PAID", label: "결제완료" },
   { value: "SHIPPING", label: "배송중" },
   { value: "DELIVERED", label: "배송완료" },
@@ -52,6 +54,8 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  TRANSFER_PENDING: { label: "송금대기", variant: "outline" },
+  CONFIRMED: { label: "송금확인", variant: "default" },
   PAID: { label: "결제완료", variant: "default" },
   SHIPPING: { label: "배송중", variant: "secondary" },
   DELIVERED: { label: "배송완료", variant: "outline" },
@@ -223,7 +227,7 @@ export default function AdminOrdersPage() {
               ) : (
                 orders.map((order) => {
                   const badge = STATUS_BADGE[order.status] ?? { label: order.status, variant: "secondary" as const };
-                  const canRefund = ["PAID", "SHIPPING", "DELIVERED"].includes(order.status);
+                  const canRefund = ["TRANSFER_PENDING", "CONFIRMED", "PAID", "SHIPPING", "DELIVERED"].includes(order.status);
                   return (
                     <TableRow
                       key={order.id}
