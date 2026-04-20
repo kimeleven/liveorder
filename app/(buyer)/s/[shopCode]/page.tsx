@@ -1,19 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function ShopCodeEntryPage({
   params,
 }: {
-  params: { shopCode: string };
+  params: Promise<{ shopCode: string }>;
 }) {
   const router = useRouter();
+  const { shopCode } = use(params);
 
   useEffect(() => {
     async function resolve() {
       try {
-        const res = await fetch(`/api/sellers/${params.shopCode}`);
+        const res = await fetch(`/api/sellers/${shopCode}`);
         if (!res.ok) {
           const data = await res.json();
           sessionStorage.setItem(
@@ -24,7 +25,7 @@ export default function ShopCodeEntryPage({
           return;
         }
         const seller = await res.json();
-        sessionStorage.setItem("pendingShop", JSON.stringify({ shopCode: params.shopCode, seller }));
+        sessionStorage.setItem("pendingShop", JSON.stringify({ shopCode, seller }));
         router.replace("/chat");
       } catch {
         sessionStorage.setItem("shopEntryError", "서버 오류가 발생했습니다.");
@@ -32,7 +33,7 @@ export default function ShopCodeEntryPage({
       }
     }
     resolve();
-  }, [params.shopCode, router]);
+  }, [shopCode, router]);
 
   return (
     <div className="flex flex-1 items-center justify-center">
