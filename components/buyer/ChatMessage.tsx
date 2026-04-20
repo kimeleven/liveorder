@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import ProductCard from "./cards/ProductCard";
 import QuantitySelector from "./cards/QuantitySelector";
 import AddressForm from "./cards/AddressForm";
-import PaymentSummary from "./cards/PaymentSummary";
 import TransferOptions from "./TransferOptions";
 import OrderConfirmation from "./cards/OrderConfirmation";
 import TrackingUpdate from "./cards/TrackingUpdate";
@@ -37,7 +36,6 @@ export default function ChatMessageBubble({ message }: Props) {
       "product-card",
       "quantity-selector",
       "address-form",
-      "payment-summary",
       "transfer-options",
       "order-confirmation",
       "tracking-update",
@@ -53,9 +51,6 @@ export default function ChatMessageBubble({ message }: Props) {
         )}
         {message.type === "address-form" && (
           <AddressForm data={message.payload} />
-        )}
-        {message.type === "payment-summary" && (
-          <PaymentSummary data={message.payload} />
         )}
         {message.type === "transfer-options" && (
           <TransferOptions
@@ -94,13 +89,11 @@ export default function ChatMessageBubble({ message }: Props) {
 
   // 에러 메시지 (재시도 버튼 포함)
   if (message.type === "error") {
-    const retryAction = message.payload.retryAction as "code" | "payment" | undefined;
+    const retryAction = message.payload.retryAction as "code" | undefined;
 
     function handleRetry() {
       if (retryAction === "code") {
         setFlow({ step: "idle" });
-      } else if (retryAction === "payment") {
-        updateFlowStep("payment_pending");
       }
     }
 

@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-const PORTONE_BASE = "https://api.portone.io";
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -37,7 +35,7 @@ export async function POST(
     return NextResponse.json({ error: "주문을 찾을 수 없습니다." }, { status: 404 });
   }
 
-  const refundableStatuses = ["PAID", "SHIPPING", "DELIVERED"];
+  const refundableStatuses = ["TRANSFER_PENDING", "CONFIRMED", "SHIPPING", "DELIVERED"];
   if (!refundableStatuses.includes(order.status)) {
     return NextResponse.json(
       { error: `현재 상태(${order.status})에서는 환불할 수 없습니다.` },
@@ -45,40 +43,9 @@ export async function POST(
     );
   }
 
-  if (!order.pgTid) {
-    return NextResponse.json(
-      { error: "PG 거래번호가 없어 환불을 처리할 수 없습니다." },
-      { status: 400 }
-    );
-  }
-
-  // PortOne 환불 API 호출
-  const portoneRes = await fetch(
-    `${PORTONE_BASE}/payments/${encodeURIComponent(order.pgTid)}/cancel`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `PortOne ${process.env.PORTONE_API_SECRET}`,
-      },
-      body: JSON.stringify({
-        reason: reason.trim(),
-        ...(amount ? { cancelAmount: amount } : {}),
-      }),
-    }
-  );
-
-  if (!portoneRes.ok) {
-    const portoneError = await portoneRes.json().catch(() => ({}));
-    return NextResponse.json(
-      { error: `PG 환불 실패: ${portoneError.message ?? portoneRes.status}` },
-      { status: 502 }
-    );
-  }
-
   const sellerId = order.code.product.sellerId;
-
   const isFullRefund = !amount || amount >= order.amount;
+
   await prisma.$transaction([
     prisma.order.update({
       where: { id },
@@ -93,6 +60,7 @@ export async function POST(
           reason: reason.trim(),
           amount: amount ?? order.amount,
           refundedBy: session.user.id,
+          note: "수동 환불 — 송금 방식 주문",
         },
       },
     }),

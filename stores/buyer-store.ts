@@ -6,7 +6,6 @@ export type MessageType =
   | "product-card"
   | "quantity-selector"
   | "address-form"
-  | "payment-summary"
   | "transfer-options"
   | "order-confirmation"
   | "tracking-update"
@@ -28,8 +27,6 @@ export type FlowStep =
   | "product_shown"
   | "quantity_selected"
   | "address_entry"
-  | "payment_pending"
-  | "payment_complete"
   | "transfer_pending"
   | "transfer_confirmed"
   | "complete";

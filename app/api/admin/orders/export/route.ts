@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         o.code.product.name,
         o.buyerName,
         o.buyerPhone,
-        `${o.shippingAddress} ${o.shippingAddressDetail ?? ""}`.trim(),
+        `${o.address} ${o.addressDetail ?? ""}`.trim(),
         o.quantity,
         o.amount,
         statusLabel[o.status] ?? o.status,

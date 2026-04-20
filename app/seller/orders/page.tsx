@@ -373,7 +373,7 @@ export default function OrdersPage() {
           </div>
           <Select
             value={productId || 'ALL'}
-            onValueChange={(v) => { setProductId(v === 'ALL' ? '' : v); setPage(1); }}
+            onValueChange={(v) => { setProductId(v === 'ALL' ? '' : (v ?? '')); setPage(1); }}
           >
             <SelectTrigger className="w-44 h-8">
               <SelectValue placeholder="전체 상품" />
