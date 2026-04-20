@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, ImageOff } from "lucide-react";
 import Pagination from "@/components/ui/Pagination";
 import { toast } from "sonner";
 
@@ -25,6 +25,7 @@ interface Product {
   stock: number;
   category: string;
   isActive: boolean;
+  imageUrl: string | null;
   createdAt: string;
 }
 
@@ -138,6 +139,22 @@ export default function ProductsPage() {
                 className={`hover:shadow-md transition-shadow cursor-pointer ${!product.isActive ? "opacity-60" : ""}`}
                 onClick={() => router.push(`/seller/products/${product.id}`)}
               >
+                {/* 이미지 썸네일 */}
+                <div className="w-full h-36 rounded-t-lg overflow-hidden bg-muted flex items-center justify-center">
+                  {product.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <ImageOff className="h-8 w-8" />
+                      <span className="text-xs">이미지 없음</span>
+                    </div>
+                  )}
+                </div>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="text-base">{product.name}</CardTitle>

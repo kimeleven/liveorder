@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImagePlus, X } from "lucide-react";
+import { toast } from "sonner";
 
 const categories = [
   "패션의류",
@@ -119,7 +120,8 @@ export default function EditProductPage() {
         return;
       }
 
-      router.push("/seller/products");
+      toast.success("상품이 수정되었습니다.");
+      router.push(`/seller/products/${productId}`);
     } catch {
       setError("서버 오류가 발생했습니다.");
       setLoading(false);
@@ -255,7 +257,7 @@ export default function EditProductPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push("/seller/products")}
+                  onClick={() => router.push(`/seller/products/${productId}`)}
                 >
                   취소
                 </Button>
