@@ -70,5 +70,13 @@ export async function PATCH(
     select: { id: true, isActive: true, name: true },
   })
 
+  // 비활성화 시 연결된 활성 코드도 함께 비활성화
+  if (!isActive) {
+    await prisma.code.updateMany({
+      where: { productId: id, isActive: true },
+      data: { isActive: false },
+    })
+  }
+
   return NextResponse.json(product)
 }

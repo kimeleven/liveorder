@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminShell from '@/components/admin/AdminShell'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -46,6 +46,7 @@ export default function AdminProductsPage() {
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
   const [loading, setLoading] = useState(true)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 검색어 디바운스 300ms
@@ -81,6 +82,24 @@ export default function AdminProductsPage() {
   function handleFilterChange(value: string) {
     setIsActiveFilter(value as '' | 'true' | 'false')
     setPage(1)
+  }
+
+  async function handleToggle(productId: string, currentActive: boolean) {
+    setTogglingId(productId)
+    // 낙관적 업데이트
+    setItems(prev => prev.map(p => p.id === productId ? { ...p, isActive: !currentActive } : p))
+    try {
+      await fetch(`/api/admin/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !currentActive }),
+      })
+    } catch {
+      // 실패 시 롤백
+      setItems(prev => prev.map(p => p.id === productId ? { ...p, isActive: currentActive } : p))
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   return (
@@ -167,10 +186,12 @@ export default function AdminProductsPage() {
                     <TableCell className="text-right">₩{item.price.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{item.stock.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{item._count.codes.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <Badge variant={item.isActive ? 'default' : 'secondary'}>
-                        {item.isActive ? '활성' : '비활성'}
-                      </Badge>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <Switch
+                        checked={item.isActive}
+                        disabled={togglingId === item.id}
+                        onCheckedChange={() => handleToggle(item.id, item.isActive)}
+                      />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(item.createdAt).toLocaleDateString('ko-KR')}
