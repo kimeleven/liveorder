@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to");
   const { page, limit, skip } = parsePagination(searchParams);
 
-  const validStatuses = ["PAID", "SHIPPING", "DELIVERED", "SETTLED", "REFUNDED"];
+  const validStatuses = ["TRANSFER_PENDING", "CONFIRMED", "PAID", "SHIPPING", "DELIVERED", "SETTLED", "REFUNDED"];
   const statusFilter =
     statusParam && validStatuses.includes(statusParam)
       ? { status: statusParam as OrderStatus }
@@ -44,24 +44,29 @@ export async function GET(req: NextRequest) {
 
   const where = { ...statusFilter, ...searchFilter, ...dateFilter };
 
-  const [total, data] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      include: {
-        code: {
-          include: {
-            product: {
-              select: { name: true, seller: { select: { name: true } } },
+  try {
+    const [total, data] = await Promise.all([
+      prisma.order.count({ where }),
+      prisma.order.findMany({
+        where,
+        include: {
+          code: {
+            include: {
+              product: {
+                select: { name: true, seller: { select: { name: true } } },
+              },
             },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limit,
-    }),
-  ]);
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+    ]);
 
-  return NextResponse.json(buildPaginationResponse(data, total, page, limit));
+    return NextResponse.json(buildPaginationResponse(data, total, page, limit));
+  } catch (err) {
+    console.error("[admin/orders] DB 오류:", err);
+    return NextResponse.json({ error: "주문 목록 조회 중 오류가 발생했습니다.", detail: String(err) }, { status: 500 });
+  }
 }
