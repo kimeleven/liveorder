@@ -38,6 +38,7 @@ export default function SettingsPage() {
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  const [shopCodeMsg, setShopCodeMsg] = useState("");
   const [pwMsg, setPwMsg] = useState("");
 
   useEffect(() => {
@@ -62,12 +63,32 @@ export default function SettingsPage() {
       const res = await fetch("/api/seller/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, address, bankAccount, bankName, tradeRegNo, shopCode, kakaoPayId }),
+        body: JSON.stringify({ phone, address, bankAccount, bankName, tradeRegNo }),
       });
-      if (!res.ok) throw new Error("저장 실패");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "저장 실패");
       setSaveMsg("저장되었습니다.");
-    } catch {
-      setSaveMsg("저장에 실패했습니다.");
+    } catch (e: unknown) {
+      setSaveMsg(e instanceof Error ? e.message : "저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleShopCodeSave() {
+    setSaving(true);
+    setShopCodeMsg("");
+    try {
+      const res = await fetch("/api/seller/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopCode, kakaoPayId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "저장 실패");
+      setShopCodeMsg("저장되었습니다.");
+    } catch (e: unknown) {
+      setShopCodeMsg(e instanceof Error ? e.message : "저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -238,14 +259,14 @@ export default function SettingsPage() {
               입력 시 구매자에게 카카오페이 QR이 표시됩니다.
             </p>
           </div>
-          <div className="space-y-1">
-            <Label>
-              은행명 <span className="text-red-500">*</span>
-            </Label>
-            <p className="text-xs text-amber-600">
-              송금 방식 결제를 위해 은행명과 계좌번호를 반드시 입력하세요.
+          {shopCodeMsg && (
+            <p className={`text-sm ${isErrorMsg(shopCodeMsg) ? "text-red-500" : "text-green-600"}`}>
+              {shopCodeMsg}
             </p>
-          </div>
+          )}
+          <Button onClick={handleShopCodeSave} disabled={saving} className="w-full">
+            {saving ? "저장 중..." : "저장"}
+          </Button>
         </CardContent>
       </Card>
 
