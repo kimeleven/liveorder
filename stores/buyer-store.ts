@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 export type MessageType =
   | "text"
   | "product-card"
+  | "product-list"
   | "quantity-selector"
   | "address-form"
   | "transfer-options"
@@ -23,6 +24,7 @@ export interface ChatMessage {
 
 export type FlowStep =
   | "idle"
+  | "shop_entered"
   | "code_entered"
   | "product_shown"
   | "quantity_selected"

@@ -29,14 +29,19 @@ export default function ChatPage() {
       try {
         const { shopCode, seller } = JSON.parse(pendingShop);
         setFlow({
-          step: "product_shown",
+          step: "shop_entered",
           seller: { id: seller.id, name: seller.name },
           shopCode,
         });
         addMessage({
           direction: "incoming",
           type: "text",
-          payload: { text: `${seller.name} 쇼핑몰에 오신 것을 환영합니다! 주문할 상품 코드를 입력해주세요.` },
+          payload: { text: `${seller.name} 쇼핑몰에 오신 것을 환영합니다!` },
+        });
+        addMessage({
+          direction: "incoming",
+          type: "product-list",
+          payload: { products: seller.products, shopCode, sellerName: seller.name },
         });
       } catch {
         // 손상된 데이터 무시

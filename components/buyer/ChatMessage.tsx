@@ -4,6 +4,7 @@ import { ChatMessage, useBuyerStore } from "@/stores/buyer-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import ProductCard from "./cards/ProductCard";
+import ProductListCard from "./cards/ProductListCard";
 import QuantitySelector from "./cards/QuantitySelector";
 import AddressForm from "./cards/AddressForm";
 import TransferOptions from "./TransferOptions";
@@ -34,6 +35,7 @@ export default function ChatMessageBubble({ message }: Props) {
   if (
     [
       "product-card",
+      "product-list",
       "quantity-selector",
       "address-form",
       "transfer-options",
@@ -45,6 +47,9 @@ export default function ChatMessageBubble({ message }: Props) {
       <div className="w-full">
         {message.type === "product-card" && (
           <ProductCard data={message.payload} />
+        )}
+        {message.type === "product-list" && (
+          <ProductListCard data={message.payload} />
         )}
         {message.type === "quantity-selector" && (
           <QuantitySelector data={message.payload} />

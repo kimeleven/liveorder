@@ -44,7 +44,13 @@ export default function ChatInputBar({ onCodeSubmit }: Props) {
       <Input
         value={input}
         onChange={(e) => setInput(formatCodeInput(e.target.value))}
-        placeholder={isDisabled ? "진행 중인 주문을 완료해주세요" : "상품 코드 입력 (예: K9A-2503-X7YZ)"}
+        placeholder={
+          currentFlow?.step === "shop_entered"
+            ? "위 목록에서 상품을 선택해주세요"
+            : isDisabled
+              ? "진행 중인 주문을 완료해주세요"
+              : "상품 코드 입력 (예: K9A-2503-X7YZ)"
+        }
         disabled={isDisabled}
         maxLength={14}
         className="font-mono tracking-wider"
